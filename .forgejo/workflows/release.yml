@@ -1,0 +1,180 @@
+# Builds the Android APKs on every `vX.Y.Z` tag and attaches them to the
+# matching Forgejo release. The Linux desktop bundle is built separately —
+# run the `linux-bundle` workflow by hand when a Linux build is wanted (it
+# needs a ~3-4 min clang/gtk/mpv toolchain install that isn't worth paying
+# on every release).
+#
+# No JS actions (actions/checkout etc.) — the Flutter container has no
+# Node.js, so checkout is a plain `git clone` and the upload is `curl`
+# against the Forgejo API.
+#
+# Requirements on the Forgejo instance:
+#   * a registered Actions runner with Docker, label `docker`
+#   * repo secrets:
+#       RELEASE_TOKEN            - token with `write:repository` scope
+#       ANDROID_KEYSTORE_BASE64  - `base64 -w0 android/app/release.jks`  (optional)
+#       ANDROID_KEYSTORE_PASSWORD / ANDROID_KEY_ALIAS / ANDROID_KEY_PASSWORD
+
+name: release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  build:
+    runs-on: docker
+    container:
+      # cirruslabs rebuilds `:stable` on every Flutter stable release with
+      # the Dart SDK + engine + Android/Linux artifacts already precached, so
+      # we use it as-is. Pin to a version tag (e.g. flutter:3.47.1) if a
+      # release ever needs to be reproducible against an exact SDK.
+      image: ghcr.io/cirruslabs/flutter:stable
+    steps:
+      - name: Checkout (git, no JS action)
+        run: |
+          set -eu
+          server="${{ github.server_url }}"
+          repo="${{ github.repository }}"
+          tag="${{ github.ref_name }}"
+          auth_url="https://${{ github.actor }}:${{ secrets.RELEASE_TOKEN }}@${server#https://}/${repo}.git"
+          git config --global --add safe.directory "$PWD"
+          git init -q .
+          git remote add origin "$auth_url"
+          git fetch -q --depth 1 origin "refs/tags/${tag}:refs/tags/${tag}"
+          git checkout -q "refs/tags/${tag}"
+          git remote set-url origin "${server}/${repo}.git"
+
+      - name: Derive version
+        id: v
+        run: |
+          tag="${{ github.ref_name }}"
+          echo "name=${tag#v}" >> "$GITHUB_OUTPUT"
+          echo "build=${{ github.run_number }}" >> "$GITHUB_OUTPUT"
+
+      - name: Flutter deps
+        run: |
+          flutter --version
+          flutter pub get
+
+      # ── Android ────────────────────────────────────────────────────────
+      - name: Android signing config
+        env:
+          KS_B64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          KS_PASS: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          KEY_PASS: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          set -eu
+
+          # ── safe diagnostics: presence + length only, never the value ──
+          present() { [ -n "${1:-}" ] && echo "set (${#1} chars)" || echo "MISSING"; }
+          echo "ANDROID_KEYSTORE_BASE64  : $(present "${KS_B64:-}")"
+          echo "ANDROID_KEYSTORE_PASSWORD: $([ -n "${KS_PASS:-}" ] && echo set || echo MISSING)"
+          echo "ANDROID_KEY_ALIAS        : ${KEY_ALIAS:-<MISSING>}"
+          echo "ANDROID_KEY_PASSWORD     : $([ -n "${KEY_PASS:-}" ] && echo set || echo MISSING)"
+
+          if [ -z "${KS_B64:-}" ]; then
+            echo "::error::ANDROID_KEYSTORE_BASE64 not set — refusing to publish a debug-signed APK."
+            echo "Set the signing secrets (see RELEASE.md) and re-run the tag."
+            exit 1
+          fi
+
+          if ! echo "$KS_B64" | base64 -d > android/app/release.jks; then
+            echo "::error::ANDROID_KEYSTORE_BASE64 is not valid base64 — regenerate with 'base64 -w0 android/app/release.jks'"
+            exit 1
+          fi
+          echo "release.jks: $(wc -c < android/app/release.jks) bytes"
+          # Fail here with a clear message instead of a cryptic
+          # ':app:packageRelease > KeytoolException ... : null' five minutes in.
+          if ! keytool -list -keystore android/app/release.jks -storepass "$KS_PASS" >/dev/null 2>&1; then
+            echo "::error::release.jks unreadable — check ANDROID_KEYSTORE_BASE64 (truncated? wrong file?) and ANDROID_KEYSTORE_PASSWORD"
+            exit 1
+          fi
+          if ! keytool -list -keystore android/app/release.jks -storepass "$KS_PASS" -alias "$KEY_ALIAS" >/dev/null 2>&1; then
+            echo "::error::alias '$KEY_ALIAS' not in keystore — check ANDROID_KEY_ALIAS (case-sensitive)"
+            exit 1
+          fi
+          {
+            echo "storeFile=release.jks"
+            echo "storePassword=$KS_PASS"
+            echo "keyAlias=$KEY_ALIAS"
+            echo "keyPassword=$KEY_PASS"
+          } > android/key.properties
+          echo "Signing: RELEASE  (alias=$KEY_ALIAS)"
+
+      # This is the Forgejo / Obtainium beta channel: the in-app update check
+      # is meant to work here, so the PILEUS_FORGEJO_* defines stay. The
+      # Play / Amazon store artifacts are built by the separate `store`
+      # workflow (store.yml), without those defines and as a signed AAB.
+      - name: Build APKs
+        run: |
+          # Same size cuts as the store build (store.yml): drop the unused
+          # libmpv.so (~12 MB/ABI) and R8 code+resource shrink. The beta
+          # channel is where an R8 mis-strip should surface — before a store
+          # submission, not after.
+          flutter build apk --release --flavor tv --split-per-abi \
+            --target-platform android-arm,android-arm64 \
+            -PpileusExcludeMpv=true -PpileusR8=true \
+            --obfuscate --split-debug-info=build/symbols \
+            --build-name="${{ steps.v.outputs.name }}" \
+            --build-number="${{ steps.v.outputs.build }}" \
+            --dart-define=PILEUS_FORGEJO_URL="${{ github.server_url }}" \
+            --dart-define=PILEUS_FORGEJO_REPO="${{ github.repository }}" \
+            --dart-define=PILEUS_MYCELIUM_HOST="${{ vars.PILEUS_MYCELIUM_HOST }}"
+          mkdir -p dist
+          # flutter names split-per-abi flavored APKs app-<abi>-<flavor>-release.apk
+          # (abi first), e.g. app-arm64-v8a-tv-release.apk.
+          for f in build/app/outputs/flutter-apk/app-*-tv-release.apk; do
+            abi=$(basename "$f" | sed -E 's/^app-(.+)-tv-release\.apk$/\1/')
+            cp "$f" "dist/pileus-${{ steps.v.outputs.name }}-android-${abi}.apk"
+          done
+          # Obfuscation symbols — needed to de-obfuscate any crash/ANR stack
+          # trace from a build produced by this pipeline. Keep them.
+          tar czf "dist/pileus-${{ steps.v.outputs.name }}-android-symbols.tar.gz" \
+            -C build/symbols . || true
+
+      - name: Checksums
+        run: |
+          apt-get update -qq
+          apt-get install -y --no-install-recommends jq curl ca-certificates
+          ( cd dist && sha256sum * > SHA256SUMS.txt )
+
+      # ── Publish (curl, no JS action) ──────────────────────────────────
+      - name: Upload to release
+        env:
+          TOKEN: ${{ secrets.RELEASE_TOKEN }}
+        run: |
+          set -eu
+          api="${{ github.server_url }}/api/v1/repos/${{ github.repository }}"
+          tag="${{ github.ref_name }}"
+          hdr="Authorization: token ${TOKEN}"
+
+          rel_id=$(curl -sf -H "$hdr" "$api/releases/tags/${tag}" | jq -r '.id // empty' || true)
+          if [ -z "$rel_id" ]; then
+            rel_id=$(curl -sf -H "$hdr" -H 'Content-Type: application/json' \
+              -X POST "$api/releases" \
+              -d "{\"tag_name\":\"${tag}\",\"name\":\"${tag}\"}" | jq -r '.id')
+          fi
+          [ -n "$rel_id" ] && [ "$rel_id" != "null" ] || { echo "no release id"; exit 1; }
+          echo "release id: $rel_id"
+
+          # Delete ONLY the assets this run is about to re-upload (idempotent
+          # re-runs) — assets from the separate linux-bundle workflow are
+          # left alone.
+          names=$(cd dist && ls | tr '\n' '|' | sed 's/|$//')
+          curl -sf -H "$hdr" "$api/releases/${rel_id}/assets" \
+            | jq -c --arg re "^(${names})$" '.[] | select(.name | test($re)) | {id, name}' \
+            | while read -r a; do
+              id=$(echo "$a" | jq -r .id)
+              echo "replacing $(echo "$a" | jq -r .name)"
+              curl -sf -H "$hdr" -X DELETE "$api/releases/${rel_id}/assets/${id}" || true
+            done
+
+          for f in dist/*; do
+            echo "uploading $(basename "$f")"
+            curl -sf -H "$hdr" \
+              -F "attachment=@${f};type=application/octet-stream" \
+              "$api/releases/${rel_id}/assets?name=$(basename "$f")" > /dev/null
+          done

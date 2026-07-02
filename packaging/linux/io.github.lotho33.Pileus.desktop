@@ -1,0 +1,12 @@
+[Desktop Entry]
+Type=Application
+Name=Pileus
+GenericName=Streaming client
+Comment=Client for a self-hosted Mycelium streaming backend
+Exec=pileus
+Icon=io.github.lotho33.Pileus
+Terminal=false
+Categories=AudioVideo;Video;Player;Network;
+Keywords=streaming;mycelium;jellyfin;plex;video;
+StartupNotify=true
+StartupWMClass=pileus

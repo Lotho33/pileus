@@ -1,0 +1,60 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<component type="desktop-application">
+  <id>io.github.lotho33.Pileus</id>
+
+  <name>Pileus</name>
+  <summary>Client for a self-hosted Mycelium streaming backend</summary>
+
+  <metadata_license>CC0-1.0</metadata_license>
+  <project_license>GPL-3.0-only</project_license>
+
+  <developer id="io.github.lotho33">
+    <name>Pileus contributors</name>
+  </developer>
+
+  <description>
+    <p>
+      Pileus is a Flutter client for Mycelium, a streaming backend you run
+      yourself. It ships no content: you point it at your own server, pair
+      the device with a short code, and browse the catalog rows its plugins
+      (Jellyfin, Plex) provide.
+    </p>
+    <p>
+      One codebase covers Android TV / Fire TV, phone and tablet, the Linux
+      and Windows desktop, and a web build. The desktop build has a
+      point-and-click UI and uses libmpv for playback.
+    </p>
+    <p>The interface is Italian-only for now.</p>
+  </description>
+
+  <launchable type="desktop-id">io.github.lotho33.Pileus.desktop</launchable>
+
+  <provides>
+    <binary>pileus</binary>
+  </provides>
+
+  <categories>
+    <category>AudioVideo</category>
+    <category>Video</category>
+    <category>Player</category>
+  </categories>
+
+  <url type="homepage">https://github.com/lotho33/pileus-player</url>
+  <url type="bugtracker">https://github.com/lotho33/pileus-player/issues</url>
+  <url type="vcs-browser">https://github.com/lotho33/pileus-player</url>
+
+  <content_rating type="oars-1.1"/>
+
+  <!-- TODO: add at least one real screenshot before a Flathub submission.
+       Flathub requires the image URL to be reachable at review time. -->
+  <screenshots>
+    <screenshot type="default">
+      <caption>The desktop home screen</caption>
+      <image>https://raw.githubusercontent.com/lotho33/pileus-player/main/docs/screenshots/desktop-home.png</image>
+    </screenshot>
+  </screenshots>
+
+  <releases>
+    <release version="1.2.3" date="2026-09-09"/>
+  </releases>
+</component>

@@ -1,0 +1,115 @@
+# Builds the Linux desktop bundle for a `vX.Y.Z` tag and attaches it to the
+# matching release, creating that release if the Android pipeline hasn't yet.
+# Run by hand (Actions → linux-bundle → Run) with the tag as input — it is
+# intentionally NOT part of the per-tag release pipeline: the clang/gtk/mpv
+# toolchain install alone is ~3-4 min.
+#
+# Same requirements as release.yml (registered `docker` runner,
+# RELEASE_TOKEN secret). No signing secrets needed.
+
+name: linux-bundle
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Release tag to build (e.g. v1.1.6)'
+        required: true
+
+jobs:
+  build:
+    runs-on: docker
+    container:
+      image: ghcr.io/cirruslabs/flutter:stable
+    steps:
+      - name: Checkout (git, no JS action)
+        run: |
+          set -eu
+          server="${{ github.server_url }}"
+          repo="${{ github.repository }}"
+          tag="${{ inputs.tag }}"
+          auth_url="https://${{ github.actor }}:${{ secrets.RELEASE_TOKEN }}@${server#https://}/${repo}.git"
+          git config --global --add safe.directory "$PWD"
+          git init -q .
+          git remote add origin "$auth_url"
+          git fetch -q --depth 1 origin "refs/tags/${tag}:refs/tags/${tag}"
+          git checkout -q "refs/tags/${tag}"
+          git remote set-url origin "${server}/${repo}.git"
+
+      - name: Derive version
+        id: v
+        run: |
+          tag="${{ inputs.tag }}"
+          echo "name=${tag#v}" >> "$GITHUB_OUTPUT"
+          echo "build=${{ github.run_number }}" >> "$GITHUB_OUTPUT"
+
+      - name: Linux build deps
+        run: |
+          apt-get update
+          # Same set the devcontainer's Dockerfile installs for a working
+          # `flutter build linux`, + jq/curl for the upload step.
+          apt-get install -y --no-install-recommends \
+            build-essential clang cmake ninja-build pkg-config \
+            libgtk-3-dev liblzma-dev libmpv-dev mpv \
+            jq curl ca-certificates
+
+      - name: Flutter deps
+        run: |
+          flutter --version
+          flutter pub get
+
+      - name: Build Linux bundle
+        run: |
+          flutter config --enable-linux-desktop
+          # -t lib/main_desktop.dart: the responsive point-and-click UI, not
+          # the D-pad TV shell that lib/main.dart brings up.
+          flutter build linux --release -t lib/main_desktop.dart \
+            --build-name="${{ steps.v.outputs.name }}" \
+            --build-number="${{ steps.v.outputs.build }}" \
+            --dart-define=PILEUS_FORGEJO_URL="${{ github.server_url }}" \
+            --dart-define=PILEUS_FORGEJO_REPO="${{ github.repository }}" \
+            --dart-define=PILEUS_MYCELIUM_HOST="${{ vars.PILEUS_MYCELIUM_HOST }}"
+          mkdir -p dist
+          tar czf "dist/pileus-${{ steps.v.outputs.name }}-linux-x64.tar.gz" \
+            -C build/linux/x64/release/bundle .
+          ( cd dist && sha256sum pileus-${{ steps.v.outputs.name }}-linux-x64.tar.gz \
+            > pileus-${{ steps.v.outputs.name }}-linux-x64.tar.gz.sha256 )
+
+      - name: Upload to release
+        env:
+          TOKEN: ${{ secrets.RELEASE_TOKEN }}
+        run: |
+          set -eu
+          api="${{ github.server_url }}/api/v1/repos/${{ github.repository }}"
+          tag="${{ inputs.tag }}"
+          hdr="Authorization: token ${TOKEN}"
+
+          rel_id=$(curl -sf -H "$hdr" "$api/releases/tags/${tag}" | jq -r '.id // empty' || true)
+          if [ -z "$rel_id" ]; then
+            # No Android release for this tag yet — create the release so the
+            # Linux bundle can stand on its own (desktop is decoupled from the
+            # per-tag Android pipeline).
+            echo "no release for ${tag} yet — creating it"
+            rel_id=$(curl -sf -H "$hdr" -H 'Content-Type: application/json' \
+              -X POST "$api/releases" \
+              -d "{\"tag_name\":\"${tag}\",\"name\":\"${tag}\"}" | jq -r '.id')
+          fi
+          [ -n "$rel_id" ] && [ "$rel_id" != "null" ] || { echo "::error::no release id"; exit 1; }
+          echo "release id: $rel_id"
+
+          # Replace only this workflow's own two assets; leave the APKs alone.
+          names=$(cd dist && ls | tr '\n' '|' | sed 's/|$//')
+          curl -sf -H "$hdr" "$api/releases/${rel_id}/assets" \
+            | jq -c --arg re "^(${names})$" '.[] | select(.name | test($re)) | {id, name}' \
+            | while read -r a; do
+              id=$(echo "$a" | jq -r .id)
+              echo "replacing $(echo "$a" | jq -r .name)"
+              curl -sf -H "$hdr" -X DELETE "$api/releases/${rel_id}/assets/${id}" || true
+            done
+
+          for f in dist/*; do
+            echo "uploading $(basename "$f")"
+            curl -sf -H "$hdr" \
+              -F "attachment=@${f};type=application/octet-stream" \
+              "$api/releases/${rel_id}/assets?name=$(basename "$f")" > /dev/null
+          done

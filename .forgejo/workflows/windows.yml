@@ -1,0 +1,123 @@
+# Builds the Windows desktop app for a `vX.Y.Z` tag: an Inno Setup installer
+# (.exe) plus a portable .zip, attached to the matching release (created if
+# the Android pipeline hasn't yet). Run by hand: Actions -> windows -> Run,
+# with the tag as input.
+#
+# REQUIREMENTS (this job cannot run on the shared Linux `docker` runner):
+#   * a registered self-hosted Actions runner on Windows x64, label `windows`
+#   * on that runner's PATH:
+#       - git
+#       - flutter (stable) with Windows desktop enabled
+#         (`flutter config --enable-windows-desktop`)
+#       - Inno Setup 6 (`iscc` on PATH — https://jrsoftware.org/isinfo.php)
+#       - curl.exe (ships with Windows 10+)
+#   * repo secret RELEASE_TOKEN (write:repository), same as release.yml
+#   * repo variable PILEUS_MYCELIUM_HOST (optional)
+#
+# Not validated in CI yet — no Windows runner is registered. Treat the first
+# real run as a smoke test.
+
+name: windows
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Release tag to build (e.g. v1.2.3)'
+        required: true
+
+defaults:
+  run:
+    shell: pwsh
+
+jobs:
+  build:
+    runs-on: windows
+    steps:
+      - name: Checkout (git, no JS action)
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $server = "${{ github.server_url }}"
+          $repo   = "${{ github.repository }}"
+          $tag    = "${{ inputs.tag }}"
+          $authUrl = "https://${{ github.actor }}:${{ secrets.RELEASE_TOKEN }}@" + ($server -replace '^https://','') + "/$repo.git"
+          git config --global --add safe.directory "$PWD"
+          git init -q .
+          git remote add origin $authUrl
+          git fetch -q --depth 1 origin "refs/tags/${tag}:refs/tags/${tag}"
+          git checkout -q "refs/tags/${tag}"
+          git remote set-url origin "$server/$repo.git"
+
+      - name: Derive version
+        id: v
+        run: |
+          $name = "${{ inputs.tag }}".TrimStart('v')
+          "name=$name"                       | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+          "build=${{ github.run_number }}"   | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+
+      - name: Flutter deps
+        run: |
+          flutter --version
+          flutter config --enable-windows-desktop
+          flutter pub get
+
+      - name: Build Windows release
+        run: |
+          $ErrorActionPreference = 'Stop'
+          flutter build windows --release -t lib/main_desktop.dart `
+            --build-name="${{ steps.v.outputs.name }}" `
+            --build-number="${{ steps.v.outputs.build }}" `
+            --dart-define=PILEUS_FORGEJO_URL="${{ github.server_url }}" `
+            --dart-define=PILEUS_FORGEJO_REPO="${{ github.repository }}" `
+            --dart-define=PILEUS_MYCELIUM_HOST="${{ vars.PILEUS_MYCELIUM_HOST }}"
+
+      - name: Package (installer + portable zip)
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $v = "${{ steps.v.outputs.name }}"
+          New-Item -ItemType Directory -Force dist | Out-Null
+          $rel = "build/windows/x64/runner/Release"
+
+          # Portable zip
+          Compress-Archive -Path "$rel/*" -DestinationPath "dist/pileus-$v-windows-x64-portable.zip" -Force
+
+          # Installer
+          iscc "packaging\windows\pileus.iss" "/DAppVersion=$v"
+
+          # Checksums
+          Get-ChildItem dist -File | ForEach-Object {
+            (Get-FileHash $_.FullName -Algorithm SHA256).Hash.ToLower() + "  " + $_.Name
+          } | Out-File -Encoding ascii "dist/SHA256SUMS-windows.txt"
+
+      - name: Upload to release
+        env:
+          TOKEN: ${{ secrets.RELEASE_TOKEN }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $api = "${{ github.server_url }}/api/v1/repos/${{ github.repository }}"
+          $tag = "${{ inputs.tag }}"
+          $auth = "Authorization: token $env:TOKEN"
+
+          $relId = (curl.exe -sf -H $auth "$api/releases/tags/$tag" | ConvertFrom-Json).id
+          if (-not $relId) {
+            Write-Host "no release for $tag yet - creating it"
+            $body = @{ tag_name = $tag; name = $tag } | ConvertTo-Json -Compress
+            $relId = (curl.exe -sf -H $auth -H "Content-Type: application/json" -X POST "$api/releases" -d $body | ConvertFrom-Json).id
+          }
+          if (-not $relId) { throw "no release id" }
+          Write-Host "release id: $relId"
+
+          # Replace only this workflow's own assets
+          $names = (Get-ChildItem dist -File | ForEach-Object Name)
+          $existing = curl.exe -sf -H $auth "$api/releases/$relId/assets" | ConvertFrom-Json
+          foreach ($a in $existing) {
+            if ($names -contains $a.name) {
+              Write-Host "replacing $($a.name)"
+              curl.exe -sf -H $auth -X DELETE "$api/releases/$relId/assets/$($a.id)" | Out-Null
+            }
+          }
+          foreach ($f in Get-ChildItem dist -File) {
+            Write-Host "uploading $($f.Name)"
+            curl.exe -sf -H $auth -F "attachment=@$($f.FullName);type=application/octet-stream" `
+              "$api/releases/$relId/assets?name=$($f.Name)" | Out-Null
+          }

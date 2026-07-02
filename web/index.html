@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <base href="$FLUTTER_BASE_HREF">
+
+  <meta charset="UTF-8">
+  <meta content="IE=Edge" http-equiv="X-UA-Compatible">
+  <meta name="description" content="Client per il tuo server multimediale Mycelium.">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Pileus">
+  <link rel="apple-touch-icon" href="icons/Icon-192.png">
+  <meta name="theme-color" content="#0D0D1A">
+
+  <link rel="icon" type="image/png" href="favicon.png"/>
+
+  <title>Pileus</title>
+  <link rel="manifest" href="manifest.json">
+
+  <style>
+    html, body { margin: 0; padding: 0; height: 100%; background: #0D0D1A; }
+    /* Boot placeholder — shown until Flutter paints its first frame. */
+    #boot {
+      position: fixed; inset: 0; display: flex; align-items: center;
+      justify-content: center; background: #0D0D1A;
+      transition: opacity .3s ease; z-index: 9999;
+    }
+    #boot.hide { opacity: 0; pointer-events: none; }
+    #boot .ring {
+      width: 34px; height: 34px; border-radius: 50%;
+      border: 3px solid rgba(124,106,247,.25);
+      border-top-color: #7C6AF7;
+      animation: spin .9s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+  </style>
+</head>
+<body>
+  <div id="boot"><div class="ring"></div></div>
+  <script>
+    window.addEventListener('flutter-first-frame', function () {
+      var b = document.getElementById('boot');
+      if (b) { b.classList.add('hide'); setTimeout(function(){ b.remove(); }, 350); }
+    });
+  </script>
+  <!-- Bundled locally (not a CDN) so the PWA works offline and no external
+       host has to be whitelisted in a deployment CSP. Chrome/Firefox need it
+       to play HLS; Safari plays HLS natively and this stays dormant. -->
+  <script src="hls.min.js"></script>
+  <script src="flutter_bootstrap.js" async></script>
+</body>
+</html>

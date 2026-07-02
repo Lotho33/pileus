@@ -1,0 +1,487 @@
+syntax = "proto3";
+
+package mycelium;
+
+option go_package = "github.com/Lotho33/stipes-sdk/sdk/gen;gen";
+
+// ─────────────────────────────────────────────────────────────────────────────
+// MediaPipeline — Pileus player → Core
+// Delegates internally to the server's plugin system.
+//
+// Type hierarchy:
+//   CatalogItem  — lightweight tile for catalog/search/browse responses
+//   EpisodeInfo  — rich episode object returned when browsing a season
+//   SeasonInfo   — season metadata, lives inside SeriesDetails
+//   *Details     — typed rich metadata, returned only by GetDetails
+// ─────────────────────────────────────────────────────────────────────────────
+
+// CatalogItem is the lightweight tile object used in catalog/search/browse.
+// Rich per-type metadata lives in DetailsResponse.details (oneof typed messages).
+// Plugins must return JSON with these exact field names.
+message CatalogItem {
+  string id          = 1;
+  string title       = 2;
+  // media_type: "movie"|"series"|"episode"|"live"|"music"|"podcast"|"video"
+  string media_type  = 3;
+  string poster_url  = 4;
+  int32  year        = 5;
+  double rating      = 6;
+  bool   is_dir      = 7;   // true → browse; false → play/details
+  string provider_id = 8;
+  string show_id     = 9;   // for episodes: parent show ID
+  string parent_id   = 10;  // for episodes: parent season directory_id
+  int32  season_number  = 11;
+  int32  episode_number = 12;
+  // direct play without resolve step:
+  string direct_stream_url = 13;
+  bool   is_external       = 14;
+  // escape hatch for plugin-specific edge cases — NOT for structured data:
+  map<string, string> extra = 15;
+  // logo_url: transparent PNG/SVG wordmark
+  string logo_url    = 16;
+  // banner_url: wide landscape image
+  string banner_url  = 17;
+}
+
+// EpisodeInfo is the rich episode object returned when browsing a season.
+message EpisodeInfo {
+  string id             = 1;
+  string title          = 2;
+  int32  episode_number = 3;
+  int32  season_number  = 4;
+  string thumbnail_url  = 5;   // 16:9 still
+  string air_date       = 6;   // "2023-04-02"
+  int32  duration       = 7;   // minutes
+  double vote           = 8;   // 0.0–10.0
+  string plot           = 9;
+  string show_id        = 10;
+  string parent_id      = 11;  // season directory_id
+}
+
+// SeasonInfo lives inside SeriesDetails.
+message SeasonInfo {
+  int32  number        = 1;
+  string label         = 2;
+  string directory_id  = 3;
+  string poster_url    = 4;
+  int32  year          = 5;
+  int32  episode_count = 6;
+  string overview      = 7;   // season overview
+  string air_date      = 8;   // "YYYY-MM-DD"
+}
+
+// ─── Requests ─────────────────────────────────────────────────────────────────
+
+message CatalogRequest {
+  string plugin_id  = 1;
+  string catalog_id = 2;
+  int32  page       = 3;
+}
+message CatalogResponse {
+  repeated CatalogItem items    = 1;
+  bool                 has_more = 2;
+}
+
+message SearchFilter {
+  string id    = 1;
+  string label = 2;
+  // type: "select"|"bool"|"number"
+  string type  = 3;
+  repeated FilterOption options = 4;
+}
+
+message FilterOption {
+  string id    = 1;
+  string label = 2;
+}
+
+message SearchFiltersRequest  { string plugin_id = 1; }
+message SearchFiltersResponse { repeated SearchFilter filters = 1; }
+
+message SearchRequest {
+  string plugin_id            = 1;
+  string query                = 2;
+  int32  page                 = 3;
+  map<string, string> filters = 4;
+}
+message SearchResponse {
+  repeated CatalogItem items    = 1;
+  bool                 has_more = 2;
+}
+
+message DetailsRequest {
+  string plugin_id = 1;
+  string media_id  = 2;
+}
+
+// ─── Typed rich-metadata messages ─────────────────────────────────────────────
+// Populated only by GetDetails, never by catalog/search/browse.
+
+message MovieDetails {
+  string          plot           = 1;
+  int32           year           = 2;
+  repeated string genres         = 3;
+  string          runtime        = 4;   // "120 min"
+  repeated string cast           = 5;
+  repeated string directors      = 6;
+  string          trailer_url    = 7;
+  string          released       = 8;   // ISO 8601 date
+  string          tagline        = 9;
+  string          content_rating = 10;  // "PG-13", "R", ...
+  string          poster_url     = 11;  // full-res (may differ from tile)
+  string          fanart_url     = 12;
+  string          logo_url       = 13;  // transparent wordmark PNG/SVG
+}
+
+message SeriesDetails {
+  string          plot            = 1;
+  int32           year            = 2;
+  repeated string genres          = 3;
+  string          status          = 4;  // "Ended"|"Continuing"|"FINISHED"|"RELEASING"
+  string          content_rating  = 5;
+  string          network         = 6;
+  string          episode_runtime = 7;  // "24 min"
+  repeated string cast            = 8;
+  repeated string creators        = 9;  // showrunners / studios
+  string          trailer_url     = 10;
+  string          first_air_date  = 11; // ISO 8601
+  string          poster_url      = 12;
+  string          fanart_url      = 13;
+  repeated SeasonInfo seasons     = 14;
+  string          logo_url        = 15; // transparent wordmark PNG/SVG
+}
+
+message EpisodeDetails {
+  string          plot           = 1;
+  int32           year           = 2;
+  string          thumbnail_url  = 3;
+  string          air_date       = 4;
+  int32           duration       = 5;   // minutes
+  double          vote           = 6;
+  int32           episode_number = 7;
+  int32           season_number  = 8;
+  string          show_id        = 9;
+  repeated string guest_stars    = 10;
+  repeated string directors      = 11;
+}
+
+message LiveDetails {
+  string          channel_name   = 1;
+  string          channel_logo   = 2;
+  string          stream_start   = 3;  // ISO 8601 datetime, empty if 24/7
+  string          stream_end     = 4;
+  string          sport_category = 5;  // "football"|"basketball"|...
+  repeated string teams          = 6;
+  string          competition    = 7;  // e.g. league or tournament name
+  bool            is_replay      = 8;
+}
+
+message VideoDetails {
+  string          channel_name = 1;
+  string          channel_url  = 2;
+  string          published_at = 3;  // ISO 8601 datetime
+  int64           view_count   = 4;
+  int64           like_count   = 5;
+  string          duration     = 6;  // "PT12M30S" or "12:30"
+  repeated string tags         = 7;
+}
+
+message MusicDetails {
+  string          artist        = 1;
+  string          album         = 2;
+  string          album_art_url = 3;
+  string          duration      = 4;  // "3:45"
+  int32           track_number  = 5;
+  int32           disc_number   = 6;
+  string          released      = 7;  // ISO 8601 date
+  repeated string composers     = 8;
+  repeated string genres        = 9;
+  string          lyrics_url    = 10;
+}
+
+message PodcastDetails {
+  string          show_name      = 1;
+  string          author         = 2;
+  string          published_at   = 3;  // ISO 8601 datetime
+  string          duration       = 4;  // "45:12"
+  int32           episode_number = 5;
+  int32           season_number  = 6;
+  string          audio_url      = 7;
+  repeated string tags           = 8;
+}
+
+message DetailsResponse {
+  CatalogItem item = 1;
+  // seasons removed from top-level — now inside SeriesDetails.seasons
+  oneof details {
+    MovieDetails   movie   = 2;
+    SeriesDetails  series  = 3;
+    EpisodeDetails episode = 4;
+    LiveDetails    live    = 5;
+    VideoDetails   video   = 6;
+    MusicDetails   music   = 7;
+    PodcastDetails podcast = 8;
+  }
+}
+
+message BrowseRequest {
+  string plugin_id = 1;
+  string parent_id = 2;
+  string child_id  = 3;
+  int32  page      = 4;
+}
+message BrowseResponse {
+  repeated CatalogItem  items    = 1;  // generic catalog/directory items
+  bool                  has_more = 2;
+  repeated EpisodeInfo  episodes = 3;  // populated when browsing a season
+}
+
+message StreamSource {
+  string id      = 1;
+  string label   = 2;
+  string quality = 3;
+  bool   is_live = 4;
+}
+message StreamsRequest {
+  string plugin_id = 1;
+  string media_id  = 2;
+}
+message StreamsResponse {
+  repeated StreamSource sources = 1;
+}
+
+message ResolveRequest {
+  string plugin_id = 1;
+  string stream_id = 2;
+}
+message ResolveResponse {
+  string              resolved_url = 1;
+  map<string, string> http_headers = 2;
+  bool                is_live      = 3;
+  reserved 4;
+  reserved "error";
+  map<string, string> extra        = 5;
+}
+
+// ResolveProgress is an informational update emitted while ResolveStream is
+// still working (e.g. a resolve step failed and the plugin is trying an
+// alternative). It never ends the RPC by itself.
+message ResolveProgress {
+  string message = 1;
+  string status  = 2;
+}
+
+// ResolveStreamEvent is the payload of the ResolveStream server-streaming
+// RPC: zero or more {progress} updates followed by exactly one {result}
+// that ends the stream. If the resolve fails outright the RPC returns an
+// error instead of a {result} event.
+message ResolveStreamEvent {
+  oneof payload {
+    ResolveProgress progress = 1;
+    ResolveResponse result   = 2;
+  }
+}
+
+message ProgressRequest {
+  string plugin_id          = 1;
+  string media_id           = 2;
+  string parent_id          = 3;
+  int64  current_position   = 4;
+  int64  total_duration     = 5;
+  // navigation_context/title/poster: populate the continue-watching card.
+  // Empty string leaves the existing stored value untouched (see
+  // UpsertProgress's merge-on-conflict) rather than clearing it — a plain
+  // position-only heartbeat doesn't need to resend metadata every tick.
+  string navigation_context = 6;
+  string title              = 7;
+  string poster             = 8;
+  // rating/genres/plot/year: same merge-on-conflict rule as above — 0/empty
+  // leaves the stored value untouched. Sourced from GetDetails at play time
+  // (PlaybackArgs on the Flutter side), not re-fetched here server-side.
+  double rating             = 9;
+  repeated string genres    = 10;
+  string plot               = 11;
+  int32  year               = 12;
+}
+message ProgressResponse {
+  bool ok = 1;
+}
+
+message DeleteProgressRequest {
+  string plugin_id = 1;
+  string media_id  = 2;
+}
+message DeleteProgressResponse {
+  bool ok = 1;
+}
+
+message ContinueWatchingItem {
+  string plugin_id          = 1;
+  string media_id           = 2;
+  string parent_id          = 3;
+  string navigation_context = 4;
+  string title              = 5;
+  string poster             = 6;
+  double progress_time      = 7;
+  double total_time         = 8;
+  string last_updated       = 9;
+  double rating             = 10;
+  repeated string genres    = 11;
+  string plot               = 12;
+  int32  year               = 13;
+}
+message ContinueWatchingRequest {
+  int32  limit     = 1;  // 0 = server default
+  string parent_id = 2;  // optional filter
+  string plugin_id = 3;  // optional filter
+}
+message ContinueWatchingResponse {
+  repeated ContinueWatchingItem items = 1;
+}
+
+message PluginListRequest {}
+message PluginInfo {
+  string          plugin_id      = 1;
+  string          name           = 2;
+  string          version        = 3;
+  bool            is_ready       = 4;
+  repeated string capabilities   = 5;
+  repeated CatalogDef catalogs   = 6;
+  // Runtime status reported by the plugin itself.
+  string          status_label   = 7; // "ready"|"syncing"|"needs_config"|"error"
+  string          status_detail  = 8; // human-readable detail, e.g. "Sincronizzazione 12/50"
+  // True when one or more required core-scoped settings are missing
+  bool            needs_config   = 9;
+  // True when the plugin actually answered a liveness check recently — NOT
+  // the same as is_ready (which only means "configured", independent of
+  // whether the process/connection currently responds). A plugin whose
+  // process is alive but whose channel is broken, or whose last N task runs
+  // all errored, reports reachable=false here so the client can
+  // surface a real "backend unreachable" signal instead of the user having
+  // to infer it from a stale catalog or dig through logs.
+  bool            reachable      = 10;
+  // Unix timestamp (seconds) of the last time this plugin was confirmed
+  // reachable. 0 if never. Lets the client show "last seen Xm ago" instead
+  // of a bare boolean.
+  int64           last_ok_unix   = 11;
+}
+message CatalogDef {
+  string id                = 1;
+  string name              = 2;
+  string type              = 3;
+  int32  cache_ttl_seconds = 4;
+  // section_kind: row layout, orthogonal to content type.
+  //   ""|"carousel" — horizontal scroll (today's default, always safe).
+  //   "grid"        — tile grid. Reserved: no client renders it yet as of
+  //                   this writing: treat as unset until a client opts in.
+  // Forward-compat contract: a client that doesn't recognize a value here
+  // must skip/ignore it gracefully (treat as unset), never crash or render
+  // garbage — this field will grow new values over time without a proto bump.
+  string section_kind      = 5;
+  // style_hint: presentation weight within section_kind.
+  //   ""         — default card size (today's behavior).
+  //   "featured" — larger cards, visual emphasis.
+  //   "compact"  — smaller/denser cards.
+  // Same forward-compat contract as section_kind.
+  string style_hint        = 6;
+  // True when this catalog backs a background task the plugin author marked
+  // as user-triggerable — e.g. a live catalog's manual "refresh now". Lets
+  // the client show an "aggiorna ora" action instead of waiting for the
+  // next scheduled run.
+  bool   live_refreshable  = 7;
+  // card_layout: card aspect ratio for this catalog's row — deliberately
+  // independent of `type`. Before this field existed, the only way to get
+  // 16:9 cards was `type = "live"`, which also forces the live-TV row
+  // styling (home_screen.dart's big centered fonts) and disables
+  // continue-watching plugin-wide — wrong for e.g. a landscape-thumbnail
+  // video plugin serving perfectly ordinary on-demand video
+  // (`CatalogItem.media_type` stays whatever it already was — "video", not
+  // "live" — and continues to drive live-vs-VOD *player* behavior on its
+  // own, unaffected by this field).
+  //   ""           — poster/vertical, 2:3 (today's default, unchanged).
+  //   "landscape"  — wide/horizontal, 16:9.
+  // Same forward-compat contract as section_kind: unrecognized values must
+  // be treated as unset, never crash or render garbage.
+  string card_layout       = 8;
+  // disable_hero_background: when true, the home screen's full-bleed hero
+  // background never shows this catalog's fanart/poster imagery — it always
+  // falls back to the neutral/anonymous background (a flat dark fill, or a
+  // themed gradient for sport) that already renders today whenever no image
+  // is available. Content this is useful for tends to look bad or feels
+  // over-personal blown up full-screen (a specific match's low-res team
+  // logos, a random video's thumbnail) — better to stay anonymous than
+  // adapt to whatever's focused. False (default) preserves today's behavior
+  // unchanged for every catalog that doesn't set this.
+  bool   disable_hero_background = 9;
+}
+message PluginListResponse {
+  repeated PluginInfo plugins = 1;
+}
+
+// ─── PluginService — per-user plugin settings ────────────────────────────────
+// Manages user-scoped settings (scope: user in manifest.yaml).
+// Core-scoped settings are admin-only and never exposed here.
+
+message PluginSettingField {
+  string id           = 1;
+  string label        = 2;
+  // type: "string"|"password"|"number"|"bool"
+  string type         = 3;
+  bool   required     = 4;
+  // current_value is empty for password fields; use is_set instead
+  string current_value = 5;
+  bool   is_set        = 6; // true when a password field has a stored value
+}
+
+message GetPluginSettingsRequest {
+  string plugin_id  = 1;
+  string profile_id = 2; // empty = use profile from JWT header
+}
+message GetPluginSettingsResponse {
+  repeated PluginSettingField fields = 1;
+}
+
+message SavePluginSettingRequest {
+  string plugin_id  = 1;
+  string profile_id = 2;
+  string key        = 3;
+  string value      = 4; // empty string = delete/clear the setting
+}
+message SavePluginSettingResponse {
+  bool ok = 1;
+}
+
+// TriggerRefresh asks the core to run a plugin's live_refresh-marked task(s)
+// right now, instead of waiting for its cron schedule. Non-blocking on the
+// core side: if a task for this plugin is already running, ok=false with an
+// explanatory message rather than queueing or blocking the call.
+message TriggerRefreshRequest {
+  string plugin_id = 1;
+}
+message TriggerRefreshResponse {
+  bool   ok      = 1;
+  string message = 2;
+}
+
+service PluginService {
+  // Returns user-scoped setting definitions + current values for a plugin.
+  rpc GetPluginSettings (GetPluginSettingsRequest)  returns (GetPluginSettingsResponse);
+  // Saves or clears a single user-scoped setting.
+  rpc SavePluginSetting (SavePluginSettingRequest)  returns (SavePluginSettingResponse);
+  // Manually triggers a plugin's live_refresh task(s) on demand.
+  rpc TriggerRefresh (TriggerRefreshRequest) returns (TriggerRefreshResponse);
+}
+
+service MediaPipeline {
+  rpc GetCatalog       (CatalogRequest)        returns (CatalogResponse);
+  rpc GetSearchFilters (SearchFiltersRequest)  returns (SearchFiltersResponse);
+  rpc Search           (SearchRequest)         returns (SearchResponse);
+  rpc GetDetails    (DetailsRequest)    returns (DetailsResponse);
+  rpc Browse        (BrowseRequest)     returns (BrowseResponse);
+  rpc GetStreams     (StreamsRequest)    returns (StreamsResponse);
+  rpc ResolveStream (ResolveRequest)    returns (stream ResolveStreamEvent);
+  rpc UpdateProgress(ProgressRequest)         returns (ProgressResponse);
+  rpc DeleteProgress(DeleteProgressRequest)   returns (DeleteProgressResponse);
+  rpc GetContinueWatching(ContinueWatchingRequest) returns (ContinueWatchingResponse);
+  rpc ListPlugins   (PluginListRequest) returns (PluginListResponse);
+}

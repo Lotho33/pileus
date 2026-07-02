@@ -1,0 +1,154 @@
+# Builds the Play Store / Amazon Appstore artifacts for an existing
+# `vX.Y.Z` tag and pushes them to this repo's Forgejo *generic package*
+# registry (private to the repo — NOT attached to the public release).
+# Run by hand: Actions -> store -> Run, with the tag as input.
+#
+# Builds BOTH store apps (tv + mobile, distinct applicationIds/listings).
+#
+# Difference from release.yml (the Obtainium beta channel):
+#   * signed **AAB** (Play requires it) + signed per-ABI APKs (Amazon)
+#   * --dart-define=PILEUS_STORE_BUILD=true  -> in-app update check compiled
+#     out, no personal Forgejo/Mycelium host baked in
+#   * -PpileusRequireSigning=true            -> build fails instead of
+#     silently debug-signing
+#   * --obfuscate + symbols/mapping kept for crash de-obfuscation
+#   * both flavors: -PpileusExcludeMpv (drop the unused libmpv.so, ~12 MB/ABI)
+#     + -PpileusR8 (code + resource shrink). A bad strip only shows at
+#     runtime — smoke-test playback / gRPC / subtitle-SVG on a device before
+#     shipping either flavor.
+#
+# Requirements: same registered `docker` runner + RELEASE_TOKEN, plus the
+# ANDROID_KEYSTORE_* signing secrets (mandatory here — no debug fallback).
+#
+# After it runs, download the AAB/APKs from
+#   <forgejo>/<owner>/-/packages/generic/pileus-store/<version>
+# and upload them to the Play Console / Amazon Developer console by hand.
+
+name: store
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Release tag to build (e.g. v1.3.0)'
+        required: true
+
+jobs:
+  build:
+    runs-on: docker
+    container:
+      image: ghcr.io/cirruslabs/flutter:stable
+    steps:
+      - name: Checkout (git, no JS action)
+        run: |
+          set -eu
+          server="${{ github.server_url }}"
+          repo="${{ github.repository }}"
+          tag="${{ inputs.tag }}"
+          auth_url="https://${{ github.actor }}:${{ secrets.RELEASE_TOKEN }}@${server#https://}/${repo}.git"
+          git config --global --add safe.directory "$PWD"
+          git init -q .
+          git remote add origin "$auth_url"
+          git fetch -q --depth 1 origin "refs/tags/${tag}:refs/tags/${tag}"
+          git checkout -q "refs/tags/${tag}"
+          git remote set-url origin "${server}/${repo}.git"
+
+      - name: Derive version
+        id: v
+        run: |
+          tag="${{ inputs.tag }}"
+          echo "name=${tag#v}" >> "$GITHUB_OUTPUT"
+          echo "build=${{ github.run_number }}" >> "$GITHUB_OUTPUT"
+
+      - name: Flutter deps
+        run: |
+          flutter --version
+          flutter pub get
+
+      - name: Android signing config (mandatory)
+        env:
+          KS_B64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          KS_PASS: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          KEY_PASS: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          set -eu
+          if [ -z "${KS_B64:-}" ] || [ -z "${KS_PASS:-}" ] || [ -z "${KEY_ALIAS:-}" ] || [ -z "${KEY_PASS:-}" ]; then
+            echo "::error::store builds require ANDROID_KEYSTORE_BASE64 / ANDROID_KEYSTORE_PASSWORD / ANDROID_KEY_ALIAS / ANDROID_KEY_PASSWORD"
+            exit 1
+          fi
+          echo "$KS_B64" | base64 -d > android/app/release.jks
+          keytool -list -keystore android/app/release.jks -storepass "$KS_PASS" -alias "$KEY_ALIAS" >/dev/null
+          {
+            echo "storeFile=release.jks"
+            echo "storePassword=$KS_PASS"
+            echo "keyAlias=$KEY_ALIAS"
+            echo "keyPassword=$KEY_PASS"
+          } > android/key.properties
+          echo "Signing: RELEASE (alias=$KEY_ALIAS)"
+
+      - name: Build TV (AAB + per-ABI APKs)
+        run: |
+          set -eu
+          V="${{ steps.v.outputs.name }}"
+          # Same size cuts as mobile: strip the never-used libmpv.so
+          # (~12 MB/ABI — Android always uses ExoPlayer, _MpvPlayerEngine
+          # throws if constructed) and turn on R8 + resource shrinking.
+          # Run a real playback / gRPC / subtitle-SVG smoke test on a TV box
+          # before promoting a store build.
+          common="--release --flavor tv -PpileusRequireSigning=true \
+            -PpileusExcludeMpv=true -PpileusR8=true \
+            --obfuscate --split-debug-info=build/symbols-tv \
+            --dart-define=PILEUS_STORE_BUILD=true \
+            --build-name=$V --build-number=${{ steps.v.outputs.build }}"
+          flutter build appbundle $common
+          flutter build apk --split-per-abi --target-platform android-arm,android-arm64 $common
+          mkdir -p dist
+          cp build/app/outputs/bundle/tvRelease/app-tv-release.aab "dist/pileus-$V-tv-store.aab"
+          # flutter names split-per-abi flavored APKs app-<abi>-<flavor>-release.apk.
+          for f in build/app/outputs/flutter-apk/app-*-tv-release.apk; do
+            abi=$(basename "$f" | sed -E 's/^app-(.+)-tv-release\.apk$/\1/')
+            cp "$f" "dist/pileus-$V-tv-store-${abi}.apk"
+          done
+          tar czf "dist/pileus-$V-tv-symbols.tar.gz" -C build/symbols-tv .
+          cp build/app/outputs/mapping/tvRelease/mapping.txt "dist/pileus-$V-tv-mapping.txt" || true
+
+      - name: Build Mobile (AAB + per-ABI APKs)
+        run: |
+          set -eu
+          V="${{ steps.v.outputs.name }}"
+          # Mobile adds the size cuts: strip the never-used libmpv.so and
+          # turn on R8 + resource shrinking. Distinct applicationId
+          # (com.lotho33.pileus.mobile) → separate Play/Amazon listing.
+          common="--release --flavor mobile -t lib/main_mobile.dart \
+            -PpileusRequireSigning=true -PpileusExcludeMpv=true -PpileusR8=true \
+            --obfuscate --split-debug-info=build/symbols-mobile \
+            --dart-define=PILEUS_STORE_BUILD=true \
+            --build-name=$V --build-number=${{ steps.v.outputs.build }}"
+          flutter build appbundle $common
+          flutter build apk --split-per-abi --target-platform android-arm,android-arm64 $common
+          cp build/app/outputs/bundle/mobileRelease/app-mobile-release.aab "dist/pileus-$V-mobile-store.aab"
+          for f in build/app/outputs/flutter-apk/app-*-mobile-release.apk; do
+            abi=$(basename "$f" | sed -E 's/^app-(.+)-mobile-release\.apk$/\1/')
+            cp "$f" "dist/pileus-$V-mobile-store-${abi}.apk"
+          done
+          tar czf "dist/pileus-$V-mobile-symbols.tar.gz" -C build/symbols-mobile .
+          cp build/app/outputs/mapping/mobileRelease/mapping.txt "dist/pileus-$V-mobile-mapping.txt" || true
+          ( cd dist && sha256sum * > SHA256SUMS.txt )
+          ls -la dist
+
+      - name: Push to Forgejo generic package registry (private)
+        env:
+          TOKEN: ${{ secrets.RELEASE_TOKEN }}
+        run: |
+          set -eu
+          apt-get update -qq
+          apt-get install -y --no-install-recommends curl ca-certificates
+          owner="${{ github.repository_owner }}"
+          base="${{ github.server_url }}/api/packages/${owner}/generic/pileus-store/${{ steps.v.outputs.name }}"
+          for f in dist/*; do
+            echo "uploading $(basename "$f")"
+            curl -sf -H "Authorization: token ${TOKEN}" \
+              --upload-file "$f" "${base}/$(basename "$f")"
+          done
+          echo "Done. Download from: ${{ github.server_url }}/${owner}/-/packages/generic/pileus-store/${{ steps.v.outputs.name }}"

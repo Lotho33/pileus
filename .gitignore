@@ -1,0 +1,66 @@
+# Miscellaneous
+*.class
+*.log
+*.pyc
+*.swp
+.DS_Store
+.atom/
+.build/
+.buildlog/
+.history
+.svn/
+.swiftpm/
+migrate_working_dir/
+
+# IntelliJ related
+*.iml
+*.ipr
+*.iws
+.idea/
+
+# Editor / local tooling
+.vscode/
+.claude/
+
+# Flutter/Dart/Pub related
+**/doc/api/
+**/ios/Flutter/.last_build_id
+.dart_tool/
+.flutter-plugins-dependencies
+.pub-cache/
+.pub/
+/build/
+/coverage/
+
+# Symbolication related
+app.*.symbols
+
+# Obfuscation related
+app.*.map.json
+
+# Android Studio will place build artifacts here
+/android/app/debug
+/android/app/profile
+/android/app/release
+
+# Gradle build output (reports, intermediates, per-flavor APK/AAB) — the
+# top-level /build/ rule above only covers Flutter's own output dir, not
+# Gradle's. A stray android/build/reports/... snuck into the first public
+# commit before this was added (2026-09-11).
+/android/build/
+/android/app/build/
+
+# Signing material — never commit real keystores / key passwords.
+# android/key.properties.example is the tracked template.
+*.jks
+*.keystore
+/android/key.properties
+/android/app/*.jks
+
+# Internal, non-public docs (kept locally; see PUBBLICAZIONE plan)
+/docs/STORE_READINESS.md
+
+# iOS / macOS are not supported targets — the flutter tool may re-scaffold
+# these on `pub get`; keep them out of the tree. See README.
+/ios/
+/macos/

@@ -1,0 +1,97 @@
+# Builds the web / PWA bundle for an existing `vX.Y.Z` release and attaches
+# it as a tarball. Run by hand: Actions -> web -> Run, with the tag.
+#
+# The bundle expects to be served from the same origin as Mycelium (which
+# must expose a gRPC-Web endpoint at /grpc — see docs/WEB.md). This job only
+# produces the static files; deployment is manual / handled by mycelium.
+#
+# Same requirements as release.yml (registered `docker` runner,
+# RELEASE_TOKEN). No signing / native toolchain needed.
+
+name: web
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Release tag to build (e.g. v1.4.0)'
+        required: true
+
+jobs:
+  build:
+    runs-on: docker
+    container:
+      image: ghcr.io/cirruslabs/flutter:stable
+    steps:
+      - name: Checkout (git, no JS action)
+        run: |
+          set -eu
+          server="${{ github.server_url }}"
+          repo="${{ github.repository }}"
+          tag="${{ inputs.tag }}"
+          auth_url="https://${{ github.actor }}:${{ secrets.RELEASE_TOKEN }}@${server#https://}/${repo}.git"
+          git config --global --add safe.directory "$PWD"
+          git init -q .
+          git remote add origin "$auth_url"
+          git fetch -q --depth 1 origin "refs/tags/${tag}:refs/tags/${tag}"
+          git checkout -q "refs/tags/${tag}"
+          git remote set-url origin "${server}/${repo}.git"
+
+      - name: Derive version
+        id: v
+        run: |
+          tag="${{ inputs.tag }}"
+          echo "name=${tag#v}" >> "$GITHUB_OUTPUT"
+          echo "build=${{ github.run_number }}" >> "$GITHUB_OUTPUT"
+
+      - name: Flutter deps
+        run: |
+          flutter --version
+          flutter pub get
+
+      - name: Build web bundle
+        run: |
+          set -eu
+          apt-get update -qq
+          apt-get install -y --no-install-recommends jq curl ca-certificates
+          V="${{ steps.v.outputs.name }}"
+          flutter build web --release -t lib/main_web.dart --base-href / \
+            --build-name="$V" --build-number="${{ steps.v.outputs.build }}" \
+            --dart-define=PILEUS_STORE_BUILD=true
+          mkdir -p dist
+          tar czf "dist/pileus-$V-web.tar.gz" -C build/web .
+          ( cd dist && sha256sum "pileus-$V-web.tar.gz" > "pileus-$V-web.tar.gz.sha256" )
+
+      - name: Upload to release
+        env:
+          TOKEN: ${{ secrets.RELEASE_TOKEN }}
+        run: |
+          set -eu
+          api="${{ github.server_url }}/api/v1/repos/${{ github.repository }}"
+          tag="${{ inputs.tag }}"
+          hdr="Authorization: token ${TOKEN}"
+
+          rel_id=$(curl -sf -H "$hdr" "$api/releases/tags/${tag}" | jq -r '.id // empty' || true)
+          if [ -z "$rel_id" ]; then
+            echo "no release for ${tag} yet — creating it"
+            rel_id=$(curl -sf -H "$hdr" -H 'Content-Type: application/json' \
+              -X POST "$api/releases" \
+              -d "{\"tag_name\":\"${tag}\",\"name\":\"${tag}\"}" | jq -r '.id')
+          fi
+          [ -n "$rel_id" ] && [ "$rel_id" != "null" ] || { echo "::error::no release id"; exit 1; }
+
+          names=$(cd dist && ls | tr '\n' '|' | sed 's/|$//')
+          curl -sf -H "$hdr" "$api/releases/${rel_id}/assets" \
+            | jq -c --arg re "^(${names})$" '.[] | select(.name | test($re)) | {id, name}' \
+            | while read -r a; do
+              id=$(echo "$a" | jq -r .id)
+              echo "replacing $(echo "$a" | jq -r .name)"
+              curl -sf -H "$hdr" -X DELETE "$api/releases/${rel_id}/assets/${id}" || true
+            done
+
+          for f in dist/*; do
+            echo "uploading $(basename "$f")"
+            curl -sf -H "$hdr" \
+              -F "attachment=@${f};type=application/octet-stream" \
+              "$api/releases/${rel_id}/assets?name=$(basename "$f")" > /dev/null
+          done

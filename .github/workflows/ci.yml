@@ -1,0 +1,27 @@
+# Mirror of .forgejo/workflows/ci.yml for the public GitHub repo: static
+# analysis + unit tests on every push and PR to the main lines. Release
+# artifacts are built on the Forgejo instance, not here.
+
+name: ci
+
+on:
+  push:
+    branches: [main, dev]
+  pull_request:
+    branches: [main, dev]
+
+jobs:
+  analyze-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - run: flutter --version
+      - run: flutter pub get
+      - run: flutter analyze
+      - run: flutter test --reporter expanded

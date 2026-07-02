@@ -1,0 +1,54 @@
+{
+  "name": "Pileus Player",
+  "build": {
+    "dockerfile": "Dockerfile"
+  },
+  "initializeCommand": "xhost +local: || true; (command -v adb >/dev/null 2>&1 && adb start-server) || true",
+  "runArgs": [
+    "--network=host",
+    "-e", "DISPLAY=${localEnv:DISPLAY}",
+    "-v", "/tmp/.X11-unix:/tmp/.X11-unix:rw",
+    "--device=/dev/dri",
+    "--group-add=video",
+    "-v", "/run/user/1000/pulse:/run/user/1000/pulse:ro",
+    "-e", "PULSE_SERVER=unix:/run/user/1000/pulse/native",
+    "-v", "pileus-pub-cache:/root/.local/share/pub-cache",
+    "-v", "pileus-gradle-cache:/root/.gradle"
+  ],
+  // adb: with --network=host the container's adb client shares the host's
+  // network namespace. It must NOT spawn its own server (that would fight the
+  // host's on tcp:5037). ADB_SERVER_SOCKET (remoteEnv, below) makes it a pure
+  // client; initializeCommand guarantees the host server is up first so it
+  // always has something to connect to. "ignore" keeps VS Code from trying to
+  // forward 5037 (and failing "address already in use") on top of that.
+  "otherPortsAttributes": {
+    "5037": {
+      "onAutoForward": "ignore"
+    }
+  },
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "dart-code.dart-code",
+        "dart-code.flutter"
+      ],
+      "settings": {
+        "dart.flutterSdkPath": "/opt/flutter"
+      }
+    }
+  },
+  "postCreateCommand": "mkdir -p /root/Documents /root/.local/share && flutter pub get",
+  "remoteEnv": {
+    "MYCELIUM_HOST": "127.0.0.1",
+    "MYCELIUM_HTTP_PORT": "8000",
+    "MYCELIUM_GRPC_PORT": "50051",
+    "HOME": "/root",
+    "XDG_DATA_HOME": "/root/.local/share",
+    "LIBGL_ALWAYS_SOFTWARE": "",
+    "PULSE_SERVER": "unix:/run/user/1000/pulse/native",
+    "ADB_SERVER_SOCKET": "tcp:127.0.0.1:5037",
+    "ANDROID_ADB_SERVER_ADDRESS": "127.0.0.1",
+    "ANDROID_ADB_SERVER_PORT": "5037",
+    "GDK_BACKEND": "x11"
+  }
+}

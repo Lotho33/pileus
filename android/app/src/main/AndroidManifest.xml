@@ -1,0 +1,126 @@
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- ── Form factor: TV only ────────────────────────────────────────────
+         Without an explicit <uses-feature>, Play and Amazon treat
+         android.hardware.touchscreen as REQUIRED — every Android TV / Fire
+         TV reports no touchscreen, so the app would be filtered off every
+         device it actually targets. `required="false"` fixes that.
+
+         android.software.leanback required="true" makes this a TV-only
+         listing (mobile/desktop are a separate app). If an older Fire TV
+         model that doesn't report the leanback feature ever needs to be
+         supported, flip this one attribute to "false" — the LEANBACK_LAUNCHER
+         category below is what actually places the app on the TV home
+         screen. faketouch / wifi / gamepad are declared optional so no TV
+         box is excluded for lacking them. -->
+    <uses-feature android:name="android.hardware.touchscreen" android:required="false"/>
+    <uses-feature android:name="android.software.leanback" android:required="true"/>
+    <uses-feature android:name="android.hardware.faketouch" android:required="false"/>
+    <uses-feature android:name="android.hardware.wifi" android:required="false"/>
+    <uses-feature android:name="android.hardware.gamepad" android:required="false"/>
+
+    <!-- The debug/profile manifests (src/debug, src/profile) each grant this
+         separately for Flutter's own dev tooling (hot reload, DevTools),
+         which reads as "only needed for development" — but the app itself
+         makes real network calls (gRPC to mycelium-core, HTTP discovery) in
+         every build variant, release included. Without it here too, every
+         socket/HTTP attempt in a release build fails silently (caught by
+         the surrounding try/catch in host_resolver.dart/
+         server_discovery_screen.dart as just "not reachable"), which reads
+         exactly like "the server isn't found" even though it's actually
+         "no build has permission to open a socket at all" — release was
+         missing this permission entirely; debug/profile only ever worked
+         because their own manifests granted it independently.
+    -->
+    <uses-permission android:name="android.permission.INTERNET"/>
+    <!-- Pileus is a bring-your-own-server client: users point it at their own
+         mycelium box, which on a LAN almost always serves gRPC and the HLS
+         stream proxy over plain http://. ExoPlayer's HTTP data source
+         (unlike libmpv's own FFmpeg networking, which ignored the OS policy)
+         enforces the platform cleartext policy, and with targetSdk >= 28
+         that defaults to "blocked" — so without usesCleartextTraffic the
+         video load fails with a bare "Source error" on every http stream.
+         dart:io sockets (gRPC / discovery) bypass the policy, so this only
+         started mattering once playback moved to ExoPlayer. -->
+    <application
+        android:label="Pileus"
+        android:name="${applicationName}"
+        android:icon="@mipmap/ic_launcher"
+        android:banner="@drawable/banner"
+        android:networkSecurityConfig="@xml/network_security_config"
+        android:usesCleartextTraffic="true">
+        <activity
+            android:name=".MainActivity"
+            android:exported="true"
+            android:launchMode="singleTop"
+            android:taskAffinity=""
+            android:theme="@style/LaunchTheme"
+            android:configChanges="orientation|keyboardHidden|keyboard|screenSize|smallestScreenSize|locale|layoutDirection|fontScale|screenLayout|density|uiMode"
+            android:hardwareAccelerated="true"
+            android:windowSoftInputMode="adjustResize">
+            <!-- Specifies an Android theme to apply to this Activity as soon as
+                 the Android process has started. This theme is visible to the user
+                 while the Flutter UI initializes. After that, this theme continues
+                 to determine the Window background behind the Flutter UI. -->
+            <meta-data
+              android:name="io.flutter.embedding.android.NormalTheme"
+              android:resource="@style/NormalTheme"
+              />
+            <!-- Force Impeller's OpenGL ES renderer instead of Vulkan
+                 (EnableImpeller=false is kept only as a no-op for older
+                 engines that still had the Skia path).
+
+                 On the weak Amlogic TV boxes (Tanix W2 / S905W, Fire Stick,
+                 Mali-450) the Vulkan driver is unreliable under the combined
+                 load of a hardware-decoded video Surface plus Flutter
+                 compositing — the swapchain has reported "Fence wait
+                 failed: ErrorDeviceLost" / "No surface available", i.e. a
+                 hard screen freeze on playback start. The GLES backend has
+                 no swapchain fence to lose. Conservative default for this
+                 device class; a capable phone/tablet is unaffected either
+                 way. -->
+            <meta-data
+              android:name="io.flutter.embedding.android.ImpellerBackend"
+              android:value="opengles"
+              />
+            <meta-data
+              android:name="io.flutter.embedding.android.EnableImpeller"
+              android:value="false"
+              />
+            <!-- Since Flutter 3.29 platform-view compositing on Android 10+
+                 goes through SurfaceControl. On the Amlogic TV boxes'
+                 HWComposer this has invalidated the shared rendering Surface
+                 the instant the video PlatformView's Surface is allocated
+                 (UI freeze on playback start). Force the older TextureView /
+                 virtual-display compositing path, which the Amlogic
+                 compositor handles. -->
+            <meta-data
+              android:name="io.flutter.embedding.android.EnableSurfaceControl"
+              android:value="false"
+              />
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN"/>
+                <category android:name="android.intent.category.LAUNCHER"/>
+            </intent-filter>
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN"/>
+                <category android:name="android.intent.category.LEANBACK_LAUNCHER"/>
+            </intent-filter>
+        </activity>
+        <!-- Don't delete the meta-data below.
+             This is used by the Flutter tool to generate GeneratedPluginRegistrant.java -->
+        <meta-data
+            android:name="flutterEmbedding"
+            android:value="2" />
+    </application>
+    <!-- Required to query activities that can process text, see:
+         https://developer.android.com/training/package-visibility and
+         https://developer.android.com/reference/android/content/Intent#ACTION_PROCESS_TEXT.
+
+         In particular, this is used by the Flutter engine in io.flutter.plugin.text.ProcessTextPlugin. -->
+    <queries>
+        <intent>
+            <action android:name="android.intent.action.PROCESS_TEXT"/>
+            <data android:mimeType="text/plain"/>
+        </intent>
+    </queries>
+</manifest>

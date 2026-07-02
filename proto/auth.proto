@@ -1,0 +1,114 @@
+syntax = "proto3";
+
+package mycelium;
+
+option go_package = "github.com/Lotho33/stipes-sdk/sdk/gen;gen";
+
+// ─────────────────────────────────────────────────────────────────────────────
+// AuthService — Pileus player → Core
+// Device pairing (master PIN) and profile management.
+// All calls after pairing carry JWT via "authorization: Bearer <token>"
+// and optionally "x-profile-id: <uuid>".
+// ─────────────────────────────────────────────────────────────────────────────
+
+message AuthorizeDeviceRequest {
+  string device_id = 1;
+  string pin_hash  = 2;
+}
+
+message AuthorizeDeviceResponse {
+  string device_jwt = 1;
+  int64  expires_at = 2;
+  // field 3 reserved — was: string error (use gRPC status codes instead)
+  reserved 3;
+  reserved "error";
+}
+
+message CreateProfileRequest {
+  string name              = 1;
+  string avatar_url        = 2;
+  bool   is_child          = 3;
+  reserved 4;                 // was: string parental_pin_hash (removed 2026-09)
+  reserved "parental_pin_hash";
+  // Opaque JSON blob of person-scoped client preferences (subtitle
+  // appearance). Optional; server stores "{}" when empty.
+  string preferences_json  = 5;
+}
+
+message ProfileResponse {
+  string profile_id       = 1;
+  string name             = 2;
+  string avatar_url       = 3;
+  bool   is_child         = 4;
+  reserved 5;                 // was: bool has_pin (removed 2026-09)
+  reserved "has_pin";
+  // Opaque JSON blob of person-scoped client preferences. The client owns
+  // the schema; the server only stores and echoes it. Profiles are
+  // server-wide, so this follows the person across every paired device.
+  string preferences_json = 6;
+}
+
+message ListProfilesRequest {}
+message ListProfilesResponse {
+  repeated ProfileResponse profiles = 1;
+}
+
+message DeleteProfileRequest {
+  string profile_id = 1;
+}
+message DeleteProfileResponse {
+  bool ok = 1;
+  // field 2 reserved — was: string error (use gRPC status codes instead)
+  reserved 2;
+  reserved "error";
+}
+
+message UpdateProfileRequest {
+  string profile_id        = 1;
+  string name              = 2;
+  string avatar_url        = 3;
+  bool   is_child          = 4;
+  reserved 5;                 // was: string parental_pin_hash (removed 2026-09)
+  reserved "parental_pin_hash";
+}
+
+// SetProfilePreferences replaces only the preferences blob — a separate call
+// so the client doesn't have to round-trip name/avatar just to save a
+// subtitle setting. preferences_json is stored verbatim ("{}" to clear).
+message SetProfilePreferencesRequest {
+  string profile_id       = 1;
+  string preferences_json = 2;
+}
+
+message RefreshTokenRequest {}
+
+message DeviceInfo {
+  string device_id    = 1;
+  string label        = 2;
+  int64  created_at   = 3;
+  int64  last_seen_at = 4;
+}
+message ListDevicesRequest {}
+message ListDevicesResponse {
+  repeated DeviceInfo devices = 1;
+}
+
+message RenameDeviceRequest {
+  string device_id = 1;
+  string label     = 2;
+}
+message RenameDeviceResponse {
+  bool ok = 1;
+}
+
+service AuthService {
+  rpc AuthorizeDevice  (AuthorizeDeviceRequest)  returns (AuthorizeDeviceResponse);
+  rpc CreateProfile    (CreateProfileRequest)    returns (ProfileResponse);
+  rpc ListProfiles     (ListProfilesRequest)     returns (ListProfilesResponse);
+  rpc DeleteProfile    (DeleteProfileRequest)    returns (DeleteProfileResponse);
+  rpc UpdateProfile    (UpdateProfileRequest)    returns (ProfileResponse);
+  rpc SetProfilePreferences (SetProfilePreferencesRequest) returns (ProfileResponse);
+  rpc RefreshToken     (RefreshTokenRequest)     returns (AuthorizeDeviceResponse);
+  rpc ListDevices      (ListDevicesRequest)      returns (ListDevicesResponse);
+  rpc RenameDevice     (RenameDeviceRequest)     returns (RenameDeviceResponse);
+}

@@ -1,0 +1,16 @@
+# Copy to android/key.properties (git-ignored) to build a signed release APK
+# locally. CI writes this file itself from repo secrets — see
+# .forgejo/workflows/release.yml.
+#
+# Generate a keystore once (keep the .jks and these passwords safe — losing
+# them means you can never ship an update to an already-installed APK):
+#
+#   keytool -genkey -v -keystore ~/pileus-release.jks \
+#     -keyalg RSA -keysize 2048 -validity 10000 -alias pileus
+#
+# Then put the .jks at android/app/release.jks (or set storeFile to its path).
+
+storeFile=release.jks
+storePassword=CHANGE_ME
+keyAlias=pileus
+keyPassword=CHANGE_ME

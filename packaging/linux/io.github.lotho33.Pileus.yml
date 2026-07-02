@@ -1,0 +1,70 @@
+# Flatpak manifest for Pileus (Linux desktop) — TEMPLATE, not yet buildable.
+#
+# Strategy: package the *prebuilt* Linux bundle from
+# .forgejo/workflows/linux.yml (pileus-<version>-linux-x64.tar.gz) instead of
+# rebuilding Flutter inside the manifest. Enough for a directly-downloadable
+# `.flatpak`; a Flathub submission needs more (see packaging/linux/README.md).
+#
+# Placeholders to fill before this builds:
+#   <TARBALL_URL>   real release asset URL for pileus-<version>-linux-x64.tar.gz
+#   <TARBALL_SHA256> its sha256
+#   the libmpv module: pin a real mpv release + its sha256, and verify at
+#   runtime that media_kit actually loads it (org.freedesktop.Platform has
+#   ffmpeg but not mpv)
+#   icon-256.png: rasterise assets/branding/pileus_icon.svg to 256x256
+#
+#   flatpak-builder --user --install --force-clean build-dir \
+#     packaging/linux/io.github.lotho33.Pileus.yml
+
+app-id: io.github.lotho33.Pileus
+runtime: org.freedesktop.Platform
+runtime-version: '24.08'
+sdk: org.freedesktop.Sdk
+command: pileus
+
+finish-args:
+  - --share=ipc
+  - --socket=fallback-x11
+  - --socket=wayland
+  - --socket=pulseaudio
+  - --share=network
+  - --device=dri
+  - --talk-name=org.freedesktop.ScreenSaver
+
+cleanup:
+  - /include
+  - /lib/pkgconfig
+  - /share/man
+  - '*.a'
+
+modules:
+  # libmpv for the media_kit backend — see header note; needs real pins.
+  - name: libmpv
+    buildsystem: simple
+    build-commands:
+      - 'echo "TODO: build/pin libmpv (mpv-player/mpv release) into /app"'
+      - 'exit 1'
+    sources: []
+
+  - name: pileus
+    buildsystem: simple
+    build-commands:
+      - install -Dm755 pileus /app/bin/pileus
+      - cp -r data /app/share/pileus
+      - test ! -d lib || cp -r lib /app/lib/pileus
+      - install -Dm644 io.github.lotho33.Pileus.desktop
+          /app/share/applications/io.github.lotho33.Pileus.desktop
+      - install -Dm644 io.github.lotho33.Pileus.metainfo.xml
+          /app/share/metainfo/io.github.lotho33.Pileus.metainfo.xml
+      - install -Dm644 icon-256.png
+          /app/share/icons/hicolor/256x256/apps/io.github.lotho33.Pileus.png
+    sources:
+      - type: archive
+        url: <TARBALL_URL>
+        sha256: <TARBALL_SHA256>
+      - type: file
+        path: io.github.lotho33.Pileus.desktop
+      - type: file
+        path: io.github.lotho33.Pileus.metainfo.xml
+      - type: file
+        path: icon-256.png

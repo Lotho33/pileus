@@ -1,0 +1,105 @@
+name: pileus
+description: "Pileus - Flutter TV client for Mycelium streaming backend."
+publish_to: 'none'
+version: 1.2.3+0
+
+environment:
+  sdk: ^3.5.0
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+  # State management
+  flutter_bloc: ^9.1.1
+  equatable: ^2.0.5
+
+  # Navigation
+  go_router: ^17.5.0
+
+  # gRPC
+  grpc: ^5.1.0
+  protobuf: ^6.0.0
+
+  # Local cache/session store
+  shared_preferences: ^2.3.2
+
+  # Running app version, for the in-app update check (core/update). Reads
+  # Flutter's generated version.json on Linux and the manifest versionName
+  # on Android — both come from pubspec's `version:` (or CI --build-name).
+  package_info_plus: ^10.2.1
+
+  # DI
+  get_it: ^9.2.1
+
+  # Video player — dual backend behind lib/features/player/engine/.
+  #
+  # Android/iOS: better_player_plus (AndroidX Media3 / ExoPlayer, AVPlayer).
+  # On weak Amlogic TV boxes libmpv's MediaCodec path either can't sustain
+  # the per-frame GL texture upload (avsync spiral) or can't open the
+  # surface-mode codec at all (media-kit#1178, mpv-android#966/#670/#1088 —
+  # all open). ExoPlayer does zero-copy MediaCodec→Surface HW decode
+  # natively, has real decoder fallback, and HLS audio/subtitle track
+  # selection out of the box.
+  #
+  # Desktop/web: media_kit (libmpv) — better_player_plus has no Linux/
+  # Windows/macOS/web implementation and `flutter run -d linux` is the dev
+  # loop. Plain upstream, no vendored fork: the Amlogic surface-attach patch
+  # only mattered on Android, which no longer uses this backend.
+  better_player_plus: ^1.3.5
+  media_kit: 1.2.6
+  media_kit_video: ^1.3.1
+  media_kit_libs_video: 1.0.7
+  wakelock_plus: ^1.7.0
+
+  # Web-compatible HTTP client (server_discovery_screen.dart's probe — plain
+  # dart:io HttpClient throws at runtime on Flutter Web)
+  http: ^1.6.0
+
+  # Browser APIs for the web player (<video> + hls.js interop). `package:web`
+  # + dart:js_interop instead of the legacy dart:html so the web target also
+  # compiles under `flutter build web --wasm`.
+  web: ^1.1.0
+
+  # Crypto (TLS certificate fingerprint pinning)
+  crypto: ^3.0.3
+
+  # Required by protoc-generated Dart stubs (Int64 type)
+  fixnum: ^1.1.0
+
+  # Image caching
+  cached_network_image: ^3.4.1
+
+  # Utils
+  uuid: ^4.4.2
+  collection: ^1.18.0
+  window_manager: ^0.5.2
+
+  # Logo/wordmark (assets/branding) — vector, not raster, so the splash
+  # screen and side nav render crisp at any size instead of scaling a fixed
+  # PNG.
+  flutter_svg: ^2.0.17
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^6.0.0
+
+flutter:
+  uses-material-design: true
+
+  assets:
+    - assets/branding/
+
+  fonts:
+    - family: DMSans
+      fonts:
+        - asset: assets/fonts/DMSans/DMSans-Regular.ttf
+        - asset: assets/fonts/DMSans/DMSans-Italic.ttf
+          style: italic
+        - asset: assets/fonts/DMSans/DMSans-Medium.ttf
+          weight: 500
+        - asset: assets/fonts/DMSans/DMSans-SemiBold.ttf
+          weight: 600
+        - asset: assets/fonts/DMSans/DMSans-Bold.ttf
+          weight: 700
