@@ -1,9 +1,12 @@
-# Builds the Android APKs on every `vX.Y.Z` tag and attaches them to the
-# matching GitHub Release — this is the Obtainium / sideload beta channel
-# (see RELEASE.md); the in-app update check stays wired in
-# (--dart-define=PILEUS_GITHUB_REPO). The Play/Amazon store artifacts are a
-# separate, manually-run pipeline (store.yml). Linux/web/Windows bundles are
-# separate manual conveniences too (linux.yml / web.yml / windows.yml).
+# Builds the Android APKs (both the `tv` and `mobile` flavors — distinct
+# applicationIds, so Obtainium needs two separate app entries, one per
+# flavor, each filtered to its own asset name pattern) on every `vX.Y.Z` tag
+# and attaches them to the matching GitHub Release — this is the Obtainium /
+# sideload beta channel (see RELEASE.md); the in-app update check stays
+# wired in (--dart-define=PILEUS_GITHUB_REPO). The Play/Amazon *store*
+# artifacts (signed AAB, no update check) are a separate, manually-run
+# pipeline (store.yml). Linux/web/Windows bundles are separate manual
+# conveniences too (linux.yml / web.yml / windows.yml).
 #
 # GitHub-hosted runner, standard actions — no self-hosted runner or custom
 # registry secret needed. GITHUB_TOKEN (builtin, `contents: write` below)
@@ -97,7 +100,7 @@ jobs:
           } > android/key.properties
           echo "Signing: RELEASE  (alias=$KEY_ALIAS)"
 
-      - name: Build APKs
+      - name: Build APKs (tv)
         run: |
           # Drop the unused libmpv.so (~12 MB/ABI — Android always uses
           # ExoPlayer) and turn on R8 code+resource shrink. This beta channel
@@ -106,14 +109,16 @@ jobs:
           flutter build apk --release --flavor tv --split-per-abi \
             --target-platform android-arm,android-arm64 \
             -PpileusExcludeMpv=true -PpileusR8=true \
-            --obfuscate --split-debug-info=build/symbols \
+            --obfuscate --split-debug-info=build/symbols-tv \
             --build-name="${{ steps.v.outputs.name }}" \
             --build-number="${{ steps.v.outputs.build }}" \
             --dart-define=PILEUS_GITHUB_REPO="${{ github.repository }}" \
             --dart-define=PILEUS_MYCELIUM_HOST="${{ vars.PILEUS_MYCELIUM_HOST }}"
           mkdir -p dist
           # flutter names split-per-abi flavored APKs app-<abi>-<flavor>-release.apk
-          # (abi first), e.g. app-arm64-v8a-tv-release.apk.
+          # (abi first), e.g. app-arm64-v8a-tv-release.apk. Naming kept
+          # without "-tv-" for backwards compat with existing Obtainium
+          # filename filters (this asset name predates the mobile build).
           for f in build/app/outputs/flutter-apk/app-*-tv-release.apk; do
             abi=$(basename "$f" | sed -E 's/^app-(.+)-tv-release\.apk$/\1/')
             cp "$f" "dist/pileus-${{ steps.v.outputs.name }}-android-${abi}.apk"
@@ -121,8 +126,30 @@ jobs:
           # Obfuscation symbols — needed to de-obfuscate any crash/ANR stack
           # trace from a build produced by this pipeline. Keep them.
           tar czf "dist/pileus-${{ steps.v.outputs.name }}-android-symbols.tar.gz" \
-            -C build/symbols . || true
-          ( cd dist && sha256sum * > SHA256SUMS.txt )
+            -C build/symbols-tv . || true
+
+      - name: Build APKs (mobile)
+        run: |
+          # Same size cuts as tv. Distinct applicationId
+          # (com.lotho33.pileus.mobile) — Obtainium needs a second app entry
+          # for this one, filtered on the "-mobile-" asset name below.
+          flutter build apk --release --flavor mobile -t lib/main_mobile.dart \
+            --split-per-abi --target-platform android-arm,android-arm64 \
+            -PpileusExcludeMpv=true -PpileusR8=true \
+            --obfuscate --split-debug-info=build/symbols-mobile \
+            --build-name="${{ steps.v.outputs.name }}" \
+            --build-number="${{ steps.v.outputs.build }}" \
+            --dart-define=PILEUS_GITHUB_REPO="${{ github.repository }}" \
+            --dart-define=PILEUS_MYCELIUM_HOST="${{ vars.PILEUS_MYCELIUM_HOST }}"
+          for f in build/app/outputs/flutter-apk/app-*-mobile-release.apk; do
+            abi=$(basename "$f" | sed -E 's/^app-(.+)-mobile-release\.apk$/\1/')
+            cp "$f" "dist/pileus-${{ steps.v.outputs.name }}-mobile-android-${abi}.apk"
+          done
+          tar czf "dist/pileus-${{ steps.v.outputs.name }}-mobile-android-symbols.tar.gz" \
+            -C build/symbols-mobile . || true
+
+      - name: Checksums
+        run: ( cd dist && sha256sum * > SHA256SUMS.txt )
 
       - name: GitHub Release
         uses: softprops/action-gh-release@v2

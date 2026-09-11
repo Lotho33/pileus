@@ -168,12 +168,26 @@ flutter run -d linux --dart-define=PILEUS_GITHUB_REPO=Lotho33/pileus
 
 ### Android — Obtainium
 
-Install [Obtainium](https://github.com/ImranR98/Obtainium) on each beta
-phone, **Add App**, source type **GitHub**, URL =
-`https://github.com/Lotho33/pileus`. It tracks the APK assets and installs
-new releases (enable background updates for near-silent updating). Pick the
-ABI that matches the device (`arm64-v8a` for essentially all modern Android
-TV boxes). Public repo, so no PAT to configure in Obtainium either.
+`release.yml` builds **both** flavors — `tv` (`com.lotho33.pileus`) and
+`mobile` (`com.lotho33.pileus.mobile`) — as separate applicationIds, so
+Obtainium needs **two separate app entries**, one per flavor; adding just
+one and expecting it to somehow serve both installs won't work (Android
+sees them as unrelated apps).
+
+For each, install [Obtainium](https://github.com/ImranR98/Obtainium),
+**Add App**, source type **GitHub**, URL = `https://github.com/Lotho33/pileus`
+— same repo both times — then set an **APK filter** (regex) so each entry
+picks its own asset instead of grabbing whichever comes first:
+
+| Entry | APK filter (regex) |
+|---|---|
+| TV | `pileus-.*-android-(?!.*mobile).*\.apk` (i.e. matches `pileus-1.4.0-android-arm64-v8a.apk`, not the `-mobile-` ones) |
+| Mobile | `pileus-.*-mobile-android-.*\.apk` |
+
+Pick the ABI that matches the device (`arm64-v8a` for essentially all modern
+Android TV boxes and current phones). Enable background updates for
+near-silent updating. Public repo, so no PAT to configure in Obtainium
+either.
 
 ### Linux — systemd timer  (desktop only, out of scope for the TV product)
 
