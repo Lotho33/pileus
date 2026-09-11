@@ -11,12 +11,12 @@
 #
 # Override via env:
 #   PILEUS_RELEASE_REMOTE   git remote su cui pushare      (default: origin)
-#   PILEUS_RELEASE_BRANCH   branch da pushare              (default: dev)
+#   PILEUS_RELEASE_BRANCH   branch da pushare              (default: main)
 #   PILEUS_ACTIONS_URL      URL "segui la build" stampato a fine run
 set -euo pipefail
 
 REMOTE=${PILEUS_RELEASE_REMOTE:-origin}
-BRANCH=${PILEUS_RELEASE_BRANCH:-dev}
+BRANCH=${PILEUS_RELEASE_BRANCH:-main}
 ACTIONS_URL=${PILEUS_ACTIONS_URL:-}
 
 ver=${1:-}

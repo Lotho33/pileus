@@ -6,9 +6,11 @@ the **Android APKs (per ABI)** are produced automatically by
 is the shipping target.
 
 > Migration note: `release.yml` (this pipeline) and `ci.yml` are on GitHub
-> Actions. `store.yml` / `linux.yml` / `web.yml` / `windows.yml` are **still
-> on Forgejo** (`.forgejo/workflows/`), pending a follow-up port — the
-> Forgejo repo stays around for those until then.
+> Actions, and there's a single `main` branch now (no more `dev` — the repo
+> is entirely public, the old private-dev/public-main split doesn't protect
+> anything anymore). `store.yml` / `linux.yml` / `web.yml` / `windows.yml`
+> are **still on Forgejo** (`.forgejo/workflows/`), pending a follow-up
+> port — the Forgejo repo stays around for those until then.
 
 The **Linux x64** tarball (`linux.yml`) and the **web / PWA** bundle
 (`web.yml`) are separate **manual** conveniences — `workflow_dispatch` only,
@@ -22,18 +24,18 @@ Mycelium — see `docs/WEB.md`.
 
 Use the helper: `scripts/release.sh <X.Y.Z>` bumps `version:` in
 `pubspec.yaml`, commits, tags `vX.Y.Z`, and pushes branch + tag to the
-`origin` remote (the script refuses to run unless you are on `dev`).
+`origin` remote (the script refuses to run unless you are on `main`).
 
 Manually, the equivalent is:
 
 1. Bump `version:` in `pubspec.yaml` (e.g. `1.4.0+0` — the `+build` is
    overwritten by CI with the pipeline run number, so only the `1.4.0` part
    matters here).
-2. Commit, then tag and push to the release remote/branch:
+2. Commit, then tag and push:
 
    ```sh
    git tag v1.4.0
-   git push origin dev --tags
+   git push origin main --tags
    ```
 
 3. The `release` workflow builds and attaches the APKs to the `v1.4.0`
