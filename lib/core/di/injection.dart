@@ -90,7 +90,7 @@ Future<void> configureDependencies() async {
     dispose: (r) => r.dispose(),
   );
   // In-app "newer release available" check (best-effort, no-op unless
-  // UpdateConfig is pointed at a Forgejo repo — see core/update/).
+  // UpdateConfig is pointed at a GitHub repo — see core/update/).
   getIt.registerLazySingleton<UpdateService>(
     () => UpdateService(getIt<SharedPreferences>()),
     dispose: (s) => s.dispose(),

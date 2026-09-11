@@ -4,16 +4,18 @@
 #   scripts/release.sh 1.0.5            # bump + commit + tag v1.0.5 + push
 #   scripts/release.sh 1.0.5 -n        # dry-run: mostra cosa farebbe e basta
 #
-# Il push del tag vX.Y.Z fa partire la pipeline CI (.forgejo/workflows/release.yml)
-# che builda gli APK firmati + il tarball Linux e li allega alla release.
+# Il push del tag vX.Y.Z fa partire .github/workflows/release.yml che builda
+# gli APK Android firmati e li allega alla release GitHub (Obtainium li
+# raccoglie da lì). Il tarball Linux resta su store.yml/linux.yml (ancora su
+# Forgejo, non ancora migrati — vedi RELEASE.md).
 #
 # Override via env:
-#   PILEUS_RELEASE_REMOTE   git remote su cui pushare      (default: forgejo)
+#   PILEUS_RELEASE_REMOTE   git remote su cui pushare      (default: origin)
 #   PILEUS_RELEASE_BRANCH   branch da pushare              (default: dev)
 #   PILEUS_ACTIONS_URL      URL "segui la build" stampato a fine run
 set -euo pipefail
 
-REMOTE=${PILEUS_RELEASE_REMOTE:-forgejo}
+REMOTE=${PILEUS_RELEASE_REMOTE:-origin}
 BRANCH=${PILEUS_RELEASE_BRANCH:-dev}
 ACTIONS_URL=${PILEUS_ACTIONS_URL:-}
 

@@ -1,8 +1,14 @@
 # Releasing Pileus
 
-Builds are published as **Forgejo releases**: the **Android APKs (per ABI)**
-are produced automatically by `.forgejo/workflows/release.yml` on every
-`vX.Y.Z` tag. Android TV / Fire TV is the shipping target.
+Builds are published as **GitHub releases** on `github.com/Lotho33/pileus`:
+the **Android APKs (per ABI)** are produced automatically by
+`.github/workflows/release.yml` on every `vX.Y.Z` tag. Android TV / Fire TV
+is the shipping target.
+
+> Migration note: `release.yml` (this pipeline) and `ci.yml` are on GitHub
+> Actions. `store.yml` / `linux.yml` / `web.yml` / `windows.yml` are **still
+> on Forgejo** (`.forgejo/workflows/`), pending a follow-up port — the
+> Forgejo repo stays around for those until then.
 
 The **Linux x64** tarball (`linux.yml`) and the **web / PWA** bundle
 (`web.yml`) are separate **manual** conveniences — `workflow_dispatch` only,
@@ -16,7 +22,7 @@ Mycelium — see `docs/WEB.md`.
 
 Use the helper: `scripts/release.sh <X.Y.Z>` bumps `version:` in
 `pubspec.yaml`, commits, tags `vX.Y.Z`, and pushes branch + tag to the
-`forgejo` remote (the script refuses to run unless you are on `dev`).
+`origin` remote (the script refuses to run unless you are on `dev`).
 
 Manually, the equivalent is:
 
@@ -27,12 +33,12 @@ Manually, the equivalent is:
 
    ```sh
    git tag v1.4.0
-   git push forgejo dev --tags
+   git push origin dev --tags
    ```
 
 3. The `release` workflow builds and attaches the APKs to the `v1.4.0`
-   release. Mark it **pre-release** in Forgejo for beta builds — the in-app
-   check and Obtainium both still pick it up.
+   GitHub release. Mark it **pre-release** there for beta builds — the
+   in-app check and Obtainium both still pick it up.
 
 Per-release effort after the one-time setup: ~1 minute.
 
@@ -52,7 +58,7 @@ Differences from `release.yml` baked into `store.yml`:
 
 - `--dart-define=PILEUS_STORE_BUILD=true` — the in-app update check and the
   Obtainium/sideload dialog are compiled out (`UpdateConfig.storeBuild`), and
-  no personal Forgejo/Mycelium host is embedded (`PILEUS_FORGEJO_*` /
+  no personal GitHub/Mycelium host is embedded (`PILEUS_GITHUB_REPO` /
   `PILEUS_MYCELIUM_HOST` are **not** passed)
 - `-PpileusRequireSigning=true` — the build fails if signing isn't
   configured, instead of falling back to debug keys
@@ -96,26 +102,25 @@ Result: arm64 mobile release APK ≈ **23.5 MB** (vs ~36 MB unoptimised).
 
 ## One-time setup
 
-### Forgejo Actions runner
+### CI runner
 
-You need a registered runner with Docker. On the machine that will build:
+`release.yml` and `ci.yml` run on GitHub-hosted `ubuntu-latest` — nothing to
+register, free on this public repo. (`store.yml` / `linux.yml` / `web.yml` /
+`windows.yml`, still on Forgejo, keep needing a self-hosted runner there
+until ported — see the migration note above.)
 
-```sh
-# https://forgejo.org/docs/latest/admin/actions/
-forgejo-runner register --instance https://YOUR-FORGEJO --token <REG_TOKEN> \
-  --name builder --labels docker:docker://ghcr.io/cirruslabs/flutter:stable
-forgejo-runner daemon
-```
-
-### Repo secrets  (Settings → Actions → Secrets)
+### Repo secrets  (GitHub → Settings → Secrets and variables → Actions)
 
 | Secret | What |
 |---|---|
-| `RELEASE_TOKEN` | Forgejo access token with `write:repository` scope |
 | `ANDROID_KEYSTORE_BASE64` | `base64 -w0 pileus-release.jks` |
 | `ANDROID_KEYSTORE_PASSWORD` | keystore password |
 | `ANDROID_KEY_ALIAS` | key alias (e.g. `pileus`) |
 | `ANDROID_KEY_PASSWORD` | key password |
+
+No `RELEASE_TOKEN` needed on GitHub — the builtin `GITHUB_TOKEN` (with
+`contents: write`, already set in the workflow) covers creating the release
+and uploading the APK assets.
 
 ### Repo variables  (Settings → Actions → Variables)
 
@@ -140,35 +145,33 @@ Local signed builds: copy `android/key.properties.example` →
 
 ## Keeping devices updated
 
-### In-app notice (Forgejo/sideload distribution only)
+### In-app notice (sideload distribution only)
 
-Forgejo release builds are compiled with
-`--dart-define=PILEUS_FORGEJO_URL=<instance> --dart-define=PILEUS_FORGEJO_REPO=<owner/repo>`
-(injected by CI from `github.server_url` / `github.repository`). On the home
-screen the app then checks the releases API (rate-limited to once per 6 h)
-and shows a one-shot dialog when a newer version is out. It only *notifies*
-— no download, no install.
+Sideload release builds are compiled with
+`--dart-define=PILEUS_GITHUB_REPO=<owner/repo>` (injected by CI from
+`github.repository`). On the home screen the app then checks
+`api.github.com`'s releases endpoint (rate-limited to once per 6 h) and
+shows a one-shot dialog when a newer version is out. It only *notifies* — no
+download, no install. `pileus` is a public repo, so this needs no token.
 
-**Store builds must omit these two defines** (Play and Amazon auto-update,
-and the dialog otherwise points users off-store). With them unset,
+**Store builds must omit this define** (Play and Amazon auto-update, and the
+dialog otherwise points users off-store). With it unset,
 `UpdateConfig.isConfigured` is false and the check is a silent no-op.
 
 To try it in a dev build (desktop, dev only):
 
 ```sh
-flutter run -d linux \
-  --dart-define=PILEUS_FORGEJO_URL=https://YOUR-FORGEJO \
-  --dart-define=PILEUS_FORGEJO_REPO=OWNER/pileus-player
+flutter run -d linux --dart-define=PILEUS_GITHUB_REPO=Lotho33/pileus
 ```
 
 ### Android — Obtainium
 
 Install [Obtainium](https://github.com/ImranR98/Obtainium) on each beta
-phone, **Add App**, source type **Gitea / Forgejo**, URL =
-`https://YOUR-FORGEJO/OWNER/pileus-player`. It tracks the APK assets and
-installs new releases (enable background updates for near-silent updating).
-Pick the ABI that matches the device (`arm64-v8a` for essentially all modern
-Android TV boxes).
+phone, **Add App**, source type **GitHub**, URL =
+`https://github.com/Lotho33/pileus`. It tracks the APK assets and installs
+new releases (enable background updates for near-silent updating). Pick the
+ABI that matches the device (`arm64-v8a` for essentially all modern Android
+TV boxes). Public repo, so no PAT to configure in Obtainium either.
 
 ### Linux — systemd timer  (desktop only, out of scope for the TV product)
 

@@ -1,6 +1,6 @@
-# Mirror of .forgejo/workflows/ci.yml for the public GitHub repo: static
-# analysis + unit tests on every push and PR to the main lines. Release
-# artifacts are built on the Forgejo instance, not here.
+# Pre-merge gate: static analysis + unit tests on every push and PR to the
+# main lines. Build coverage for the release artifacts lives in
+# release.yml / store.yml / linux.yml / web.yml / windows.yml.
 
 name: ci
 

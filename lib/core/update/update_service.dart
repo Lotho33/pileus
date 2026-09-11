@@ -74,12 +74,15 @@ class UpdateService {
 
       // The list endpoint (newest first) covers both stable and beta
       // (pre-release) — /releases/latest silently skips pre-releases.
+      // Same JSON shape as Gitea/Forgejo (tag_name, name, body, html_url,
+      // prerelease, draft, published_at) — only the host/path differ, the
+      // parsing below is unchanged.
       final uri = Uri.parse(
-        '${UpdateConfig.forgejoBaseUrl}'
-        '/api/v1/repos/${UpdateConfig.repoSlug}/releases?limit=10&page=1',
+        'https://api.github.com/repos/${UpdateConfig.repoSlug}'
+        '/releases?per_page=10&page=1',
       );
       final resp = await _client.get(uri, headers: {
-        'Accept': 'application/json'
+        'Accept': 'application/vnd.github+json'
       }).timeout(UpdateConfig.requestTimeout);
 
       // Record the attempt regardless of outcome so a flaky server doesn't
