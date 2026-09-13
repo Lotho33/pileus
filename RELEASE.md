@@ -5,20 +5,33 @@ the **Android APKs (per ABI)** are produced automatically by
 `.github/workflows/release.yml` on every `vX.Y.Z` tag. Android TV / Fire TV
 is the shipping target.
 
-> Migration note: `release.yml` (this pipeline) and `ci.yml` are on GitHub
-> Actions, and there's a single `main` branch now (no more `dev` — the repo
-> is entirely public, the old private-dev/public-main split doesn't protect
-> anything anymore). `store.yml` / `linux.yml` / `web.yml` / `windows.yml`
+> Migration note: `release.yml` (this pipeline), `ci.yml` and `web.yml` are
+> on GitHub Actions, and there's a single `main` branch now (no more `dev` —
+> the repo is entirely public, the old private-dev/public-main split
+> doesn't protect anything anymore). `store.yml` / `linux.yml` / `windows.yml`
 > are **still on Forgejo** (`.forgejo/workflows/`), pending a follow-up
 > port — the Forgejo repo stays around for those until then.
 
-The **Linux x64** tarball (`linux.yml`) and the **web / PWA** bundle
-(`web.yml`) are separate **manual** conveniences — `workflow_dispatch` only,
-run by hand with the tag as input, each attaching one tarball to the
-existing release. Both build the responsive `-t lib/main_desktop.dart` /
-`-t lib/main_web.dart` UI (not the D-pad TV shell). Neither is part of the
-tag pipeline. The web bundle is a **spike** and needs a gRPC-Web endpoint on
-Mycelium — see `docs/WEB.md`.
+The **Linux x64** tarball (`linux.yml`, still Forgejo-only) and the
+**web / PWA** bundle (`web.yml`, now on GitHub Actions too) are separate
+**manual** conveniences — `workflow_dispatch` only, run by hand with the tag
+as input, each attaching one tarball to the existing release. Both build the
+responsive `-t lib/main_desktop.dart` / `-t lib/main_web.dart` UI (not the
+D-pad TV shell). Neither is part of the automatic tag pipeline. The web
+bundle's *playback* is still a **spike** — see `docs/WEB.md` for the current
+status of the Mycelium-side gRPC-Web endpoint and header-less stream URLs
+before relying on it for anything beyond browsing.
+
+### Web / PWA build
+
+Actions → **web** → Run workflow, with the tag (e.g. `v1.4.0`) as input.
+Attaches `pileus-<version>-web.tar.gz` to that GitHub release — same asset
+naming/checksum convention as the Android APKs. Unpack it and serve
+`build/web`'s contents from the same origin as Mycelium (or a reverse proxy
+in front of it); on iOS, where a sideloaded native app isn't an option
+without a developer account, this is what lets someone install Pileus via
+Safari → Add to Home Screen instead. Not run automatically on every tag —
+trigger it by hand for whichever release you actually want to deploy.
 
 ## Cutting a release
 

@@ -16,6 +16,11 @@ class PlayerLiveOverlay extends StatefulWidget {
   final VoidCallback onBack;
   final VoidCallback onOpenSettings;
   final void Function(String srcId, String srcLabel) onSwitchSource;
+  // Tears the whole player engine down and rebuilds it in place, reopening
+  // the same source (see _PlaybackViewState._restartPlayerInPlace) — the
+  // fast path for the frozen-picture-but-audio-plays-on freeze some Android
+  // TV boxes hit, instead of backing out to the library and re-entering.
+  final VoidCallback onRestart;
   // Loading state — mirrors PlayerOverlay's: shows a centre spinner / buffer
   // ring + the plugin's resolve step while the picture is still coming up.
   final bool loading;
@@ -29,6 +34,7 @@ class PlayerLiveOverlay extends StatefulWidget {
     required this.onBack,
     required this.onOpenSettings,
     required this.onSwitchSource,
+    required this.onRestart,
     this.title,
     this.liveSources = const [],
     this.liveSourceLabels = const [],
@@ -51,6 +57,7 @@ class PlayerLiveOverlayState extends State<PlayerLiveOverlay> {
 
   final _backFn = FocusNode();
   FocusNode? _swapFn;
+  final _restartFn = FocusNode();
   final _settingsFn = FocusNode();
 
   @override
@@ -84,6 +91,7 @@ class PlayerLiveOverlayState extends State<PlayerLiveOverlay> {
   void dispose() {
     _backFn.dispose();
     _swapFn?.dispose();
+    _restartFn.dispose();
     _settingsFn.dispose();
     super.dispose();
   }
@@ -93,7 +101,7 @@ class PlayerLiveOverlayState extends State<PlayerLiveOverlay> {
   void requestInitialFocus() => _backFn.requestFocus();
 
   List<FocusNode> get _chain =>
-      [_backFn, if (_swapFn != null) _swapFn!, _settingsFn];
+      [_backFn, if (_swapFn != null) _swapFn!, _restartFn, _settingsFn];
 
   void _moveIn(FocusNode self, int dir) {
     final chain = _chain;
@@ -189,6 +197,14 @@ class PlayerLiveOverlayState extends State<PlayerLiveOverlay> {
                             _focusedSource = 0;
                           }),
                         ),
+                      _FocusableIconButton(
+                        icon: Icons.restart_alt_rounded,
+                        size: iconSz,
+                        onPressed: widget.onRestart,
+                        focusNode: _restartFn,
+                        onLeft: () => _moveIn(_restartFn, -1),
+                        onRight: () => _moveIn(_restartFn, 1),
+                      ),
                       _FocusableIconButton(
                         icon: Icons.settings_rounded,
                         size: iconSz,

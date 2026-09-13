@@ -25,8 +25,16 @@ class _PlaybackView extends StatefulWidget {
 }
 
 class _PlaybackViewState extends State<_PlaybackView> {
-  late final PlayerEngine _engine;
+  // Not `final`: _restartPlayerInPlace() disposes and rebuilds this from
+  // scratch (new BetterPlayerController → new native player → new Surface)
+  // as a last-resort recovery for a frozen live picture that a mere re-open
+  // can't fix (see _restartPlayerInPlace).
+  late PlayerEngine _engine;
   late final PlayerUiCubit _uiCubit;
+  // Read once from settings in initState, reused verbatim by
+  // _restartPlayerInPlace so a manual restart doesn't have to re-read
+  // SettingsRepository or duplicate the lowPowerUi clamp.
+  late final int _bufferMiB;
 
   // Lets _onKey hand D-pad focus into whichever overlay is on screen the
   // moment it's revealed — otherwise the screen-level Focus below keeps
@@ -63,6 +71,18 @@ class _PlaybackViewState extends State<_PlaybackView> {
   DateTime? _resumeSeekAt;
   Timer? _heartbeatTimer;
   Timer? _errorGraceTimer;
+  // Live-only: catches the case a plain error/buffering event never covers —
+  // ExoPlayer (or mpv) reporting playing=true with no error at all while the
+  // position has genuinely stopped advancing (e.g. an HLS live edge blip
+  // that lands ExoPlayer in STATE_IDLE without ever surfacing an exception —
+  // see the 2026-09-13 stall/freeze audit). See _armLiveStallWatchdog.
+  Timer? _liveStallWatchdog;
+  int _liveStallStrikes = 0;
+  // Last resolved stream (url/headers), kept only so _restartPlayerInPlace
+  // can reopen the same source after rebuilding the engine — nothing else
+  // reads these.
+  String? _lastStreamUrl;
+  Map<String, String> _lastStreamHeaders = const {};
   // Same reasoning as PlayerOverlayState._optimisticSeekTarget: the reported
   // position lags a seek() call, so two fast arrow presses on the raw D-pad
   // handler (as opposed to the seek bar / skip buttons, which track this
@@ -176,6 +196,7 @@ class _PlaybackViewState extends State<_PlaybackView> {
         ? _settings.getLiveBufferMiB()
         : _settings.getPlayerBufferMiB();
     if (lowPowerUi) bufMiB = bufMiB.clamp(4, args.isLive ? 10 : 16);
+    _bufferMiB = bufMiB;
 
     _engine = PlayerEngine.create();
     _engine.onError = _onEngineError;
@@ -188,7 +209,7 @@ class _PlaybackViewState extends State<_PlaybackView> {
         bottomPadding: _subtitleBottomPadding,
       ),
       isLive: args.isLive,
-      bufferMiB: bufMiB,
+      bufferMiB: _bufferMiB,
     );
     perf('screen: engine built (${_engine.runtimeType})');
 
@@ -196,6 +217,7 @@ class _PlaybackViewState extends State<_PlaybackView> {
       if (!mounted || widget.args.isLive) return;
       _saveProgress();
     });
+    if (args.isLive) _armLiveStallWatchdog();
 
     _resolveSeriesMetaIfMissing().whenComplete(() {
       if (mounted) _resolveEpisodeListIfMissing();
@@ -286,6 +308,124 @@ class _PlaybackViewState extends State<_PlaybackView> {
         if (mounted) _errorOverlayKey.currentState?.requestInitialFocus();
       });
     });
+  }
+
+  // ── Live stall watchdog ─────────────────────────────────────────────────
+  //
+  // Neither better_player_plus (ExoPlayer) nor libmpv is guaranteed to tell
+  // us when a live stream dies: a brief network blip at an HLS live edge can
+  // land ExoPlayer in STATE_IDLE without ever emitting bufferingStart or a
+  // catchable exception (BehindLiveWindowException goes unhandled upstream —
+  // see the 2026-09-13 stall/freeze audit). `playing` then keeps reading
+  // true and `position` simply stops advancing — nothing above this ever
+  // notices on its own, which is exactly the "no buffering shown, video just
+  // freezes" symptom reported for live sport. Wall-clock time since the last
+  // real position tick (_onPosition, only ever called when the position
+  // actually changed) is the one signal that can't be silently skipped.
+  //
+  // Two escalating tiers, both already-existing recovery paths (nothing new
+  // to get subtly wrong): a cheap pause/play nudge first — fixes a renderer
+  // merely stuck on a stale internal state — then, if that didn't bring
+  // progress back, the same fresh-URL reopen the "Riprova" button triggers
+  // by hand. This does *not* cover a frozen picture with audio/position
+  // still advancing (the Amlogic-style dead-Surface freeze) — there is no
+  // engine-agnostic signal here to detect that case; see
+  // _restartPlayerInPlace for the manual fallback.
+  void _armLiveStallWatchdog() {
+    _liveStallWatchdog?.cancel();
+    _liveStallWatchdog = Timer.periodic(const Duration(seconds: 4), (_) {
+      if (!mounted || !_videoStarted) return;
+      if (_playbackError != null || _pendingErrorText != null) return;
+      if (!_engine.playing || _engine.buffering) return;
+      final last = _lastProgressAt;
+      if (last == null) return;
+      final stalledFor = DateTime.now().difference(last);
+      if (stalledFor < const Duration(seconds: 9)) return;
+
+      _liveStallStrikes++;
+      perf('screen: live stall watchdog — playing=true, no progress in '
+          '${stalledFor.inSeconds}s (strike #$_liveStallStrikes)');
+      if (_liveStallStrikes <= 1) {
+        _engine.pause();
+        _engine.play();
+      } else {
+        _liveStallStrikes = 0;
+        context.read<PlaybackBloc>().add(InitializeVideoEvent(
+              pluginId: widget.args.epPluginId,
+              mediaId: _currentMediaId,
+              preferredLabel: _currentSourceLabel,
+            ));
+      }
+      // Give the recovery attempt a full interval to show progress instead
+      // of re-firing (and escalating) again 4s later while it's still
+      // settling.
+      _lastProgressAt = DateTime.now();
+    });
+  }
+
+  // ── Manual "restart in place" (TV freeze fallback) ──────────────────────
+  //
+  // The stall watchdog above only ever sees a genuinely stuck *position* —
+  // it can't detect the other freeze reported on some Android TV boxes
+  // (Amlogic in particular): the decoder gets wedged against a dead render
+  // Surface after a mid-stream reconfigure (an ABR switch or an HLS
+  // discontinuity — either can be triggered by the same kind of network
+  // blip), while audio and the position clock keep advancing normally — see
+  // the 2026-09-13 stall/freeze audit. better_player_plus creates that
+  // Surface once per native player instance and never reattaches it, so even
+  // a full `_engine.open()` reopen (same instance) can't recover it — only
+  // tearing the whole PlayerEngine down and building a fresh one does (which
+  // is what exiting and re-entering the screen already did by accident).
+  // This exposes the same recovery from the live overlay's restart button,
+  // without losing the screen/overlay state.
+  //
+  // No automatic trigger: unlike the position stall above, there is no
+  // Dart-observable signal that the picture is frozen while everything else
+  // (audio, position, playing) reports healthy — the underlying frame-render
+  // count isn't exposed past the plugin's Dart API. Manual only.
+  Future<void> _restartPlayerInPlace() async {
+    final url = _lastStreamUrl;
+    if (url == null) return; // nothing resolved yet — nothing to reopen
+    perf('screen: manual player restart in place');
+    _liveStallStrikes = 0;
+    _errorGraceTimer?.cancel();
+    setState(() {
+      _playbackError = null;
+      _pendingErrorText = null;
+      _videoStarted = false;
+    });
+
+    // Detach the old engine's callbacks before it's torn down, but don't
+    // dispose it yet — `_engine` must keep pointing at a live, still-usable
+    // instance (buildView() et al.) for as long as `await` below can yield
+    // to a rebuild.
+    final old = _engine;
+    old.onError = null;
+    old.removeListener(_onEngineChanged);
+
+    final fresh = PlayerEngine.create();
+    fresh.onError = _onEngineError;
+    fresh.addListener(_onEngineChanged);
+    await fresh.initialize(
+      PlayerSubtitleStyle(
+        fontSize: _subtitleFontSize,
+        color: _subtitleColor,
+        backgroundEnabled: _subtitleBgEnabled,
+        bottomPadding: _subtitleBottomPadding,
+      ),
+      isLive: widget.args.isLive,
+      bufferMiB: _bufferMiB,
+    );
+    if (!mounted) {
+      // The screen itself got torn down while we were awaiting — its own
+      // dispose() already released `old` (still `_engine` at that point);
+      // `fresh` was never wired in, so it's the only thing left to clean up.
+      fresh.dispose();
+      return;
+    }
+    setState(() => _engine = fresh);
+    old.dispose();
+    _engine.open(url, headers: _lastStreamHeaders);
   }
 
   // One-shot: backfill the series name / synopsis / parent id when a launch
@@ -432,6 +572,7 @@ class _PlaybackViewState extends State<_PlaybackView> {
     perf('screen: dispose (videoStarted=$_videoStarted)');
     _heartbeatTimer?.cancel();
     _errorGraceTimer?.cancel();
+    _liveStallWatchdog?.cancel();
     _optimisticSeekClearTimer?.cancel();
     _engine.removeListener(_onEngineChanged);
     _uiCubit.close(); // cancella internamente il suo _hideTimer
@@ -515,6 +656,9 @@ class _PlaybackViewState extends State<_PlaybackView> {
 
   void _onPosition(Duration pos) {
     _lastProgressAt = DateTime.now();
+    // Real forward progress — whatever the stall watchdog was escalating
+    // toward, drop it back to the first (gentlest) tier.
+    _liveStallStrikes = 0;
     // Position updates only arrive while the player is actively decoding — a
     // stream that's still advancing has recovered from whatever transient
     // error triggered _playbackError, even mid-playback (not just on the
@@ -696,6 +840,8 @@ class _PlaybackViewState extends State<_PlaybackView> {
     // against *this* new stream and shows the old error message over one
     // that's actually loading fine.
     _errorGraceTimer?.cancel();
+    _lastStreamUrl = url;
+    _lastStreamHeaders = headers;
     setState(() {
       _playbackReady = true;
       _videoStarted = false;
@@ -1104,6 +1250,7 @@ class _PlaybackViewState extends State<_PlaybackView> {
                                           ));
                                     },
                                     onOpenSettings: _openSettings,
+                                    onRestart: _restartPlayerInPlace,
                                     // Initial load AND any mid-stream
                                     // rebuffer — the live overlay has no
                                     // other loading cue.

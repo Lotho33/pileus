@@ -1,0 +1,70 @@
+# Builds the web / PWA bundle for an existing `vX.Y.Z` GitHub release and
+# attaches it as a tarball, mirroring the (Forgejo-only, now superseded here)
+# `.forgejo/workflows/web.yml`. Manual only (`workflow_dispatch`) — unlike
+# the Android APKs this isn't built on every tag, since not every release
+# needs a fresh web bundle re-deployed. See RELEASE.md / docs/WEB.md.
+#
+# The bundle expects to be served from the same origin as Mycelium (which
+# must expose a gRPC-Web endpoint at /grpc — see docs/WEB.md for current
+# status). This job only produces the static files; deployment (e.g. behind
+# Mycelium, for a PWA "Add to Home Screen" install on iOS/Safari, where a
+# native app can't be sideloaded) is manual.
+#
+# GitHub-hosted runner, standard actions, same pattern as release.yml.
+# GITHUB_TOKEN (builtin, `contents: write` below) covers uploading the
+# asset to the existing release — no extra secret needed.
+
+name: web
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "existing tag to build (e.g. v1.4.0)"
+        required: true
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ github.event.inputs.tag }}
+
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: Derive version
+        id: v
+        run: |
+          tag="${{ github.event.inputs.tag }}"
+          echo "name=${tag#v}" >> "$GITHUB_OUTPUT"
+          echo "build=${{ github.run_number }}" >> "$GITHUB_OUTPUT"
+
+      - run: flutter pub get
+
+      - name: Build web bundle
+        run: |
+          set -eu
+          V="${{ steps.v.outputs.name }}"
+          # PILEUS_STORE_BUILD=true: same reasoning as the store Android
+          # builds — a web/PWA install is always "latest" from the origin
+          # it's served from, so the sideload update-check/dialog (which
+          # points at GitHub releases) doesn't apply here either.
+          flutter build web --release -t lib/main_web.dart --base-href / \
+            --build-name="$V" --build-number="${{ steps.v.outputs.build }}" \
+            --dart-define=PILEUS_STORE_BUILD=true
+          mkdir -p dist
+          tar czf "dist/pileus-$V-web.tar.gz" -C build/web .
+          ( cd dist && sha256sum * > SHA256SUMS-web.txt )
+
+      - name: GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.event.inputs.tag }}
+          files: dist/*
