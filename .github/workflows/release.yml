@@ -1,12 +1,14 @@
 # Builds the Android APKs (both the `tv` and `mobile` flavors — distinct
 # applicationIds, so Obtainium needs two separate app entries, one per
-# flavor, each filtered to its own asset name pattern) on every `vX.Y.Z` tag
-# and attaches them to the matching GitHub Release — this is the Obtainium /
-# sideload beta channel (see RELEASE.md); the in-app update check stays
-# wired in (--dart-define=PILEUS_GITHUB_REPO). The Play/Amazon *store*
-# artifacts (signed AAB, no update check) are a separate, manually-run
-# pipeline (store.yml). Linux/web/Windows bundles are separate manual
-# conveniences too (linux.yml / web.yml / windows.yml).
+# flavor, each filtered to its own asset name pattern) AND the web/PWA
+# bundle on every `vX.Y.Z` tag, and attaches them to the matching GitHub
+# Release — this is the Obtainium / sideload beta channel (see RELEASE.md);
+# the in-app update check stays wired in for Android
+# (--dart-define=PILEUS_GITHUB_REPO). The Play/Amazon *store* artifacts
+# (signed AAB, no update check) are a separate, manually-run pipeline
+# (store.yml). Linux/Windows bundles are separate manual conveniences too
+# (linux.yml / windows.yml) — unlike web, not every release needs a fresh
+# desktop bundle re-deployed.
 #
 # GitHub-hosted runner, standard actions — no self-hosted runner or custom
 # registry secret needed. GITHUB_TOKEN (builtin, `contents: write` below)
@@ -16,7 +18,8 @@
 #   ANDROID_KEYSTORE_BASE64   base64 -w0 android/app/release.jks
 #   ANDROID_KEYSTORE_PASSWORD / ANDROID_KEY_ALIAS / ANDROID_KEY_PASSWORD
 # and, optionally, repo variable PILEUS_MYCELIUM_HOST (baked in via
-# --dart-define for TVs where `mycelium.local` won't resolve).
+# --dart-define for TVs where `mycelium.local` won't resolve). The web job
+# needs none of the above — no signing, no native toolchain.
 
 name: release
 
@@ -156,4 +159,53 @@ jobs:
         with:
           tag_name: ${{ github.event.inputs.tag || github.ref_name }}
           generate_release_notes: true
+          files: dist/*
+
+  # Runs after `android` so the release already exists by the time this
+  # uploads to it (two parallel jobs both creating the same release via
+  # action-gh-release would race). The bundle expects to be served from the
+  # same origin as Mycelium — see docs/WEB.md for what that still needs on
+  # the server side before playback works end to end; this job only
+  # produces and publishes the static files.
+  web:
+    needs: android
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ github.event.inputs.tag || github.ref }}
+
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: Derive version
+        id: v
+        run: |
+          ref="${{ github.event.inputs.tag || github.ref_name }}"
+          echo "name=${ref#v}" >> "$GITHUB_OUTPUT"
+          echo "build=${{ github.run_number }}" >> "$GITHUB_OUTPUT"
+
+      - run: flutter pub get
+
+      - name: Build web bundle
+        run: |
+          set -eu
+          V="${{ steps.v.outputs.name }}"
+          # PILEUS_STORE_BUILD=true: same reasoning as the store Android
+          # builds — a web/PWA install is always "latest" from the origin
+          # it's served from, so the sideload update-check/dialog (which
+          # points at GitHub releases) doesn't apply here.
+          flutter build web --release -t lib/main_web.dart --base-href / \
+            --build-name="$V" --build-number="${{ steps.v.outputs.build }}" \
+            --dart-define=PILEUS_STORE_BUILD=true
+          mkdir -p dist
+          tar czf "dist/pileus-$V-web.tar.gz" -C build/web .
+          ( cd dist && sha256sum * > SHA256SUMS-web.txt )
+
+      - name: GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.event.inputs.tag || github.ref_name }}
           files: dist/*
