@@ -41,7 +41,32 @@ extension type _Hls._(JSObject _) implements JSObject {
   external void loadSource(String url);
   external void attachMedia(web.HTMLVideoElement media);
   external void destroy();
+  external void on(String event, JSFunction listener);
 }
+
+// hls.js's error-event payload — only the fields read here. `type`/`details`
+// are its own error taxonomy (e.g. "networkError"/"manifestLoadError",
+// "mediaError"/"bufferStalledError"); `fatal` is whether hls.js gave up on
+// this instance entirely vs. is retrying/recovering on its own. `response`
+// is only present on network errors (HTTP status + a text body, useful for
+// telling a 403/CORS rejection from a genuine timeout).
+extension type _HlsErrorData._(JSObject _) implements JSObject {
+  external String? get type;
+  external String? get details;
+  external bool? get fatal;
+  external _HlsErrorResponse? get response;
+}
+
+extension type _HlsErrorResponse._(JSObject _) implements JSObject {
+  external int? get code;
+  external String? get text;
+}
+
+// hls.js's own event-name constant (Hls.Events.ERROR) — its value is this
+// literal string in every hls.js release; hardcoded rather than pulled off
+// the JS object to dodge extension-type static-getter interop for one
+// constant.
+const _hlsErrorEvent = 'hlsError';
 
 /// Web player — a plain HTML5 `<video>` behind an [HtmlElementView].
 ///
@@ -166,9 +191,25 @@ class _ViewState extends State<_View> {
     if (looksHls && !nativeHls && _hlsUsable) {
       try {
         _hls?.destroy();
-        final h = _Hls()
-          ..loadSource(url)
-          ..attachMedia(_video);
+        final h = _Hls();
+        // Registered before loadSource/attachMedia so an error on the very
+        // first manifest fetch can't fire before this is wired up. hls.js
+        // otherwise fails a lot of this silently from Dart's side — no
+        // exception crosses the JS/Dart boundary, so without this listener
+        // a manifest parse failure, a blocked/rejected request, or a fatal
+        // media error all look identical to "nothing happens": the <video>
+        // just sits on its own idle grey chrome forever (reported on
+        // vixseries/vixmovie specifically, 2026-09-14 — root cause not yet
+        // identified; this is what's needed to actually see it next time).
+        h.on(_hlsErrorEvent, ((JSAny? _, _HlsErrorData data) {
+          final resp = data.response;
+          debugPrint('[web player] hls.js error: type=${data.type} '
+              'details=${data.details} fatal=${data.fatal ?? false}'
+              '${resp == null ? '' : ' httpStatus=${resp.code} body=${resp.text}'}'
+              ' url=$url');
+        }).toJS);
+        h.loadSource(url);
+        h.attachMedia(_video);
         _hls = h;
         return;
       } catch (_) {

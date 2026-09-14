@@ -10,6 +10,7 @@ import '../core/theme/app_theme.dart';
 import '../core/utils/image_sizing.dart';
 import '../features/auth/bloc/auth_bloc.dart';
 import '../features/auth/bloc/auth_event.dart';
+import '../features/media/active_plugin_controller.dart';
 import '../features/media/bloc/continue_watching_bloc.dart';
 import '../features/media/bloc/continue_watching_event.dart';
 import '../features/media/bloc/continue_watching_state.dart';
@@ -21,9 +22,9 @@ import '../features/media/bloc/plugin_event.dart';
 import '../features/media/bloc/plugin_state.dart';
 import '../features/media/data/continue_watching_item.dart';
 import '../features/media/data/media_repository.dart';
-import '../features/media/presentation/widgets/plugin_nav.dart' show pluginLabel;
 import 'widgets/mobile_hero.dart';
 import 'widgets/mobile_poster_card.dart';
+import 'widgets/plugin_switcher_pill.dart';
 import 'widgets/press_scale.dart';
 
 class MobileHomeScreen extends StatelessWidget {
@@ -57,20 +58,48 @@ class _MobileHomeView extends StatefulWidget {
 }
 
 class _MobileHomeViewState extends State<_MobileHomeView> {
-  String? _activeId;
+  // Shared with MobileSearchScreen (see the class doc) — replaces a local
+  // `_activeId` field that only this screen ever saw.
+  final _activePlugin = getIt<ActivePluginController>();
+
+  @override
+  void initState() {
+    super.initState();
+    _activePlugin.addListener(_onActiveChanged);
+  }
+
+  void _onActiveChanged() {
+    if (mounted) setState(() {});
+  }
+
+  @override
+  void dispose() {
+    _activePlugin.removeListener(_onActiveChanged);
+    super.dispose();
+  }
 
   List<PluginInfo> _pluginsOf(PluginState s) =>
       s is PluginsLoaded ? s.plugins : const [];
 
+  /// Resolves the active plugin by identity, same as the pre-shared-state
+  /// version — and re-seeds the shared controller (post-frame, not during
+  /// build) whenever its current value doesn't match a real plugin: unset
+  /// on first load, or pointing at one that's since vanished server-side.
   PluginInfo? _active(List<PluginInfo> plugins) {
     if (plugins.isEmpty) return null;
-    final id = _activeId;
-    if (id != null) {
-      for (final p in plugins) {
-        if (p.pluginId == id) return p;
-      }
+    final id = _activePlugin.value;
+    PluginInfo? match;
+    for (final p in plugins) {
+      if (p.pluginId == id) match = p;
     }
-    return plugins.firstWhere((p) => p.isReady, orElse: () => plugins.first);
+    final found =
+        match ?? plugins.firstWhere((p) => p.isReady, orElse: () => plugins.first);
+    if (found.pluginId != id) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _activePlugin.value = found.pluginId;
+      });
+    }
+    return found;
   }
 
   void _profileSheet() {
@@ -143,8 +172,8 @@ class _MobileHomeViewState extends State<_MobileHomeView> {
           children: [
             _HomeTopBar(
               plugins: plugins,
-              activeId: active?.pluginId,
-              onSelect: (id) => setState(() => _activeId = id),
+              active: active,
+              onSelect: (id) => _activePlugin.value = id,
               onProfile: _profileSheet,
             ),
             Expanded(child: body),
@@ -155,17 +184,17 @@ class _MobileHomeViewState extends State<_MobileHomeView> {
   }
 }
 
-/// Opaque top bar: wordmark + profile button + a horizontal plugin switcher,
-/// sitting above the scrolling content (never over it).
+/// Opaque top bar: wordmark + profile button + the active-plugin switcher
+/// pill, sitting above the scrolling content (never over it).
 class _HomeTopBar extends StatelessWidget {
   final List<PluginInfo> plugins;
-  final String? activeId;
+  final PluginInfo? active;
   final ValueChanged<String> onSelect;
   final VoidCallback onProfile;
 
   const _HomeTopBar({
     required this.plugins,
-    required this.activeId,
+    required this.active,
     required this.onSelect,
     required this.onProfile,
   });
@@ -205,37 +234,11 @@ class _HomeTopBar extends StatelessWidget {
                     ],
                   ),
                 ),
-                if (plugins.length > 1)
-                  SizedBox(
-                    height: 44,
-                    child: ListView.separated(
-                      scrollDirection: Axis.horizontal,
-                      padding: const EdgeInsets.fromLTRB(16, 0, 16, 10),
-                      itemCount: plugins.length,
-                      separatorBuilder: (_, __) => const SizedBox(width: 8),
-                      itemBuilder: (_, i) {
-                        final p = plugins[i];
-                        final sel = p.pluginId == activeId;
-                        return ChoiceChip(
-                          label: Text(pluginLabel(p)),
-                          selected: sel,
-                          onSelected: (_) => onSelect(p.pluginId),
-                          showCheckmark: false,
-                          side: BorderSide(
-                              color: sel
-                                  ? Colors.transparent
-                                  : AppTheme.border),
-                          backgroundColor: AppTheme.surface,
-                          selectedColor: AppTheme.primary,
-                          labelStyle: TextStyle(
-                            fontSize: 13,
-                            fontWeight: FontWeight.w600,
-                            color: sel ? Colors.white : AppTheme.textHigh,
-                          ),
-                        );
-                      },
-                    ),
-                  ),
+                PluginSwitcherPill(
+                  plugins: plugins,
+                  active: active,
+                  onSelect: onSelect,
+                ),
               ],
             ),
           ),

@@ -14,6 +14,7 @@ import '../update/update_service.dart';
 import '../../features/auth/bloc/auth_bloc.dart';
 import '../../features/auth/bloc/auth_event.dart';
 import '../../features/auth/data/auth_repository.dart';
+import '../../features/media/active_plugin_controller.dart';
 import '../../features/media/bloc/continue_watching_bloc.dart';
 import '../../features/media/bloc/details_bloc.dart';
 import '../../features/media/bloc/discovery_bloc.dart';
@@ -123,6 +124,12 @@ Future<void> configureDependencies() async {
         onSessionExpired: () =>
             getIt<AuthBloc>().add(const SessionExpiredEvent()),
       ));
+  // Mobile-only (Home/Cerca tab sync — see the class doc), registered here
+  // like everything else so it's reset alongside the rest on logout; a
+  // lazy singleton never instantiates at all on TV/desktop/web, which never
+  // call getIt<ActivePluginController>().
+  getIt.registerLazySingleton<ActivePluginController>(
+      () => ActivePluginController());
   getIt.registerFactory<PlaybackBloc>(() => PlaybackBloc(
         getIt<MediaRepository>(),
         onSessionExpired: () =>

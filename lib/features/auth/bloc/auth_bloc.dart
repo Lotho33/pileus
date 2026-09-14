@@ -4,6 +4,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 
 import '../../../core/di/injection.dart';
 import '../../../core/grpc/auth_interceptor.dart';
+import '../../media/active_plugin_controller.dart';
 import '../../media/bloc/continue_watching_bloc.dart';
 import '../../media/bloc/continue_watching_event.dart';
 import '../../media/bloc/discovery_bloc.dart';
@@ -330,6 +331,15 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
         disposingFunction: (b) => b.close());
     await getIt.resetLazySingleton<ContinueWatchingBloc>(
         disposingFunction: (b) => b.close());
+    // Mobile-only: the plugin id picked here belongs to the account just
+    // logged out of — same staleness this whole method exists to avoid for
+    // Plugin/ContinueWatchingBloc above. A no-op on TV/desktop/web, which
+    // never register it (lazy singleton, only ever instantiated by mobile's
+    // Home/Cerca tabs).
+    if (getIt.isRegistered<ActivePluginController>()) {
+      await getIt.resetLazySingleton<ActivePluginController>(
+          disposingFunction: (c) => c.dispose());
+    }
   }
 
   Future<void> _onSwitchProfile(

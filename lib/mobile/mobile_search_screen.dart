@@ -6,6 +6,7 @@ import '../core/grpc/clients/media_client.dart' show PluginInfo, SearchFilter;
 import '../core/theme/app_theme.dart';
 import '../features/auth/bloc/auth_bloc.dart';
 import '../features/auth/bloc/auth_event.dart';
+import '../features/media/active_plugin_controller.dart';
 import '../features/media/bloc/discovery_bloc.dart';
 import '../features/media/bloc/discovery_event.dart';
 import '../features/media/bloc/discovery_state.dart';
@@ -16,6 +17,7 @@ import '../features/media/data/media_repository.dart';
 import '../features/media/presentation/widgets/plugin_nav.dart' show pluginLabel;
 import '../shared/widgets/filter_sheet.dart';
 import 'widgets/mobile_poster_card.dart';
+import 'widgets/plugin_switcher_pill.dart';
 
 /// Shortest query the search will dispatch, unless a filter is carrying it.
 const _kMinLen = 2;
@@ -34,6 +36,16 @@ class _MobileSearchScreenState extends State<MobileSearchScreen> {
   final _ctrl = TextEditingController();
   final _focus = FocusNode();
 
+  // Shared with MobileHomeScreen (see the class doc on
+  // ActivePluginController) — switching plugin here or on Home now updates
+  // both instead of each tab tracking its own, independent selection
+  // (reported 2026-09-14: Cerca always reopened on the first plugin no
+  // matter what was active on Home). _pluginId mirrors _activePlugin.value
+  // purely so the rest of this file — _run/_resolve/the search hint — reads
+  // the same local field it always did; _onActiveChanged is the one place
+  // that writes it, whether the change originated here (_switchPlugin, via
+  // the shared controller) or on the Home tab.
+  final _activePlugin = getIt<ActivePluginController>();
   String? _pluginId;
   String _submitted = '';
 
@@ -50,10 +62,13 @@ class _MobileSearchScreenState extends State<MobileSearchScreen> {
     );
     final pb = getIt<PluginBloc>();
     if (pb.state is PluginInitial) pb.add(const LoadPluginsEvent());
+    _pluginId = _activePlugin.value;
+    _activePlugin.addListener(_onActiveChanged);
   }
 
   @override
   void dispose() {
+    _activePlugin.removeListener(_onActiveChanged);
     _ctrl.dispose();
     _focus.dispose();
     _bloc.close();
@@ -63,8 +78,8 @@ class _MobileSearchScreenState extends State<MobileSearchScreen> {
   List<PluginInfo> _pluginsOf(PluginState s) =>
       s is PluginsLoaded ? s.plugins : const [];
 
-  /// Picks the effective plugin, seeding [_pluginId] the first time plugins
-  /// arrive (post-frame, so we don't setState during build).
+  /// Picks the effective plugin, seeding the shared controller the first
+  /// time plugins arrive (post-frame, so we don't write to it during build).
   PluginInfo? _resolve(List<PluginInfo> plugins) {
     if (plugins.isEmpty) return null;
     PluginInfo? match;
@@ -75,18 +90,29 @@ class _MobileSearchScreenState extends State<MobileSearchScreen> {
         plugins.firstWhere((p) => p.isReady, orElse: () => plugins.first);
     // Seed on first load, and re-seed if the selected plugin vanished
     // server-side (else _run() keeps firing SearchRequestEvent at a dead id).
+    // _onActiveChanged below does the actual reset once this lands.
     if (found.pluginId != _pluginId) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted && _pluginId != found.pluginId) {
-          _switchPlugin(found.pluginId);
+        if (mounted && _activePlugin.value != found.pluginId) {
+          _activePlugin.value = found.pluginId;
         }
       });
     }
     return found;
   }
 
+  /// User picked a plugin from this screen's own picker — writes through
+  /// the shared controller so Home picks it up too; _onActiveChanged (fired
+  /// either way, including when Home is the one that changed it) does the
+  /// actual query/filter reset.
   void _switchPlugin(String id) {
     if (id == _pluginId) return;
+    _activePlugin.value = id;
+  }
+
+  void _onActiveChanged() {
+    final id = _activePlugin.value;
+    if (!mounted || id == _pluginId) return;
     setState(() {
       _pluginId = id;
       _active.clear();
@@ -95,7 +121,7 @@ class _MobileSearchScreenState extends State<MobileSearchScreen> {
     });
     _ctrl.clear();
     _bloc.add(const ClearSearchEvent());
-    _loadFilters(id);
+    if (id != null) _loadFilters(id);
   }
 
   Future<void> _loadFilters(String pluginId) async {
@@ -247,35 +273,11 @@ class _MobileSearchScreenState extends State<MobileSearchScreen> {
                 ),
               ),
               // ── Plugin picker ─────────────────────────────────────────
-              if (plugins.length > 1)
-                SizedBox(
-                  height: 40,
-                  child: ListView.separated(
-                    scrollDirection: Axis.horizontal,
-                    padding: const EdgeInsets.fromLTRB(16, 0, 16, 4),
-                    itemCount: plugins.length,
-                    separatorBuilder: (_, __) => const SizedBox(width: 8),
-                    itemBuilder: (_, i) {
-                      final p = plugins[i];
-                      final sel = p.pluginId == active?.pluginId;
-                      return ChoiceChip(
-                        label: Text(pluginLabel(p)),
-                        selected: sel,
-                        showCheckmark: false,
-                        backgroundColor: AppTheme.surface,
-                        selectedColor: AppTheme.primary,
-                        side: BorderSide(
-                            color: sel ? Colors.transparent : AppTheme.border),
-                        labelStyle: TextStyle(
-                          fontSize: 13,
-                          fontWeight: FontWeight.w600,
-                          color: sel ? Colors.white : AppTheme.textHigh,
-                        ),
-                        onSelected: (_) => _switchPlugin(p.pluginId),
-                      );
-                    },
-                  ),
-                ),
+              PluginSwitcherPill(
+                plugins: plugins,
+                active: active,
+                onSelect: _switchPlugin,
+              ),
               // ── Active filter chips ───────────────────────────────────
               if (_active.isNotEmpty)
                 Align(
