@@ -35,6 +35,10 @@ class _PlaybackViewState extends State<_PlaybackView> {
   // _restartPlayerInPlace so a manual restart doesn't have to re-read
   // SettingsRepository or duplicate the lowPowerUi clamp.
   late final int _bufferMiB;
+  // Guards _ensureEngineInitialized so the native player setup runs exactly
+  // once per engine instance — see that method. _restartPlayerInPlace
+  // initializes its replacement _engine itself and keeps this true.
+  bool _engineInitialized = false;
 
   // Lets _onKey hand D-pad focus into whichever overlay is on screen the
   // moment it's revealed — otherwise the screen-level Focus below keeps
@@ -198,20 +202,19 @@ class _PlaybackViewState extends State<_PlaybackView> {
     if (lowPowerUi) bufMiB = bufMiB.clamp(4, args.isLive ? 10 : 16);
     _bufferMiB = bufMiB;
 
+    // _engine.create() is a plain Dart object (no native call) — safe here.
+    // _engine.initialize() is NOT: on Android it synchronously spins up a
+    // BetterPlayerController, which the plugin's native side answers by
+    // allocating a real Surface/SurfaceTexture right away (BetterPlayer.kt's
+    // init block), independently of whether buildView()'s widget is even in
+    // the tree yet (it returns SizedBox.shrink() until _controller exists,
+    // but the native side doesn't know or care about that). Deliberately
+    // deferred to _ensureEngineInitialized(), called from _startPlayback
+    // instead of here — see that method for why.
     _engine = PlayerEngine.create();
     _engine.onError = _onEngineError;
     _engine.addListener(_onEngineChanged);
-    _engine.initialize(
-      PlayerSubtitleStyle(
-        fontSize: _subtitleFontSize,
-        color: _subtitleColor,
-        backgroundEnabled: _subtitleBgEnabled,
-        bottomPadding: _subtitleBottomPadding,
-      ),
-      isLive: args.isLive,
-      bufferMiB: _bufferMiB,
-    );
-    perf('screen: engine built (${_engine.runtimeType})');
+    perf('screen: engine created (${_engine.runtimeType})');
 
     _heartbeatTimer = Timer.periodic(const Duration(seconds: 15), (_) {
       if (!mounted || widget.args.isLive) return;
@@ -805,8 +808,49 @@ class _PlaybackViewState extends State<_PlaybackView> {
 
   // ── Playback start ─────────────────────────────────────────────────────────
 
+  // Actually spins up the native player (BetterPlayerController on Android →
+  // a real Surface/SurfaceTexture allocated by the plugin, or the mpv/media_kit
+  // player on desktop/web) the first time it's needed, right before the
+  // resolved URL is handed to it.
+  //
+  // Used to happen unconditionally in initState, i.e. the instant this
+  // screen opened — before the plugin has even started resolving the
+  // stream (which for a live "embed" source can mean several seconds of
+  // server-side headless-browser work: "carico l'embed nel browser",
+  // "estrazione flusso video" in the UI). On the weak Amlogic TV boxes this
+  // screen also targets (Tanix W2 / S905W, Mali-450 — same class of
+  // hardware behind the ImpellerBackend/EnableSurfaceControl workarounds in
+  // AndroidManifest.xml), a hard whole-screen compositor freeze has been
+  // reported reliably during exactly that resolve window — i.e. while a
+  // Surface nobody needs yet (the screen is fully covered by an opaque
+  // black cover until the first frame regardless, see the Stack in build())
+  // sat allocated and idle, stretching a fragile moment that AndroidManifest
+  // already documents as freeze-prone from a handful of frames to several
+  // seconds on every single live open (reported 2026-09-14). Narrowing the
+  // window back to "right before a real frame is imminent" costs nothing —
+  // buildView() already renders SizedBox.shrink() until this has run — and
+  // doesn't reopen the older bug the always-painted RepaintBoundary above
+  // this was protecting against (a live stream's own first-frame wait,
+  // which only starts after this runs, not before it).
+  void _ensureEngineInitialized() {
+    if (_engineInitialized) return;
+    _engineInitialized = true;
+    _engine.initialize(
+      PlayerSubtitleStyle(
+        fontSize: _subtitleFontSize,
+        color: _subtitleColor,
+        backgroundEnabled: _subtitleBgEnabled,
+        bottomPadding: _subtitleBottomPadding,
+      ),
+      isLive: widget.args.isLive,
+      bufferMiB: _bufferMiB,
+    );
+    perf('screen: engine initialized (${_engine.runtimeType})');
+  }
+
   void _startPlayback(
       String url, Map<String, String> headers, Map<String, String> extra) {
+    _ensureEngineInitialized();
     List<SkipInterval> intervals = const [];
     final skipJson = extra['skip_times'];
     if (skipJson != null && skipJson.isNotEmpty) {
