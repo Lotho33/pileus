@@ -33,7 +33,24 @@ GrpcWebClientChannel createGrpcChannel({
 String _webOrigin(String host, int port) {
   try {
     final href = Uri.base;
-    return '${href.scheme}://${href.host}${href.hasPort ? ":${href.port}" : ""}';
+    // Same-origin — the normal "page served by mycelium itself" deployment
+    // (resolveGrpcHost's web branch seeds `host` from Uri.base.host at
+    // startup, so this is also true on a fresh launch before any explicit
+    // choice has been made). Stick to the page's own scheme/host/port so a
+    // reverse-proxied HTTPS deployment isn't bounced to a bare
+    // http://host:grpcPort that CORS/mixed-content would then block.
+    if (host.isEmpty || host == href.host) {
+      return '${href.scheme}://${href.host}${href.hasPort ? ":${href.port}" : ""}';
+    }
+    // An explicit different host — WebDiscoveryScreen's manual override
+    // ("for the case where the app is hosted somewhere else"), or `host`
+    // arriving via rebuildGrpcClients() after one. Before this, that
+    // override had literally no effect: every gRPC-Web call kept hitting
+    // Uri.base regardless of what was saved, which is also what breaks
+    // local dev (`flutter run -d web-server` serves the page itself, not
+    // mycelium — Uri.base is the Flutter dev server's own port, not the
+    // server being pointed at) — reported 2026-09-14.
+    return 'http://$host:$port';
   } catch (_) {
     return 'http://$host:$port';
   }

@@ -62,11 +62,27 @@ extension type _HlsErrorResponse._(JSObject _) implements JSObject {
   external String? get text;
 }
 
-// hls.js's own event-name constant (Hls.Events.ERROR) — its value is this
-// literal string in every hls.js release; hardcoded rather than pulled off
-// the JS object to dodge extension-type static-getter interop for one
-// constant.
+extension type _HlsManifestParsedData._(JSObject _) implements JSObject {
+  external JSArray? get levels;
+}
+
+// hls.js's own event-name constants (Hls.Events.*) — these values are the
+// literal strings every hls.js release uses; hardcoded rather than pulled
+// off the JS object to dodge extension-type static-getter interop for a
+// handful of constants.
 const _hlsErrorEvent = 'hlsError';
+const _hlsManifestParsedEvent = 'hlsManifestParsed';
+// Minimal lifecycle trace, not full hls.js debug logging (which is far
+// noisier): confirms whether hls.js ever attempts to load a level/fragment
+// after parsing the manifest at all — the open question left after
+// vixseries/vixmovie's master playlist turned out to parse and rewrite fine
+// server-side (2026-09-14) but nothing past it ever reached the server.
+const _hlsTraceEvents = [
+  'hlsLevelLoading',
+  'hlsLevelLoaded',
+  'hlsFragLoading',
+  'hlsFragLoaded',
+];
 
 /// Web player — a plain HTML5 `<video>` behind an [HtmlElementView].
 ///
@@ -144,6 +160,20 @@ class _ViewState extends State<_View> {
       ..style.setProperty('background', 'black');
     ui_web.platformViewRegistry
         .registerViewFactory(_viewType, (int _) => _video);
+    // Catches a failure on *either* path _attachSource can take: the plain
+    // `_video.src = url` assignment (no listener anywhere before this), and
+    // — since hls.js ultimately still feeds this same element via MSE — a
+    // fatal decode/format error hls.js's own error event (see _attachSource)
+    // didn't already report as fatal. MediaError.code: 1 ABORTED, 2 NETWORK,
+    // 3 DECODE, 4 SRC_NOT_SUPPORTED (spec numbering).
+    _video.addEventListener(
+      'error',
+      ((web.Event _) {
+        final err = _video.error;
+        debugPrint('[web player] <video> element error: '
+            'code=${err?.code} message=${err?.message}');
+      }).toJS,
+    );
     if (!widget.args.isLive) {
       _progressTimer = Timer.periodic(
           const Duration(seconds: 15), (_) => _saveProgress());
@@ -186,8 +216,27 @@ class _ViewState extends State<_View> {
   ///  * HLS in a browser without native support → hls.js (if bundled).
   void _attachSource(String url) {
     final looksHls = url.toLowerCase().contains('.m3u8');
+    // canPlayType returns "" (no), "maybe", or "probably" per spec — only
+    // Safari genuinely plays HLS natively and returns "probably" for it.
+    // Chromium (so Brave/Chrome/Edge too) has no native HLS decoder at all
+    // but, because "application/vnd.apple.mpegurl" is a generic-enough MIME
+    // string, sometimes hedges with "maybe" rather than committing to "" —
+    // checking .isNotEmpty treated that hedge as "yes, native", skipped
+    // hls.js entirely, and left the browser to fail outright on its own
+    // (confirmed 2026-09-14 on Brave: `<video> element error: code=4`
+    // MEDIA_ERR_SRC_NOT_SUPPORTED — the exact playlist played back fine in
+    // VLC seconds later, so this was never a server-side/playlist problem).
     final nativeHls =
-        _video.canPlayType('application/vnd.apple.mpegurl').isNotEmpty;
+        _video.canPlayType('application/vnd.apple.mpegurl') == 'probably';
+    // The actual branch decision — without this there was no way to tell
+    // "hls.js never got a chance to run" (wrong looksHls, or nativeHls true
+    // so the browser's own HLS support was trusted instead) apart from
+    // absence of every hls.js log line, which is exactly the ambiguity that
+    // came up investigating vixseries/vixmovie not playing on web
+    // (2026-09-14): PlaybackReady fired, nothing after it, no hls.js event
+    // ever printed — this line is what would have settled it immediately.
+    debugPrint('[web player] attachSource: looksHls=$looksHls '
+        'nativeHls=$nativeHls hlsUsable=$_hlsUsable url=$url');
     if (looksHls && !nativeHls && _hlsUsable) {
       try {
         _hls?.destroy();
@@ -208,6 +257,21 @@ class _ViewState extends State<_View> {
               '${resp == null ? '' : ' httpStatus=${resp.code} body=${resp.text}'}'
               ' url=$url');
         }).toJS);
+        // How many renditions hls.js actually extracted from the master —
+        // if this never fires, or fires with 0 levels, the manifest parse
+        // itself is the failure point, not anything past it.
+        h.on(_hlsManifestParsedEvent, ((JSAny? _, _HlsManifestParsedData data) {
+          debugPrint('[web player] hls.js manifest parsed: '
+              '${data.levels?.length ?? 0} level(s) url=$url');
+        }).toJS);
+        // If parsing found levels but none of these ever fire, hls.js
+        // decided not to load anything — a level/autoStartLoad config
+        // issue, not a network or parse failure.
+        for (final evt in _hlsTraceEvents) {
+          h.on(evt, ((JSAny? _, JSAny? __) {
+            debugPrint('[web player] hls.js event: $evt url=$url');
+          }).toJS);
+        }
         h.loadSource(url);
         h.attachMedia(_video);
         _hls = h;

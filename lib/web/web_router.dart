@@ -12,11 +12,30 @@ import '../desktop/desktop_pairing_screen.dart';
 import '../desktop/desktop_profiles_screen.dart';
 import '../desktop/desktop_shell.dart';
 import '../desktop/desktop_splash_screen.dart';
+// Below `Breakpoint.compact` width (phone/PWA), the mobile flavor's own
+// screens render instead — see web_responsive.dart. Also dart:io-free
+// (mobile_discovery_screen.dart is the one exception in lib/mobile/, and
+// nothing here pulls it in — web keeps its own WebDiscoveryScreen).
+import '../features/media/presentation/browse_screen.dart';
+import '../features/media/presentation/episode_detail_screen.dart';
+import '../features/media/presentation/plugin_settings_screen.dart';
+import '../mobile/mobile_details_screen.dart';
+import '../mobile/mobile_plugins_screen.dart';
+import '../mobile/mobile_preferences_screen.dart';
+import '../mobile/mobile_profile_settings_screen.dart';
+import '../mobile/mobile_settings_screen.dart';
+import '../mobile/mobile_shell.dart';
 import 'web_discovery_screen.dart';
 import 'web_playback_screen.dart';
+import 'web_responsive.dart';
 
 /// Web router. Same shape as the desktop router, but discovery + player are
-/// web-native (no `dart:io` socket probe, HTML5 `<video>` playback).
+/// web-native (no `dart:io` socket probe, HTML5 `<video>` playback), and
+/// `/home` + `/details` switch between the desktop and mobile shells by
+/// viewport width (see web_responsive.dart). The `/settings/*` sub-routes
+/// and `/browse`, `/episode`, `/plugin-settings` only exist for the mobile
+/// shell's own navigation (DesktopShell keeps settings as an in-shell pane,
+/// never pushes to them) — harmless to register unconditionally either way.
 final GoRouter webRouter = GoRouter(
   initialLocation: '/splash',
   routes: [
@@ -29,14 +48,58 @@ final GoRouter webRouter = GoRouter(
     GoRoute(
         path: '/profiles',
         builder: (_, __) => const DesktopProfilesScreen()),
-    GoRoute(path: '/home', builder: (_, __) => const DesktopShell()),
+    GoRoute(
+      path: '/home',
+      builder: (context, __) => webResponsive(
+        context,
+        mobile: (_) => const MobileShell(),
+        desktop: (_) => const DesktopShell(),
+      ),
+    ),
     GoRoute(
       path: '/details/:pluginId/:mediaId',
-      builder: (_, state) => DesktopDetailsScreen(
+      builder: (context, state) {
+        final pluginId = state.pathParameters['pluginId']!;
+        final mediaId = Uri.decodeComponent(state.pathParameters['mediaId']!);
+        final preview =
+            state.extra is CatalogItem ? state.extra as CatalogItem : null;
+        return webResponsive(
+          context,
+          mobile: (_) => MobileDetailsScreen(
+              pluginId: pluginId, mediaId: mediaId, preview: preview),
+          desktop: (_) => DesktopDetailsScreen(
+              pluginId: pluginId, mediaId: mediaId, preview: preview),
+        );
+      },
+    ),
+    GoRoute(
+      path: '/browse/:pluginId/:parentId',
+      builder: (_, state) => BrowseScreen(
         pluginId: state.pathParameters['pluginId']!,
-        mediaId: Uri.decodeComponent(state.pathParameters['mediaId']!),
-        preview: state.extra is CatalogItem ? state.extra as CatalogItem : null,
+        parentId: Uri.decodeComponent(state.pathParameters['parentId']!),
+        title: state.extra as String? ?? '',
       ),
+    ),
+    GoRoute(
+      path: '/episode/:pluginId/:mediaId',
+      builder: (_, state) {
+        final extra = state.extra as Map<String, dynamic>?;
+        return EpisodeDetailScreen(
+          pluginId: state.pathParameters['pluginId']!,
+          mediaId: Uri.decodeComponent(state.pathParameters['mediaId']!),
+          episodeList:
+              (extra?['episodeList'] as List?)?.cast<String>() ?? const [],
+          episodeTitles:
+              (extra?['episodeTitles'] as List?)?.cast<String>() ?? const [],
+          episodeIndex: extra?['episodeIndex'] as int? ?? -1,
+          allSeasonIds:
+              (extra?['allSeasonIds'] as List?)?.cast<String>() ?? const [],
+          allSeasonLabels:
+              (extra?['allSeasonLabels'] as List?)?.cast<String>() ?? const [],
+          seasonIndex: extra?['seasonIndex'] as int? ?? 0,
+          showTitle: extra?['showTitle'] as String? ?? '',
+        );
+      },
     ),
     GoRoute(
       path: '/player/:pluginId/:mediaId',
@@ -47,6 +110,27 @@ final GoRouter webRouter = GoRouter(
         extra: state.extra as Map<String, dynamic>?,
       ),
     ),
+    GoRoute(
+      path: '/plugin-settings/:pluginId',
+      builder: (_, state) {
+        final extra = state.extra as Map<String, dynamic>?;
+        return PluginSettingsScreen(
+          pluginId: state.pathParameters['pluginId']!,
+          pluginName: extra?['pluginName'] as String? ?? '',
+        );
+      },
+    ),
+    GoRoute(
+        path: '/settings', builder: (_, __) => const MobileSettingsScreen()),
+    GoRoute(
+        path: '/settings/profile',
+        builder: (_, __) => const MobileProfileSettingsScreen()),
+    GoRoute(
+        path: '/settings/preferences',
+        builder: (_, __) => const MobilePreferencesScreen()),
+    GoRoute(
+        path: '/settings/plugins',
+        builder: (_, __) => const MobilePluginsScreen()),
   ],
   errorBuilder: (context, state) => Scaffold(
     backgroundColor: AppTheme.bg,

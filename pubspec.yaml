@@ -4,7 +4,12 @@ publish_to: 'none'
 version: 1.2.9+0
 
 environment:
-  sdk: ^3.5.0
+  # Bumped from ^3.5.0: web_playback_screen.dart's hls.js diagnostics
+  # (added 2026-09-14, tracking the vixseries/vixmovie silent-playback
+  # investigation) read JSArray.length, an SDK-3.6+ dart:js_interop API.
+  # No real compatibility loss — CI always builds on current stable
+  # (ghcr.io/cirruslabs/flutter:stable), already far ahead of this floor.
+  sdk: ^3.6.0
 
 dependencies:
   flutter:

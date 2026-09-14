@@ -135,6 +135,15 @@ String? myceliumHttpBase() {
   try {
     if (kIsWeb) {
       final u = Uri.base;
+      // Same bug/fix as _webOrigin in grpc_channel_web.dart: an explicit
+      // override host (WebDiscoveryScreen, or a local dev server whose own
+      // origin isn't mycelium) must actually be used here too, or every
+      // /plugin-icon//pileus/info//img request keeps silently hitting the
+      // page's own origin regardless of what was saved (2026-09-14).
+      final saved = DeviceSession.readFrom(getIt<SharedPreferences>())?.grpcHost;
+      if (saved != null && saved.isNotEmpty && saved != u.host) {
+        return 'http://$saved:$_myceliumHttpPort';
+      }
       final port = u.hasPort ? ':${u.port}' : '';
       return '${u.scheme}://${u.host}$port';
     }
