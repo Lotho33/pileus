@@ -25,9 +25,33 @@ String? get _envHost {
 
 // The browser can't open a raw TCP socket at all — a page loaded in the
 // browser is already talking to a specific origin, and that origin's own
-// hostname *is* the resolved host (the app is served by mycelium).
+// hostname normally *is* the resolved host (the app is served by mycelium).
+//
+// A saved override (WebDiscoveryScreen's manual host — "for the case where
+// the app is hosted somewhere else", which in practice also covers a local
+// `flutter run -d web-server` dev session, where the page's own origin is
+// the Flutter dev server, not mycelium) takes precedence when present. Every
+// successful WebDiscoveryScreen connection — including the routine
+// same-origin auto-confirm — saves `host` via saveHostInfo(), so checking it
+// first here doesn't change behaviour for the normal "served by mycelium"
+// deployment (the saved value and Uri.base.host already agree there); it
+// only matters when they'd otherwise disagree.
+//
+// Without this, a full page *reload* forgot the override every time:
+// configureDependencies() calls resolveGrpcHost() from scratch on every
+// fresh load, so grpc_channel_web.dart/myceliumHttpBase()'s own
+// "prefer the saved host" fix (2026-09-14) never got a chance to fire — this
+// is what actually feeds `host` into both of those the first place, and it
+// was still handing them Uri.base.host unconditionally. Symptom: dev-server
+// testing worked until a browser refresh, at which point gRPC calls started
+// hitting the Flutter dev server's own shelf-based static server (its 404
+// response is how this was actually diagnosed — "x-powered-by: Dart with
+// package:shelf" is the dev server, not mycelium, which is Go).
 String _webHost() {
   try {
+    final saved =
+        DeviceSession.readFrom(getIt<SharedPreferences>())?.grpcHost;
+    if (saved != null && saved.isNotEmpty) return saved;
     final host = Uri.base.host;
     return host.isNotEmpty ? host : 'mycelium.local';
   } catch (_) {

@@ -22,7 +22,18 @@ class MobileHero extends StatefulWidget {
   State<MobileHero> createState() => _MobileHeroState();
 }
 
-class _MobileHeroState extends State<MobileHero> {
+// AutomaticKeepAliveClientMixin — same fix and same reason as
+// DesktopHero/_DesktopHeroState (2026-09-14): mobile_home_screen.dart's
+// outer ListView has Flutter's default ~250px cacheExtent, far short of
+// this widget's own height — scroll down a few rows and it's fully
+// deactivated, not just offscreen. Scrolling back rebuilds it from scratch:
+// an unexpected extra GetDetails (initState → _enrich() again) and a fresh
+// CachedNetworkImage decode for the backdrop/logo/portrait racing the torn-
+// down instance's own GPU resource — the likely trigger for the web build's
+// CanvasKit "texImage2D: no image" black-poster bug, reproduced through this
+// same widget when web runs the mobile shell at a phone-width viewport.
+class _MobileHeroState extends State<MobileHero>
+    with AutomaticKeepAliveClientMixin {
   final _repo = getIt<MediaRepository>();
 
   List<String> _genres = const [];
@@ -106,7 +117,11 @@ class _MobileHeroState extends State<MobileHero> {
   void _info() => openCatalogItem(context, widget.pluginId, widget.item);
 
   @override
+  bool get wantKeepAlive => true;
+
+  @override
   Widget build(BuildContext context) {
+    super.build(context); // AutomaticKeepAliveClientMixin contract
     final it = widget.item;
     final size = MediaQuery.sizeOf(context);
     // Portrait key-art (rare) can fill a tall hero; landscape wide art gets

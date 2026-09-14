@@ -32,7 +32,23 @@ class DesktopHero extends StatefulWidget {
   State<DesktopHero> createState() => _DesktopHeroState();
 }
 
-class _DesktopHeroState extends State<DesktopHero> {
+// AutomaticKeepAliveClientMixin: the outer page (desktop_home_screen.dart)
+// is a plain ListView, whose default ~250px cacheExtent is nowhere near
+// this widget's own height (440-760px) — scroll down even a few carousel
+// rows and the hero goes far enough outside that window that Flutter fully
+// deactivates its Element, not just keeps it offscreen. Scrolling back then
+// rebuilds it from scratch: a fresh initState()/_enrich() (an unexpected
+// extra GetDetails call — reported 2026-09-14, that's what surfaced this)
+// and a brand new CachedNetworkImage decode for the backdrop/logo racing
+// against whatever GPU resource the just-torn-down instance was still
+// holding — the far more likely trigger for the CanvasKit
+// "texImage2D: no image" black-poster bug than the raster-cache theory
+// originally chased for it. Opting into keep-alive here holds this one
+// (single, not-per-item) widget's Element alive across any scroll distance,
+// the same way the rest of the page's carousels are already fine with their
+// own — much cheaper — dispose/recreate cycle.
+class _DesktopHeroState extends State<DesktopHero>
+    with AutomaticKeepAliveClientMixin {
   final _repo = getIt<MediaRepository>();
   List<String> _genres = const [];
   String _logoUrl = '';
@@ -124,7 +140,11 @@ class _DesktopHeroState extends State<DesktopHero> {
   }
 
   @override
+  bool get wantKeepAlive => true;
+
+  @override
   Widget build(BuildContext context) {
+    super.build(context); // AutomaticKeepAliveClientMixin contract
     final it = widget.item;
     final imgW = backdropCacheWidth(context);
     final big = widget.bp.atLeastLarge;
