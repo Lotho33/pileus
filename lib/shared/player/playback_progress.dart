@@ -60,6 +60,30 @@ class PlaybackProgress {
     getIt<SharedPreferences>().setString(_audioLangKey, label);
   }
 
+  /// Writes a continue-watching row the instant the stream opens, even at
+  /// position 0 — mycelium no longer gates Continue Watching on a minimum
+  /// position, so a title should appear there as soon as it's opened rather
+  /// than waiting for the first 15s heartbeat (or dispose, if the user backs
+  /// out before that).
+  void markStarted(PlayerEngine engine) {
+    if (_progressCleared || args.isLive) return;
+    final a = args;
+    getIt<MediaRepository>().updateProgress(
+      pluginId: a.epPluginId,
+      mediaId: mediaId,
+      parentId: a.parentId,
+      position: engine.position,
+      totalDuration: engine.duration,
+      title: (a.title?.isNotEmpty ?? false) ? a.title! : a.showTitle,
+      showTitle: a.showTitle,
+      poster: a.poster,
+      rating: a.rating,
+      genres: a.genres,
+      plot: a.plot,
+      year: a.year,
+    );
+  }
+
   void save(PlayerEngine engine) {
     if (_progressCleared || args.isLive) return;
     final pos = engine.position;
@@ -157,8 +181,20 @@ class PlaybackProgress {
     final tracks = engine.audioTracks;
     if (tracks.length < 2) return;
     _audioPrefApplied = true;
-    final want = getIt<SharedPreferences>().getString(_audioLangKey);
-    if (want == null || want.isEmpty) return;
+    final prefs = getIt<SharedPreferences>();
+    final want = prefs.getString(_audioLangKey);
+    if (want == null || want.isEmpty) {
+      // No sticky preference yet — anchor on whatever the engine auto-picked
+      // for this first stream, so every later episode/movie keeps the same
+      // language instead of drifting with each file's own track order (the
+      // "anime audio language keeps flipping between episodes" report —
+      // without this, only an *explicit* pick via rememberAudioTrack stuck,
+      // so a run of episodes nobody ever manually touched the tracks sheet
+      // on just followed each file's own default).
+      final active = engine.activeAudioTrack;
+      if (active != null) prefs.setString(_audioLangKey, active.label);
+      return;
+    }
     final w = want.toLowerCase().trim();
     // Exact label match only — the pref is a stored `t.label`, so on the
     // same stream it matches exactly. A loose `contains` picked "Slovenian"

@@ -635,4 +635,3 @@ class _QuickSearchAreaState extends State<QuickSearchArea> {
     );
   }
 }
-

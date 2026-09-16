@@ -131,8 +131,7 @@ class _DesktopShellState extends State<DesktopShell> {
                       }),
                       onProfile: _profileMenu,
                     ),
-                    const VerticalDivider(
-                        width: 1, color: AppTheme.border),
+                    const VerticalDivider(width: 1, color: AppTheme.border),
                     Expanded(
                       child: RepaintBoundary(
                         child: IndexedStack(
@@ -162,13 +161,11 @@ class _DesktopShellState extends State<DesktopShell> {
     if (ps is PluginError) {
       return _ErrorPane(
         message: ps.message,
-        onRetry: () =>
-            context.read<PluginBloc>().add(const LoadPluginsEvent()),
+        onRetry: () => context.read<PluginBloc>().add(const LoadPluginsEvent()),
       );
     }
     if (active == null) {
-      return const _ErrorPane(
-          message: 'Nessun plugin configurato sul server.');
+      return const _ErrorPane(message: 'Nessun plugin configurato sul server.');
     }
     return DesktopHomeScreen(key: ValueKey(active.pluginId), plugin: active);
   }

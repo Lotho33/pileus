@@ -14,10 +14,10 @@ import '../features/media/bloc/plugin_bloc.dart';
 import '../features/media/bloc/plugin_event.dart';
 import '../features/media/bloc/plugin_state.dart';
 import '../features/media/data/media_repository.dart';
-import '../features/media/presentation/widgets/plugin_nav.dart' show pluginLabel;
+import '../features/media/presentation/widgets/plugin_nav.dart'
+    show pluginLabel;
 import '../shared/widgets/filter_sheet.dart';
 import 'widgets/mobile_poster_card.dart';
-import 'widgets/plugin_switcher_pill.dart';
 
 /// Shortest query the search will dispatch, unless a filter is carrying it.
 const _kMinLen = 2;
@@ -58,7 +58,8 @@ class _MobileSearchScreenState extends State<MobileSearchScreen> {
     super.initState();
     _bloc = DiscoveryBloc(
       getIt<MediaRepository>(),
-      onSessionExpired: () => getIt<AuthBloc>().add(const SessionExpiredEvent()),
+      onSessionExpired: () =>
+          getIt<AuthBloc>().add(const SessionExpiredEvent()),
     );
     final pb = getIt<PluginBloc>();
     if (pb.state is PluginInitial) pb.add(const LoadPluginsEvent());
@@ -101,15 +102,10 @@ class _MobileSearchScreenState extends State<MobileSearchScreen> {
     return found;
   }
 
-  /// User picked a plugin from this screen's own picker — writes through
-  /// the shared controller so Home picks it up too; _onActiveChanged (fired
-  /// either way, including when Home is the one that changed it) does the
-  /// actual query/filter reset.
-  void _switchPlugin(String id) {
-    if (id == _pluginId) return;
-    _activePlugin.value = id;
-  }
-
+  // Switching plugin happens only from Home's own PluginSwitcherPill now
+  // (2026-09-16) — one shared, atomic choice rather than two independent
+  // pickers that both write the same ActivePluginController. This just
+  // reacts to whatever Home (or the _resolve seed above) set it to.
   void _onActiveChanged() {
     final id = _activePlugin.value;
     if (!mounted || id == _pluginId) return;
@@ -272,12 +268,6 @@ class _MobileSearchScreenState extends State<MobileSearchScreen> {
                   ],
                 ),
               ),
-              // ── Plugin picker ─────────────────────────────────────────
-              PluginSwitcherPill(
-                plugins: plugins,
-                active: active,
-                onSelect: _switchPlugin,
-              ),
               // ── Active filter chips ───────────────────────────────────
               if (_active.isNotEmpty)
                 Align(
@@ -344,8 +334,7 @@ class _MobileSearchScreenState extends State<MobileSearchScreen> {
                             child: GridView.builder(
                               keyboardDismissBehavior:
                                   ScrollViewKeyboardDismissBehavior.onDrag,
-                              padding:
-                                  const EdgeInsets.fromLTRB(16, 6, 16, 28),
+                              padding: const EdgeInsets.fromLTRB(16, 6, 16, 28),
                               gridDelegate:
                                   const SliverGridDelegateWithMaxCrossAxisExtent(
                                 maxCrossAxisExtent: 118,

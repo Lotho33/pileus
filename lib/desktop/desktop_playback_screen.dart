@@ -98,8 +98,7 @@ class _ViewState extends State<_View> with WindowListener {
     // fullscreen toggle icon and the Esc handling below drift out of step.
     windowManager.addListener(this);
     _settings = getIt<SettingsRepository>();
-    _progress =
-        PlaybackProgress(args: widget.args, mediaId: widget.mediaId);
+    _progress = PlaybackProgress(args: widget.args, mediaId: widget.mediaId);
 
     var bufMiB = widget.args.isLive
         ? _settings.getLiveBufferMiB()
@@ -188,8 +187,7 @@ class _ViewState extends State<_View> with WindowListener {
     }
     _progress.maybeResumeSeek(_engine);
 
-    if (!_started &&
-        (playing || _engine.position > Duration.zero)) {
+    if (!_started && (playing || _engine.position > Duration.zero)) {
       _started = true;
       rebuild = true;
     }
@@ -220,6 +218,7 @@ class _ViewState extends State<_View> with WindowListener {
     _opened = true;
     _progress.onStreamOpened();
     await _engine.open(s.resolvedUrl, headers: s.httpHeaders);
+    _progress.markStarted(_engine);
   }
 
   void _retry() {
@@ -294,8 +293,8 @@ class _ViewState extends State<_View> with WindowListener {
     _wake();
   }
 
-  void _toggleMute() =>
-      _setVolume(_engine.volume > 0 ? 0 : (_lastVolume <= 0 ? 100 : _lastVolume));
+  void _toggleMute() => _setVolume(
+      _engine.volume > 0 ? 0 : (_lastVolume <= 0 ? 100 : _lastVolume));
 
   Future<void> _toggleFullscreen() async {
     _fullscreen = !_fullscreen;
@@ -377,9 +376,7 @@ class _ViewState extends State<_View> with WindowListener {
                   builder: (context, s) {
                     if (_error != null) {
                       return _ErrorOverlay(
-                          message: _error!,
-                          onBack: _exit,
-                          onRetry: _retry);
+                          message: _error!, onBack: _exit, onRetry: _retry);
                     }
                     if (s is PlaybackFailed) {
                       return _ErrorOverlay(
@@ -391,8 +388,7 @@ class _ViewState extends State<_View> with WindowListener {
                     // the open()/first-decode gap — no bare black screen.
                     if (s is! PlaybackReady || !_started) {
                       return _LoadingOverlay(
-                          state: s is PlaybackReady ? null : s,
-                          onBack: _exit);
+                          state: s is PlaybackReady ? null : s, onBack: _exit);
                     }
                     return Stack(
                       fit: StackFit.expand,
@@ -558,8 +554,7 @@ class _ControlsLayer extends StatelessWidget {
                             child: SliderTheme(
                               data: SliderTheme.of(context).copyWith(
                                 trackHeight: 3,
-                                overlayShape:
-                                    SliderComponentShape.noOverlay,
+                                overlayShape: SliderComponentShape.noOverlay,
                                 thumbShape: const RoundSliderThumbShape(
                                     enabledThumbRadius: 7),
                               ),
@@ -570,8 +565,8 @@ class _ControlsLayer extends StatelessWidget {
                                 max: maxMs,
                                 activeColor: AppTheme.primary,
                                 inactiveColor: Colors.white24,
-                                onChanged: (v) => onSeek(
-                                    Duration(milliseconds: v.toInt())),
+                                onChanged: (v) =>
+                                    onSeek(Duration(milliseconds: v.toInt())),
                               ),
                             ),
                           ),
@@ -636,10 +631,7 @@ class _CtlBtn extends StatelessWidget {
   final String? tooltip;
   final VoidCallback onTap;
   const _CtlBtn(
-      {required this.icon,
-      required this.onTap,
-      this.size = 28,
-      this.tooltip});
+      {required this.icon, required this.onTap, this.size = 28, this.tooltip});
 
   @override
   Widget build(BuildContext context) {
@@ -684,8 +676,7 @@ class _VolumeControl extends StatelessWidget {
             data: SliderTheme.of(context).copyWith(
               trackHeight: 3,
               overlayShape: SliderComponentShape.noOverlay,
-              thumbShape:
-                  const RoundSliderThumbShape(enabledThumbRadius: 6),
+              thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 6),
             ),
             child: Slider(
               value: volume.clamp(0, maxVolume),
@@ -734,9 +725,7 @@ class _TracksPanelState extends State<_TracksPanel> {
     Widget tile(String label, bool sel, VoidCallback onTap) => ListTile(
           dense: true,
           leading: Icon(
-              sel
-                  ? Icons.radio_button_checked
-                  : Icons.radio_button_unchecked,
+              sel ? Icons.radio_button_checked : Icons.radio_button_unchecked,
               color: sel ? AppTheme.primary : Colors.white38,
               size: 20),
           title: Text(label,
@@ -798,9 +787,7 @@ class _TracksPanelState extends State<_TracksPanel> {
                         tile(t.label, t.id == e.activeSubtitleTrack?.id,
                             () => e.selectSubtitleTrack(t)),
                     ],
-                    if (video.length < 2 &&
-                        audio.length < 2 &&
-                        subs.isEmpty)
+                    if (video.length < 2 && audio.length < 2 && subs.isEmpty)
                       const Padding(
                         padding: EdgeInsets.all(20),
                         child: Text(
@@ -860,8 +847,7 @@ class _LoadingOverlay extends StatelessWidget {
               children: [
                 const CircularProgressIndicator(color: Colors.white),
                 const SizedBox(height: 16),
-                Text(label,
-                    style: const TextStyle(color: Colors.white70)),
+                Text(label, style: const TextStyle(color: Colors.white70)),
               ],
             ),
           ),
@@ -907,16 +893,15 @@ class _ErrorOverlay extends StatelessWidget {
                   textAlign: TextAlign.center,
                   maxLines: 3,
                   overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                      color: Colors.white54, fontSize: 13)),
+                  style: const TextStyle(color: Colors.white54, fontSize: 13)),
               const SizedBox(height: 18),
               Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   OutlinedButton(
                     onPressed: onBack,
-                    style: OutlinedButton.styleFrom(
-                        foregroundColor: Colors.white),
+                    style:
+                        OutlinedButton.styleFrom(foregroundColor: Colors.white),
                     child: const Text('Indietro'),
                   ),
                   if (onRetry != null) ...[

@@ -280,4 +280,3 @@ class _EpisodeTileRowState extends State<_EpisodeTileRow> {
     }); // end LayoutBuilder
   }
 }
-

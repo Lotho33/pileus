@@ -40,17 +40,22 @@ class SettingsToggleRow extends StatelessWidget {
           duration: AppScale.focusDuration,
           curve: AppScale.focusCurve,
           margin: EdgeInsets.symmetric(
-              horizontal: AppScale.space(context, 16), vertical: AppScale.space(context, 4)),
+              horizontal: AppScale.space(context, 16),
+              vertical: AppScale.space(context, 4)),
           padding: EdgeInsets.symmetric(
-              horizontal: AppScale.space(context, 24), vertical: AppScale.space(context, 20)),
+              horizontal: AppScale.space(context, 24),
+              vertical: AppScale.space(context, 20)),
           decoration: BoxDecoration(
-            color: focused ? AppTheme.primary.withValues(alpha: 0.18) : AppTheme.surface2,
+            color: focused
+                ? AppTheme.primary.withValues(alpha: 0.18)
+                : AppTheme.surface2,
             borderRadius: BorderRadius.circular(14),
             border: Border.all(
               color: focused ? AppTheme.primary : Colors.transparent,
               width: 2,
             ),
-            boxShadow: focused ? AppScale.focusGlow(AppTheme.primary) : const [],
+            boxShadow:
+                focused ? AppScale.focusGlow(AppTheme.primary) : const [],
           ),
           child: Row(
             children: [
@@ -68,9 +73,13 @@ class SettingsToggleRow extends StatelessWidget {
                 value: value,
                 onChanged: onChanged,
                 thumbColor: WidgetStateProperty.resolveWith((states) =>
-                    states.contains(WidgetState.selected) ? Colors.white : AppTheme.textLow),
+                    states.contains(WidgetState.selected)
+                        ? Colors.white
+                        : AppTheme.textLow),
                 trackColor: WidgetStateProperty.resolveWith((states) =>
-                    states.contains(WidgetState.selected) ? AppTheme.primary : Colors.white12),
+                    states.contains(WidgetState.selected)
+                        ? AppTheme.primary
+                        : Colors.white12),
               ),
             ],
           ),

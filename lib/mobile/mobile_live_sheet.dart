@@ -7,6 +7,8 @@ import '../core/grpc/clients/media_client.dart' hide ContinueWatchingItem;
 import '../core/theme/app_theme.dart';
 import '../core/utils/image_sizing.dart';
 import '../features/media/data/media_repository.dart';
+import 'package:cached_network_image_platform_interface/cached_network_image_platform_interface.dart'
+    show ImageRenderMethodForWeb;
 
 /// Mobile live-event sheet — replaces the TV `showLiveEventPopup` (D-pad,
 /// AppScale) for phones. Event header + the list of stream sources
@@ -110,8 +112,12 @@ class _LiveSheetState extends State<_LiveSheet> {
                       width: 96,
                       height: 54,
                       child: CachedNetworkImage(
-                        imageUrl: posterSrc(
-                            poster, cacheWidthFor(context, 96),
+                        // Web-only, no-op on every other platform — see image_sizing.dart's
+                        // "ImageRenderMethodForWeb.HttpGet" section for why every
+                        // CachedNetworkImage call site in the app sets this.
+                        imageRenderMethodForWeb:
+                            ImageRenderMethodForWeb.HttpGet,
+                        imageUrl: posterSrc(poster, cacheWidthFor(context, 96),
                             proxy: true),
                         memCacheWidth: cacheWidthFor(context, 96),
                         fit: BoxFit.cover,

@@ -11,13 +11,16 @@ import '../features/media/bloc/plugin_bloc.dart';
 import '../features/media/bloc/plugin_event.dart';
 import '../features/media/data/media_repository.dart';
 import '../features/media/data/plugin_prefs.dart';
-import '../features/media/presentation/widgets/plugin_nav.dart' show pluginLabel;
+import '../features/media/presentation/widgets/plugin_nav.dart'
+    show pluginLabel;
 import '../features/settings/bloc/profile_management_cubit.dart';
 import '../features/settings/bloc/profile_management_state.dart';
 import '../features/settings/data/settings_repository.dart';
 import '../core/grpc/clients/media_client.dart' show PluginInfo;
 import '../shared/widgets/text_prompt_dialog.dart';
 import '../shared/widgets/default_avatars.dart';
+import 'package:cached_network_image_platform_interface/cached_network_image_platform_interface.dart'
+    show ImageRenderMethodForWeb;
 
 /// Native desktop settings: a left section list + the section content on the
 /// right. Migrated from the mobile Preferenze / Plugin / Profilo screens.
@@ -399,8 +402,8 @@ class _PluginSectionState extends State<_PluginSection> {
   }
 
   void _toggleHidden(String id) {
-    setState(() =>
-        _prefs = _prefs.withPluginHidden(id, !_prefs.isPluginHidden(id)));
+    setState(
+        () => _prefs = _prefs.withPluginHidden(id, !_prefs.isPluginHidden(id)));
     _repo.savePluginPrefs(_prefs);
     getIt<PluginBloc>().add(const RefreshPluginsEvent(force: true));
   }
@@ -448,8 +451,8 @@ class _PluginSectionState extends State<_PluginSection> {
               child: ListTile(
                 leading: ReorderableDragStartListener(
                   index: i,
-                  child: const Icon(Icons.drag_indicator,
-                      color: AppTheme.textLow),
+                  child:
+                      const Icon(Icons.drag_indicator, color: AppTheme.textLow),
                 ),
                 title: Text(
                   pluginLabel(p),
@@ -563,19 +566,17 @@ class _ProfileSection extends StatelessWidget {
               title: const Text('Profilo predefinito',
                   style: TextStyle(color: AppTheme.textHigh)),
               subtitle: state.otherDefaultName != null && !state.isDefault
-                  ? Text(
-                      'Predefinito attuale: ${state.otherDefaultName}',
+                  ? Text('Predefinito attuale: ${state.otherDefaultName}',
                       style: const TextStyle(
                           color: AppTheme.textLow, fontSize: 12))
                   : const Text('Entra direttamente con questo profilo',
-                      style: TextStyle(
-                          color: AppTheme.textLow, fontSize: 12)),
+                      style: TextStyle(color: AppTheme.textLow, fontSize: 12)),
             ),
             const Divider(color: AppTheme.border, height: 32),
             if (!state.isOnlyProfile)
               TextButton.icon(
-                icon: const Icon(Icons.delete_outline,
-                    color: Color(0xFFFF6B6B)),
+                icon:
+                    const Icon(Icons.delete_outline, color: Color(0xFFFF6B6B)),
                 label: const Text('Elimina profilo',
                     style: TextStyle(color: Color(0xFFFF6B6B))),
                 onPressed: () async {
@@ -584,9 +585,9 @@ class _ProfileSection extends StatelessWidget {
                     builder: (ctx) => AlertDialog(
                       backgroundColor: AppTheme.surface,
                       title: const Text('Eliminare il profilo?'),
-                      content: Text(
-                          'Verrà rimosso "${p.profileName}" da questo '
-                          'dispositivo.'),
+                      content:
+                          Text('Verrà rimosso "${p.profileName}" da questo '
+                              'dispositivo.'),
                       actions: [
                         TextButton(
                             onPressed: () => Navigator.pop(ctx, false),
@@ -618,6 +619,10 @@ class _Avatar extends StatelessWidget {
     }
     if (url.isEmpty) return const ColoredBox(color: AppTheme.surface2);
     return CachedNetworkImage(
+      // Web-only, no-op on every other platform — see image_sizing.dart's
+      // "ImageRenderMethodForWeb.HttpGet" section for why every
+      // CachedNetworkImage call site in the app sets this.
+      imageRenderMethodForWeb: ImageRenderMethodForWeb.HttpGet,
       imageUrl: url,
       memCacheWidth: 200,
       fit: BoxFit.cover,

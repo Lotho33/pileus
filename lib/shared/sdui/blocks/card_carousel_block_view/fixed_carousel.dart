@@ -309,4 +309,3 @@ class _FixedCarouselViewState extends State<_FixedCarouselView> {
     );
   }
 }
-

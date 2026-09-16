@@ -70,7 +70,8 @@ class _ProfileSettingsBodyState extends State<_ProfileSettingsBody> {
       onEsc: () => context.pop(),
       builder: (context, _) => Scaffold(
         backgroundColor: AppTheme.bg,
-        body: AmbientGlowBackground(child: Column(
+        body: AmbientGlowBackground(
+            child: Column(
           children: [
             SettingsHeader(
               title: 'Profilo',
@@ -94,7 +95,9 @@ class _ProfileSettingsBodyState extends State<_ProfileSettingsBody> {
                   }
                   if (state is ProfileMgmtError) {
                     ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(content: Text(state.message), backgroundColor: Colors.red[900]),
+                      SnackBar(
+                          content: Text(state.message),
+                          backgroundColor: Colors.red[900]),
                     );
                   }
                 },
@@ -119,85 +122,86 @@ class _ProfileSettingsBodyState extends State<_ProfileSettingsBody> {
     final profile = state.profile;
     final cubit = context.read<ProfileManagementCubit>();
     return ListView(
-                    padding: EdgeInsets.symmetric(
-                        horizontal: AppScale.screenHPad(context), vertical: AppScale.space(context, 12)),
-                    children: [
-                      const SettingsSectionHeader('Dati profilo'),
-                      SettingsNavRow(
-                        icon: Icons.badge_rounded,
-                        label: 'Nome',
-                        subtitle: profile.profileName,
-                        focusNode: _nameFn,
-                        autofocus: true,
-                        onFocusUp: () => _backFn.requestFocus(),
-                        onFocusDown: () => _avatarFn.requestFocus(),
-                        onTap: () async {
-                          final newName = await showSettingsTextInputDialog(
-                            context,
-                            title: 'Rinomina profilo',
-                            initialValue: profile.profileName,
-                          );
-                          if (newName != null) await cubit.rename(newName);
-                        },
-                      ),
-                      SettingsNavRow(
-                        icon: Icons.image_rounded,
-                        label: 'Avatar',
-                        subtitle: isDefaultAvatarUrl(profile.avatarUrl)
-                            ? 'Predefinito'
-                            : (profile.avatarUrl.isNotEmpty ? 'Personalizzato' : 'Nessuno'),
-                        focusNode: _avatarFn,
-                        onFocusUp: () => _nameFn.requestFocus(),
-                        onFocusDown: () => _defaultFn.requestFocus(),
-                        onTap: () => _showAvatarPickerDialog(context, cubit, profile.avatarUrl),
-                      ),
-                      const SettingsSectionHeader('Avvio'),
-                      SettingsToggleRow(
-                        label: 'Profilo predefinito',
-                        value: state.isDefault,
-                        focusNode: _defaultFn,
-                        onFocusUp: () => _avatarFn.requestFocus(),
-                        onFocusDown: () => _logoutFn.requestFocus(),
-                        onChanged: (v) {
-                          if (!v) {
-                            cubit.setDefault(false);
-                            return;
-                          }
-                          if (state.otherDefaultName != null) {
-                            _showDefaultBlockedDialog(
-                                context, state.otherDefaultName!);
-                          } else {
-                            _showSetDefaultDialog(context, cubit);
-                          }
-                        },
-                      ),
-                      const SettingsSectionHeader('Sessione'),
-                      SettingsNavRow(
-                        icon: Icons.switch_account_rounded,
-                        label: 'Cambia profilo',
-                        subtitle: 'Torna alla schermata dei profili',
-                        focusNode: _logoutFn,
-                        onFocusUp: () => _defaultFn.requestFocus(),
-                        onFocusDown: () => _deleteFn.requestFocus(),
-                        onTap: () => _showLogoutDialog(context),
-                      ),
-                      const SettingsSectionHeader('Zona pericolosa'),
-                      SettingsNavRow(
-                        icon: Icons.delete_forever_rounded,
-                        label: 'Elimina profilo',
-                        subtitle: state.isOnlyProfile
-                            ? 'Non puoi eliminare l\'unico profilo del dispositivo'
-                            : null,
-                        enabled: !state.isOnlyProfile,
-                        focusNode: _deleteFn,
-                        onFocusUp: () => _logoutFn.requestFocus(),
-                        onTap: state.isOnlyProfile
-                            ? null
-                            : () => _showDeleteDialog(context, cubit),
-                      ),
-                      const SizedBox(height: 16),
-                    ],
-                  );
+      padding: EdgeInsets.symmetric(
+          horizontal: AppScale.screenHPad(context),
+          vertical: AppScale.space(context, 12)),
+      children: [
+        const SettingsSectionHeader('Dati profilo'),
+        SettingsNavRow(
+          icon: Icons.badge_rounded,
+          label: 'Nome',
+          subtitle: profile.profileName,
+          focusNode: _nameFn,
+          autofocus: true,
+          onFocusUp: () => _backFn.requestFocus(),
+          onFocusDown: () => _avatarFn.requestFocus(),
+          onTap: () async {
+            final newName = await showSettingsTextInputDialog(
+              context,
+              title: 'Rinomina profilo',
+              initialValue: profile.profileName,
+            );
+            if (newName != null) await cubit.rename(newName);
+          },
+        ),
+        SettingsNavRow(
+          icon: Icons.image_rounded,
+          label: 'Avatar',
+          subtitle: isDefaultAvatarUrl(profile.avatarUrl)
+              ? 'Predefinito'
+              : (profile.avatarUrl.isNotEmpty ? 'Personalizzato' : 'Nessuno'),
+          focusNode: _avatarFn,
+          onFocusUp: () => _nameFn.requestFocus(),
+          onFocusDown: () => _defaultFn.requestFocus(),
+          onTap: () =>
+              _showAvatarPickerDialog(context, cubit, profile.avatarUrl),
+        ),
+        const SettingsSectionHeader('Avvio'),
+        SettingsToggleRow(
+          label: 'Profilo predefinito',
+          value: state.isDefault,
+          focusNode: _defaultFn,
+          onFocusUp: () => _avatarFn.requestFocus(),
+          onFocusDown: () => _logoutFn.requestFocus(),
+          onChanged: (v) {
+            if (!v) {
+              cubit.setDefault(false);
+              return;
+            }
+            if (state.otherDefaultName != null) {
+              _showDefaultBlockedDialog(context, state.otherDefaultName!);
+            } else {
+              _showSetDefaultDialog(context, cubit);
+            }
+          },
+        ),
+        const SettingsSectionHeader('Sessione'),
+        SettingsNavRow(
+          icon: Icons.switch_account_rounded,
+          label: 'Cambia profilo',
+          subtitle: 'Torna alla schermata dei profili',
+          focusNode: _logoutFn,
+          onFocusUp: () => _defaultFn.requestFocus(),
+          onFocusDown: () => _deleteFn.requestFocus(),
+          onTap: () => _showLogoutDialog(context),
+        ),
+        const SettingsSectionHeader('Zona pericolosa'),
+        SettingsNavRow(
+          icon: Icons.delete_forever_rounded,
+          label: 'Elimina profilo',
+          subtitle: state.isOnlyProfile
+              ? 'Non puoi eliminare l\'unico profilo del dispositivo'
+              : null,
+          enabled: !state.isOnlyProfile,
+          focusNode: _deleteFn,
+          onFocusUp: () => _logoutFn.requestFocus(),
+          onTap: state.isOnlyProfile
+              ? null
+              : () => _showDeleteDialog(context, cubit),
+        ),
+        const SizedBox(height: 16),
+      ],
+    );
   }
 }
 
@@ -205,8 +209,8 @@ class _ProfileSettingsBodyState extends State<_ProfileSettingsBody> {
 // instead of a pasted image URL — there's no comfortable way to type a URL
 // on a remote, and a self-hosted app shouldn't need external image hosting
 // just to set a profile picture.
-Future<void> _showAvatarPickerDialog(
-    BuildContext context, ProfileManagementCubit cubit, String currentAvatarUrl) async {
+Future<void> _showAvatarPickerDialog(BuildContext context,
+    ProfileManagementCubit cubit, String currentAvatarUrl) async {
   final initialIndex = isDefaultAvatarUrl(currentAvatarUrl)
       ? defaultAvatarIndex(currentAvatarUrl)
       : 0;
@@ -308,7 +312,8 @@ class _AvatarPickerGridState extends State<_AvatarPickerGrid> {
   /// calls this on Up so leaving it lands back where the user actually was
   /// instead of always resetting to the first tile.
   void focusCurrent() {
-    if (_focused >= 0 && _focused < _nodes.length) _nodes[_focused].requestFocus();
+    if (_focused >= 0 && _focused < _nodes.length)
+      _nodes[_focused].requestFocus();
   }
 
   void _moveFocus(int delta) {
@@ -506,7 +511,10 @@ Future<void> _showDeleteDialog(
                 ),
                 if (error != null) ...[
                   const SizedBox(height: 8),
-                  Text(error!, style: TextStyle(color: Colors.red, fontSize: AppScale.caption(dialogCtx))),
+                  Text(error!,
+                      style: TextStyle(
+                          color: Colors.red,
+                          fontSize: AppScale.caption(dialogCtx))),
                 ],
               ],
             ),
@@ -523,7 +531,8 @@ Future<void> _showDeleteDialog(
                 onPressed: () async {
                   final ok = await cubit.delete();
                   if (!ok) {
-                    setDialogState(() => error = 'Errore durante l\'eliminazione');
+                    setDialogState(
+                        () => error = 'Errore durante l\'eliminazione');
                     return;
                   }
                   if (dialogCtx.mounted) Navigator.of(dialogCtx).pop();

@@ -97,7 +97,8 @@ class _ErrorRetryViewState extends State<ErrorRetryView> {
                   ),
                 ),
               ],
-              if (widget.detail != null && widget.detail!.trim().isNotEmpty) ...[
+              if (widget.detail != null &&
+                  widget.detail!.trim().isNotEmpty) ...[
                 SizedBox(height: AppScale.space(context, 12)),
                 Text(
                   widget.detail!.trim(),
@@ -139,9 +140,7 @@ class _ErrorRetryViewState extends State<ErrorRetryView> {
                         focusNode: _secondaryFn,
                         autofocus: widget.autofocus && !hasRetry,
                         onTap: widget.onSecondary!,
-                        onLeft: hasRetry
-                            ? () => _retryFn.requestFocus()
-                            : null,
+                        onLeft: hasRetry ? () => _retryFn.requestFocus() : null,
                       ),
                   ],
                 ),

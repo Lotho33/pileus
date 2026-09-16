@@ -67,15 +67,19 @@ class PlaybackArgs {
       directStreamId: extra?['streamId'] as String?,
       title: extra?['title'] as String?,
       episodeList: (extra?['episodeList'] as List?)?.cast<String>() ?? const [],
-      episodeTitles: (extra?['episodeTitles'] as List?)?.cast<String>() ?? const [],
+      episodeTitles:
+          (extra?['episodeTitles'] as List?)?.cast<String>() ?? const [],
       episodeIndex: extra?['episodeIndex'] as int? ?? -1,
       epPluginId: extra?['pluginId'] as String? ?? pluginId,
       sourceLabel: extra?['sourceLabel'] as String? ?? '',
-      allSeasonIds: (extra?['allSeasonIds'] as List?)?.cast<String>() ?? const [],
-      allSeasonLabels: (extra?['allSeasonLabels'] as List?)?.cast<String>() ?? const [],
+      allSeasonIds:
+          (extra?['allSeasonIds'] as List?)?.cast<String>() ?? const [],
+      allSeasonLabels:
+          (extra?['allSeasonLabels'] as List?)?.cast<String>() ?? const [],
       seasonIndex: extra?['seasonIndex'] as int? ?? 0,
       liveSources: (extra?['liveSources'] as List?)?.cast<String>() ?? const [],
-      liveSourceLabels: (extra?['liveSourceLabels'] as List?)?.cast<String>() ?? const [],
+      liveSourceLabels:
+          (extra?['liveSourceLabels'] as List?)?.cast<String>() ?? const [],
       livePluginId: extra?['livePluginId'] as String? ?? pluginId,
       liveMediaId: extra?['liveMediaId'] as String? ?? mediaId,
       poster: extra?['poster'] as String? ?? '',
@@ -87,6 +91,47 @@ class PlaybackArgs {
       durationSeconds: (extra?['durationSeconds'] as num?)?.toInt() ?? 0,
       genres: (extra?['genres'] as List?)?.cast<String>() ?? const [],
       year: (extra?['year'] as num?)?.toInt() ?? 0,
+    );
+  }
+
+  /// Used by in-player "next episode" navigation (mobile) to rebuild the
+  /// args around a new current episode without losing the series-level
+  /// metadata (poster, parentId, showTitle, …) the launch route carried.
+  PlaybackArgs copyWith({
+    String? title,
+    List<String>? episodeList,
+    List<String>? episodeTitles,
+    int? episodeIndex,
+    String? sourceLabel,
+    int? seasonIndex,
+    int? seekTo,
+  }) {
+    return PlaybackArgs(
+      isAudio: isAudio,
+      isLive: isLive,
+      directStreamId: directStreamId,
+      epPluginId: epPluginId,
+      livePluginId: livePluginId,
+      liveMediaId: liveMediaId,
+      title: title ?? this.title,
+      episodeList: episodeList ?? this.episodeList,
+      episodeTitles: episodeTitles ?? this.episodeTitles,
+      episodeIndex: episodeIndex ?? this.episodeIndex,
+      sourceLabel: sourceLabel ?? this.sourceLabel,
+      allSeasonIds: allSeasonIds,
+      allSeasonLabels: allSeasonLabels,
+      seasonIndex: seasonIndex ?? this.seasonIndex,
+      liveSources: liveSources,
+      liveSourceLabels: liveSourceLabels,
+      poster: poster,
+      parentId: parentId,
+      seekTo: seekTo ?? this.seekTo,
+      showTitle: showTitle,
+      plot: plot,
+      rating: rating,
+      durationSeconds: durationSeconds,
+      genres: genres,
+      year: year,
     );
   }
 }

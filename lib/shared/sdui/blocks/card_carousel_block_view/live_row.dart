@@ -235,4 +235,3 @@ class _LiveRowViewState extends State<_LiveRowView> {
     );
   }
 }
-

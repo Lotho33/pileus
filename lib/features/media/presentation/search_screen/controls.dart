@@ -4,7 +4,6 @@
 // all parts.
 part of '../search_screen.dart';
 
-
 // ─────────────────────────────────────────────────────────────────────────────
 
 // Shown only in the brief moment before the on-open search resolves (or if
@@ -220,4 +219,3 @@ class _ActiveFilterChip extends StatelessWidget {
     );
   }
 }
-

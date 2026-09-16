@@ -33,13 +33,10 @@ final GoRouter mobileRouter = GoRouter(
   routes: [
     GoRoute(path: '/splash', builder: (_, __) => const MobileSplashScreen()),
     GoRoute(
-        path: '/discovery',
-        builder: (_, __) => const MobileDiscoveryScreen()),
+        path: '/discovery', builder: (_, __) => const MobileDiscoveryScreen()),
+    GoRoute(path: '/pairing', builder: (_, __) => const MobilePairingScreen()),
     GoRoute(
-        path: '/pairing', builder: (_, __) => const MobilePairingScreen()),
-    GoRoute(
-        path: '/profiles',
-        builder: (_, __) => const MobileProfilesScreen()),
+        path: '/profiles', builder: (_, __) => const MobileProfilesScreen()),
     GoRoute(path: '/home', builder: (_, __) => const MobileShell()),
     GoRoute(
       path: '/details/:pluginId/:mediaId',
@@ -97,7 +94,8 @@ final GoRouter mobileRouter = GoRouter(
         );
       },
     ),
-    GoRoute(path: '/settings', builder: (_, __) => const MobileSettingsScreen()),
+    GoRoute(
+        path: '/settings', builder: (_, __) => const MobileSettingsScreen()),
     GoRoute(
         path: '/settings/profile',
         builder: (_, __) => const MobileProfileSettingsScreen()),

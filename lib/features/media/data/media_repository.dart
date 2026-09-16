@@ -218,8 +218,35 @@ class MediaRepository {
         filters: filters.entries,
       ));
 
-  Future<DetailsResponse> getDetails(String pluginId, String mediaId) =>
-      _client.getDetails(DetailsRequest(pluginId: pluginId, mediaId: mediaId));
+  // In-memory only (session lifetime, never persisted) — unlike the
+  // SharedPreferences-backed catalog cache above, this one exists purely to
+  // survive a widget being torn down and rebuilt with the exact same
+  // pluginId/mediaId a moment later, which getDetails callers hit a lot:
+  // DesktopHero/MobileHero call it from initState() every time they're
+  // recreated (their own AutomaticKeepAliveClientMixin fix, 2026-09-14,
+  // only covers the scroll-out-of-view case — switching plugin remounts
+  // them from scratch regardless, same widget subtree, new key, and
+  // reported still refetching every single time, 2026-09-16), and
+  // _resolveSeriesMetaIfMissing in the player screen backfills from a
+  // cold resume. A short TTL, not "forever": unlike the poster/logo/plot
+  // fields those callers actually read (which don't change mid-session), a
+  // stale cache could otherwise paper over a real "genuinely still doesn't
+  // exist" 404 for 24h if this reused the catalog cache's TTL.
+  static const _detailsCacheTtl = Duration(minutes: 5);
+  final Map<String, (DetailsResponse, DateTime)> _detailsCache = {};
+
+  Future<DetailsResponse> getDetails(String pluginId, String mediaId) async {
+    final key = '$pluginId|$mediaId';
+    final cached = _detailsCache[key];
+    if (cached != null &&
+        DateTime.now().difference(cached.$2) < _detailsCacheTtl) {
+      return cached.$1;
+    }
+    final resp = await _client
+        .getDetails(DetailsRequest(pluginId: pluginId, mediaId: mediaId));
+    _detailsCache[key] = (resp, DateTime.now());
+    return resp;
+  }
 
   Future<BrowseResponse> browse(
           String pluginId, String parentId, String childId) =>

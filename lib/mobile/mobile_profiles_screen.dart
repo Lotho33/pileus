@@ -10,6 +10,8 @@ import '../features/auth/bloc/auth_event.dart';
 import '../features/auth/bloc/auth_state.dart';
 import '../shared/widgets/default_avatars.dart';
 import '../shared/widgets/text_prompt_dialog.dart';
+import 'package:cached_network_image_platform_interface/cached_network_image_platform_interface.dart'
+    show ImageRenderMethodForWeb;
 
 /// Mobile profile picker: tap an avatar to enter, "+" to create one (system
 /// keyboard dialog).
@@ -72,8 +74,8 @@ class _MobileProfilesScreenState extends State<MobileProfilesScreen> {
               for (final p in _profiles)
                 _ProfileTile(
                   profile: p,
-                  onTap: () => getIt<AuthBloc>()
-                      .add(SelectProfileEvent(p.profileId)),
+                  onTap: () =>
+                      getIt<AuthBloc>().add(SelectProfileEvent(p.profileId)),
                 ),
               _AddTile(onTap: _create),
             ],
@@ -109,6 +111,11 @@ class _ProfileTile extends StatelessWidget {
                       )
                     : profile.avatarUrl.isNotEmpty
                         ? CachedNetworkImage(
+                            // Web-only, no-op on every other platform — see image_sizing.dart's
+                            // "ImageRenderMethodForWeb.HttpGet" section for why every
+                            // CachedNetworkImage call site in the app sets this.
+                            imageRenderMethodForWeb:
+                                ImageRenderMethodForWeb.HttpGet,
                             imageUrl: profile.avatarUrl,
                             memCacheWidth: 256,
                             fit: BoxFit.cover,

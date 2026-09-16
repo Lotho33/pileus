@@ -44,11 +44,13 @@ class SubtitleStyleSection extends StatelessWidget {
     // are intentional, so it doesn't pull from AppScale.caption's
     // slightly-larger shared tier. "Sfondo sottotitoli" is a real row
     // label alongside a Switch, so it does use the shared tier.
-    final captionFs = (AppScale.sh(context) * (13.0 / 1080.0)).clamp(10.0, 20.0);
+    final captionFs =
+        (AppScale.sh(context) * (13.0 / 1080.0)).clamp(10.0, 20.0);
     final labelFs = AppScale.caption(context);
     return Padding(
       padding: EdgeInsets.symmetric(
-          horizontal: AppScale.space(context, 20), vertical: AppScale.space(context, 4)),
+          horizontal: AppScale.space(context, 20),
+          vertical: AppScale.space(context, 4)),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -63,7 +65,8 @@ class SubtitleStyleSection extends StatelessWidget {
             onChanged: onFontSizeChanged,
           ),
           SizedBox(height: AppScale.space(context, 12)),
-          Text('Colore testo', style: TextStyle(color: Colors.white54, fontSize: captionFs)),
+          Text('Colore testo',
+              style: TextStyle(color: Colors.white54, fontSize: captionFs)),
           SizedBox(height: AppScale.space(context, 8)),
           _ColorSwatchRow(
             colors: _colors,
@@ -75,15 +78,20 @@ class SubtitleStyleSection extends StatelessWidget {
           SizedBox(height: AppScale.space(context, 12)),
           Row(
             children: [
-              Text('Sfondo sottotitoli', style: TextStyle(color: Colors.white70, fontSize: labelFs)),
+              Text('Sfondo sottotitoli',
+                  style: TextStyle(color: Colors.white70, fontSize: labelFs)),
               const Spacer(),
               Switch(
                 value: bgEnabled,
                 onChanged: onBgToggled,
                 thumbColor: WidgetStateProperty.resolveWith((states) =>
-                    states.contains(WidgetState.selected) ? Colors.white : Colors.white38),
+                    states.contains(WidgetState.selected)
+                        ? Colors.white
+                        : Colors.white38),
                 trackColor: WidgetStateProperty.resolveWith((states) =>
-                    states.contains(WidgetState.selected) ? null : Colors.white12),
+                    states.contains(WidgetState.selected)
+                        ? null
+                        : Colors.white12),
               ),
             ],
           ),
@@ -130,20 +138,25 @@ class _ColorSwatchRow extends StatefulWidget {
 }
 
 class _ColorSwatchRowState extends State<_ColorSwatchRow> {
-  late List<FocusNode> _fns = List.generate(widget.colors.length, (_) => FocusNode());
+  late List<FocusNode> _fns =
+      List.generate(widget.colors.length, (_) => FocusNode());
 
   @override
   void didUpdateWidget(_ColorSwatchRow old) {
     super.didUpdateWidget(old);
     if (old.colors.length != widget.colors.length) {
-      for (final n in _fns) { n.dispose(); }
+      for (final n in _fns) {
+        n.dispose();
+      }
       _fns = List.generate(widget.colors.length, (_) => FocusNode());
     }
   }
 
   @override
   void dispose() {
-    for (final n in _fns) { n.dispose(); }
+    for (final n in _fns) {
+      n.dispose();
+    }
     super.dispose();
   }
 
@@ -218,7 +231,11 @@ class _ColorSwatch extends StatelessWidget {
               width: focused ? 3.5 : 2.5,
             ),
             boxShadow: selected || focused
-                ? [BoxShadow(color: swatchColor.withValues(alpha: 0.6), blurRadius: 6)]
+                ? [
+                    BoxShadow(
+                        color: swatchColor.withValues(alpha: 0.6),
+                        blurRadius: 6)
+                  ]
                 : null,
           ),
         ),

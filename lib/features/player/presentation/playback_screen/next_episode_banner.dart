@@ -141,4 +141,3 @@ class _NextEpisodeBannerState extends State<_NextEpisodeBanner> {
     );
   }
 }
-

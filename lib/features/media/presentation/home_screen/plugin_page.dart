@@ -610,4 +610,3 @@ class _PluginDegradedBanner extends StatelessWidget {
     );
   }
 }
-

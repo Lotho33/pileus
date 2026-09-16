@@ -20,7 +20,8 @@ class LoadCatalogEvent extends DiscoveryEvent {
     this.forceRefresh = false,
   });
   @override
-  List<Object?> get props => [pluginId, catalogId, page, cacheTtlSeconds, forceRefresh];
+  List<Object?> get props =>
+      [pluginId, catalogId, page, cacheTtlSeconds, forceRefresh];
 }
 
 class SearchRequestEvent extends DiscoveryEvent {
@@ -51,7 +52,8 @@ class LoadBrowseEvent extends DiscoveryEvent {
   final String pluginId;
   final String parentId;
   final int page;
-  const LoadBrowseEvent({required this.pluginId, required this.parentId, this.page = 1});
+  const LoadBrowseEvent(
+      {required this.pluginId, required this.parentId, this.page = 1});
   @override
   List<Object?> get props => [pluginId, parentId, page];
 }

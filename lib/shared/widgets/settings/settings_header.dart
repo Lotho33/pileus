@@ -31,11 +31,17 @@ class SettingsHeader extends StatelessWidget {
   Widget build(BuildContext context) {
     return Padding(
       padding: EdgeInsets.fromLTRB(
-        AppScale.space(context, 24), AppScale.space(context, 20),
-        AppScale.space(context, 24), AppScale.space(context, 12)),
+          AppScale.space(context, 24),
+          AppScale.space(context, 20),
+          AppScale.space(context, 24),
+          AppScale.space(context, 12)),
       child: Row(
         children: [
-          _SettingsBackButton(focusNode: focusNode, onTap: onBack, onFocusDown: onFocusDown, autofocus: autofocus),
+          _SettingsBackButton(
+              focusNode: focusNode,
+              onTap: onBack,
+              onFocusDown: onFocusDown,
+              autofocus: autofocus),
           SizedBox(width: AppScale.space(context, 14)),
           Expanded(
             child: Text(
@@ -86,13 +92,16 @@ class _SettingsBackButton extends StatelessWidget {
           curve: AppScale.focusCurve,
           padding: EdgeInsets.all(AppScale.space(context, 10)),
           decoration: BoxDecoration(
-            color: focused ? AppTheme.primary.withValues(alpha: 0.22) : Colors.white.withValues(alpha: 0.05),
+            color: focused
+                ? AppTheme.primary.withValues(alpha: 0.22)
+                : Colors.white.withValues(alpha: 0.05),
             borderRadius: BorderRadius.circular(10),
             border: Border.all(
               color: focused ? AppTheme.primary : Colors.transparent,
               width: 2,
             ),
-            boxShadow: focused ? AppScale.focusGlow(AppTheme.primary, blur: 14) : null,
+            boxShadow:
+                focused ? AppScale.focusGlow(AppTheme.primary, blur: 14) : null,
           ),
           child: Icon(
             Icons.arrow_back_rounded,

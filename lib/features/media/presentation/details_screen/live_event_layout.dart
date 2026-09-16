@@ -113,6 +113,10 @@ class _LiveEventLayoutState extends State<_LiveEventLayout> {
           if (bgUrl.isNotEmpty)
             Positioned.fill(
               child: CachedNetworkImage(
+                // Web-only, no-op on every other platform — see image_sizing.dart's
+                // "ImageRenderMethodForWeb.HttpGet" section for why every
+                // CachedNetworkImage call site in the app sets this.
+                imageRenderMethodForWeb: ImageRenderMethodForWeb.HttpGet,
                 imageUrl: backdropSrc(bgUrl, backdropCacheWidth(context)),
                 fit: BoxFit.cover,
                 memCacheWidth: backdropCacheWidth(context),

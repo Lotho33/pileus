@@ -140,7 +140,8 @@ class SettingsRepository {
     if (pid.isEmpty) return ProfilePrefs.empty;
     if (pid != _cachedBlobPid) {
       _cachedBlobPid = pid;
-      _cachedBlob = ProfilePrefs.fromJson(_prefs.getString(_blobKey(pid)) ?? '');
+      _cachedBlob =
+          ProfilePrefs.fromJson(_prefs.getString(_blobKey(pid)) ?? '');
     }
     return _cachedBlob;
   }
@@ -187,7 +188,8 @@ class SettingsRepository {
         subtitleFontSize: _prefs.getDouble('$_kSubtitleFontSize@$pid'),
         subtitleColorArgb: _prefs.getInt('$_kSubtitleColorArgb@$pid'),
         subtitleBgEnabled: _prefs.getBool('$_kSubtitleBgEnabled@$pid'),
-        subtitleBottomPadding: _prefs.getDouble('$_kSubtitleBottomPadding@$pid'),
+        subtitleBottomPadding:
+            _prefs.getDouble('$_kSubtitleBottomPadding@$pid'),
       );
 
   Timer? _pushDebounce;

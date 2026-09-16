@@ -226,8 +226,7 @@ class _RailItemState extends State<_RailItem> {
                     style: TextStyle(
                       color: tint,
                       fontSize: widget.labelSize,
-                      fontWeight:
-                          active ? FontWeight.w700 : FontWeight.w500,
+                      fontWeight: active ? FontWeight.w700 : FontWeight.w500,
                     ),
                   ),
                 ),
@@ -256,9 +255,8 @@ class _RailItemState extends State<_RailItem> {
       onExit: (_) => setState(() => _hover = false),
       child: GestureDetector(
         onTap: widget.onTap,
-        child: widget.extended
-            ? box
-            : Tooltip(message: widget.label, child: box),
+        child:
+            widget.extended ? box : Tooltip(message: widget.label, child: box),
       ),
     );
   }

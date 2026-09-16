@@ -16,6 +16,8 @@ import '../../../shared/widgets/on_screen_keyboard.dart';
 import '../../../shared/widgets/pileus_spinner.dart';
 import '../../../shared/widgets/settings/dialog_action_button.dart';
 import '../../../shared/widgets/tv_focusable.dart';
+import 'package:cached_network_image_platform_interface/cached_network_image_platform_interface.dart'
+    show ImageRenderMethodForWeb;
 
 class ProfileSelectionScreen extends StatefulWidget {
   const ProfileSelectionScreen({super.key});
@@ -329,6 +331,11 @@ class _ProfileCard extends StatelessWidget {
                             size: cardSize)
                         : profile.avatarUrl.isNotEmpty
                             ? CachedNetworkImage(
+                                // Web-only, no-op on every other platform — see image_sizing.dart's
+                                // "ImageRenderMethodForWeb.HttpGet" section for why every
+                                // CachedNetworkImage call site in the app sets this.
+                                imageRenderMethodForWeb:
+                                    ImageRenderMethodForWeb.HttpGet,
                                 imageUrl: profile.avatarUrl,
                                 width: cardSize,
                                 height: cardSize,

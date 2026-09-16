@@ -20,6 +20,7 @@ class ProfileMgmtLoaded extends ProfileMgmtState {
   final LocalProfile profile;
   final bool isOnlyProfile;
   final bool isDefault;
+
   /// Name of whichever OTHER profile currently holds the "default" slot, or
   /// null if it's free (or held by this profile). The settings screen uses
   /// it to block setting this profile as default and tell the user which
@@ -30,9 +31,15 @@ class ProfileMgmtLoaded extends ProfileMgmtState {
       required this.isDefault,
       this.otherDefaultName});
   @override
-  List<Object?> get props => [profile.profileId, profile.profileName, profile.avatarUrl,
-      profile.isChildProfile, isOnlyProfile, isDefault,
-      otherDefaultName];
+  List<Object?> get props => [
+        profile.profileId,
+        profile.profileName,
+        profile.avatarUrl,
+        profile.isChildProfile,
+        isOnlyProfile,
+        isDefault,
+        otherDefaultName
+      ];
 }
 
 class ProfileMgmtError extends ProfileMgmtState {

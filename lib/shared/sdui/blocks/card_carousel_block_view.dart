@@ -22,13 +22,14 @@ import '../../widgets/pileus_spinner.dart';
 import '../../widgets/tv_focusable.dart';
 import '../sdui_block.dart';
 import '../sport_theme.dart';
+import 'package:cached_network_image_platform_interface/cached_network_image_platform_interface.dart'
+    show ImageRenderMethodForWeb;
 
 part 'card_carousel_block_view/fixed_carousel.dart';
 part 'card_carousel_block_view/load_more_card.dart';
 part 'card_carousel_block_view/live_row.dart';
 part 'card_carousel_block_view/poster_card.dart';
 part 'card_carousel_block_view/live_card.dart';
-
 
 // Baseline 1920×1080 ratios — see home_screen.dart's own copy of these for
 // the non-carousel parts of the screen; duplicated here (not shared) since

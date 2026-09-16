@@ -334,4 +334,3 @@ class _CatalogSection extends StatelessWidget {
     );
   }
 }
-

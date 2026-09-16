@@ -30,7 +30,6 @@ part 'search_screen/results.dart';
 part 'search_screen/controls.dart';
 part 'search_screen/filter_panel.dart';
 
-
 // Ratios — 1920×1080 baseline
 // Kept as an alias so the many existing call sites don't churn — it's the
 // app accent (AppTheme.primary).

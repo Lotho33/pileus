@@ -48,52 +48,54 @@ class _MobileShellState extends State<MobileShell> {
       canPop: false,
       onPopInvokedWithResult: _onBack,
       child: Scaffold(
-      backgroundColor: AppTheme.bg,
-      body: IndexedStack(
-        index: _tab,
-        children: const [
-          MobileHomeScreen(),
-          MobileSearchScreen(),
-          MobileSettingsScreen(),
-        ],
-      ),
-      bottomNavigationBar: NavigationBarTheme(
-        data: NavigationBarThemeData(
-          backgroundColor: AppTheme.surface,
-          indicatorColor: AppTheme.primary.withValues(alpha: .20),
-          labelTextStyle: WidgetStateProperty.resolveWith((s) => TextStyle(
-                fontSize: 11.5,
-                fontWeight: FontWeight.w600,
-                color: s.contains(WidgetState.selected)
-                    ? AppTheme.textHigh
-                    : AppTheme.textLow,
-              )),
-        ),
-        child: NavigationBar(
-          height: 62,
-          selectedIndex: _tab,
-          onDestinationSelected: (i) => setState(() => _tab = i),
-          destinations: const [
-            NavigationDestination(
-              icon: Icon(Icons.home_outlined, color: AppTheme.textMid),
-              selectedIcon: Icon(Icons.home_rounded, color: AppTheme.textHigh),
-              label: 'Home',
-            ),
-            NavigationDestination(
-              icon: Icon(Icons.search_rounded, color: AppTheme.textMid),
-              selectedIcon: Icon(Icons.search_rounded, color: AppTheme.textHigh),
-              label: 'Cerca',
-            ),
-            NavigationDestination(
-              icon: Icon(Icons.settings_outlined, color: AppTheme.textMid),
-              selectedIcon:
-                  Icon(Icons.settings_rounded, color: AppTheme.textHigh),
-              label: 'Impostazioni',
-            ),
+        backgroundColor: AppTheme.bg,
+        body: IndexedStack(
+          index: _tab,
+          children: const [
+            MobileHomeScreen(),
+            MobileSearchScreen(),
+            MobileSettingsScreen(),
           ],
         ),
+        bottomNavigationBar: NavigationBarTheme(
+          data: NavigationBarThemeData(
+            backgroundColor: AppTheme.surface,
+            indicatorColor: AppTheme.primary.withValues(alpha: .20),
+            labelTextStyle: WidgetStateProperty.resolveWith((s) => TextStyle(
+                  fontSize: 11.5,
+                  fontWeight: FontWeight.w600,
+                  color: s.contains(WidgetState.selected)
+                      ? AppTheme.textHigh
+                      : AppTheme.textLow,
+                )),
+          ),
+          child: NavigationBar(
+            height: 62,
+            selectedIndex: _tab,
+            onDestinationSelected: (i) => setState(() => _tab = i),
+            destinations: const [
+              NavigationDestination(
+                icon: Icon(Icons.home_outlined, color: AppTheme.textMid),
+                selectedIcon:
+                    Icon(Icons.home_rounded, color: AppTheme.textHigh),
+                label: 'Home',
+              ),
+              NavigationDestination(
+                icon: Icon(Icons.search_rounded, color: AppTheme.textMid),
+                selectedIcon:
+                    Icon(Icons.search_rounded, color: AppTheme.textHigh),
+                label: 'Cerca',
+              ),
+              NavigationDestination(
+                icon: Icon(Icons.settings_outlined, color: AppTheme.textMid),
+                selectedIcon:
+                    Icon(Icons.settings_rounded, color: AppTheme.textHigh),
+                label: 'Impostazioni',
+              ),
+            ],
+          ),
+        ),
       ),
-    ),
     );
   }
 }

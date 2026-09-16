@@ -40,6 +40,10 @@ class _AnimeMovieLayout extends StatelessWidget {
         if (bgUrl.isNotEmpty)
           Positioned.fill(
             child: CachedNetworkImage(
+              // Web-only, no-op on every other platform — see image_sizing.dart's
+              // "ImageRenderMethodForWeb.HttpGet" section for why every
+              // CachedNetworkImage call site in the app sets this.
+              imageRenderMethodForWeb: ImageRenderMethodForWeb.HttpGet,
               imageUrl: backdropSrc(bgUrl, backdropCacheWidth(context)),
               fit: BoxFit.cover,
               memCacheWidth: backdropCacheWidth(context),
@@ -232,6 +236,11 @@ class _AnimeMovieLayout extends StatelessWidget {
                                     aspectRatio: 2 / 3,
                                     child: item.posterUrl.isNotEmpty
                                         ? CachedNetworkImage(
+                                            // Web-only, no-op on every other platform — see image_sizing.dart's
+                                            // "ImageRenderMethodForWeb.HttpGet" section for why every
+                                            // CachedNetworkImage call site in the app sets this.
+                                            imageRenderMethodForWeb:
+                                                ImageRenderMethodForWeb.HttpGet,
                                             imageUrl: posterSrc(
                                                 item.posterUrl,
                                                 cacheWidthFor(
@@ -282,4 +291,3 @@ class _AnimeMovieLayout extends StatelessWidget {
     );
   }
 }
-

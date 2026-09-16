@@ -80,12 +80,12 @@ class _Body extends StatelessWidget {
                 onTap: () => _rename(context, cubit, p.profileName),
               ),
               ListTile(
-                leading: const Icon(Icons.face_outlined,
-                    color: AppTheme.textMid),
+                leading:
+                    const Icon(Icons.face_outlined, color: AppTheme.textMid),
                 title: const Text('Avatar',
                     style: TextStyle(color: AppTheme.textHigh)),
-                trailing: const Icon(Icons.chevron_right,
-                    color: AppTheme.textLow),
+                trailing:
+                    const Icon(Icons.chevron_right, color: AppTheme.textLow),
                 onTap: () => _pickAvatar(context, cubit),
               ),
               const Divider(color: AppTheme.border),
@@ -110,14 +110,13 @@ class _Body extends StatelessWidget {
                     color: AppTheme.textMid),
                 title: const Text('Cambia profilo',
                     style: TextStyle(color: AppTheme.textHigh)),
-                onTap: () =>
-                    getIt<AuthBloc>().add(const SwitchProfileEvent()),
+                onTap: () => getIt<AuthBloc>().add(const SwitchProfileEvent()),
               ),
               const Divider(color: AppTheme.border),
               ListTile(
                 enabled: !state.isOnlyProfile,
-                leading: const Icon(Icons.delete_outline,
-                    color: Color(0xFFFF6B6B)),
+                leading:
+                    const Icon(Icons.delete_outline, color: Color(0xFFFF6B6B)),
                 title: const Text('Elimina profilo',
                     style: TextStyle(color: Color(0xFFFF6B6B))),
                 subtitle: state.isOnlyProfile
@@ -187,7 +186,8 @@ class _Body extends StatelessWidget {
               onPressed: () => Navigator.of(ctx).pop(false),
               child: const Text('Annulla')),
           FilledButton(
-            style: FilledButton.styleFrom(backgroundColor: const Color(0xFFFF6B6B)),
+            style: FilledButton.styleFrom(
+                backgroundColor: const Color(0xFFFF6B6B)),
             onPressed: () => Navigator.of(ctx).pop(true),
             child: const Text('Elimina'),
           ),

@@ -42,8 +42,8 @@ class MobileSettingsScreen extends StatelessWidget {
     );
   }
 
-  Widget _row(BuildContext context, IconData icon, String label,
-      VoidCallback onTap,
+  Widget _row(
+      BuildContext context, IconData icon, String label, VoidCallback onTap,
       {bool danger = false}) {
     final c = danger ? const Color(0xFFFF6B6B) : AppTheme.textHigh;
     return ListTile(

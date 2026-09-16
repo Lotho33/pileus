@@ -5,17 +5,28 @@ import '../../core/theme/app_theme.dart';
 import '../../features/media/presentation/widgets/plugin_nav.dart'
     show pluginLabel, PluginIcon;
 
-/// Compact "current plugin" control for the mobile top bars (Home, Cerca):
-/// the active plugin's icon + name, tap opens a bottom sheet to switch.
+/// Compact "current plugin" control for the mobile top bar: the active
+/// plugin's icon + name, tap opens a bottom sheet to switch. Sits inline in
+/// _HomeTopBar's own Row, between the wordmark and the profile button
+/// (2026-09-16) — centered there via the caller's `Expanded(child: Center(…))`,
+/// this widget itself carries no outer positioning so it drops cleanly into
+/// that Row instead of claiming a second row of its own like the original
+/// version below it did.
 ///
-/// Replaces the horizontal `ChoiceChip` row both screens used to render
-/// independently — reported uncomfortable to hit precisely once there are
-/// more than a handful of plugins, and required scrolling to find one that
-/// wasn't currently in view (2026-09-14). Same `showModalBottomSheet`
-/// pattern the profile menu already uses (`_profileSheet` in
-/// mobile_home_screen.dart), not a side drawer — this is an occasional
-/// action, not primary navigation, and the app has no drawer pattern
-/// elsewhere on mobile to match.
+/// Replaces the horizontal `ChoiceChip` row both Home and Cerca used to
+/// render independently — reported uncomfortable to hit precisely once
+/// there are more than a handful of plugins, and required scrolling to find
+/// one that wasn't currently in view (2026-09-14). Same
+/// `showModalBottomSheet` pattern the profile menu already uses
+/// (`_profileSheet` in mobile_home_screen.dart), not a side drawer — this
+/// is an occasional action, not primary navigation, and the app has no
+/// drawer pattern elsewhere on mobile to match.
+///
+/// Home-only now: switching plugin is meant to be one shared, atomic choice
+/// (`ActivePluginController`) rather than something every screen that reads
+/// it can also change — Cerca dropped its own copy of this picker
+/// (2026-09-16) and just reads the active plugin (its search-field hint
+/// still names it) without offering to change it.
 class PluginSwitcherPill extends StatelessWidget {
   final List<PluginInfo> plugins;
   final PluginInfo? active;
@@ -33,47 +44,37 @@ class PluginSwitcherPill extends StatelessWidget {
     // Nothing to switch between — same gate the old chip row used.
     if (plugins.length <= 1 || active == null) return const SizedBox.shrink();
     final a = active!;
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
-      child: Align(
-        // Centered, not left — reported more prominent/comfortable to hit
-        // this way (2026-09-14), and it's the only thing on this row now
-        // that the old chip strip is gone, so there's no longer a reason to
-        // hug the left edge like the wordmark/profile row above it does.
-        alignment: Alignment.center,
-        child: Material(
-          color: AppTheme.surface,
-          borderRadius: BorderRadius.circular(24),
-          child: InkWell(
-            borderRadius: BorderRadius.circular(24),
-            onTap: () => _openPicker(context),
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(14, 12, 16, 12),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  PluginIcon(
-                      pluginId: a.pluginId, size: 22, color: AppTheme.textHigh),
-                  const SizedBox(width: 10),
-                  ConstrainedBox(
-                    constraints: const BoxConstraints(maxWidth: 200),
-                    child: Text(
-                      pluginLabel(a),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
-                        fontSize: 15,
-                        fontWeight: FontWeight.w600,
-                        color: AppTheme.textHigh,
-                      ),
-                    ),
+    return Material(
+      color: AppTheme.surface,
+      borderRadius: BorderRadius.circular(20),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(20),
+        onTap: () => _openPicker(context),
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(12, 8, 12, 8),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              PluginIcon(
+                  pluginId: a.pluginId, size: 18, color: AppTheme.textHigh),
+              const SizedBox(width: 8),
+              ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 140),
+                child: Text(
+                  pluginLabel(a),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w600,
+                    color: AppTheme.textHigh,
                   ),
-                  const SizedBox(width: 4),
-                  const Icon(Icons.expand_more_rounded,
-                      size: 20, color: AppTheme.textMid),
-                ],
+                ),
               ),
-            ),
+              const SizedBox(width: 2),
+              const Icon(Icons.expand_more_rounded,
+                  size: 18, color: AppTheme.textMid),
+            ],
           ),
         ),
       ),

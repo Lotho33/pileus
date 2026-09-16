@@ -89,8 +89,7 @@ class _DesktopPairingScreenState extends State<DesktopPairingScreen> {
           ),
           const SizedBox(height: 6),
           TextButton(
-            onPressed: () =>
-                getIt<AuthBloc>().add(const ChangeServerEvent()),
+            onPressed: () => getIt<AuthBloc>().add(const ChangeServerEvent()),
             child: const Text('Cambia server'),
           ),
         ],

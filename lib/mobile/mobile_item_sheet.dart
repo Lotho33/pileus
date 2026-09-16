@@ -8,6 +8,8 @@ import '../core/utils/image_sizing.dart';
 import '../features/media/data/media_repository.dart';
 import '../shared/widgets/open_catalog_item.dart';
 import '../features/player/resolve_and_play.dart';
+import 'package:cached_network_image_platform_interface/cached_network_image_platform_interface.dart'
+    show ImageRenderMethodForWeb;
 
 /// Long-press context sheet for a catalog item (home cards, search results):
 /// poster + quick metadata + Info / Riproduci. The mobile equivalent of the
@@ -144,6 +146,11 @@ class _ItemSheetState extends State<_ItemSheet> {
                     height: 108,
                     child: it.posterUrl.isNotEmpty
                         ? CachedNetworkImage(
+                            // Web-only, no-op on every other platform — see image_sizing.dart's
+                            // "ImageRenderMethodForWeb.HttpGet" section for why every
+                            // CachedNetworkImage call site in the app sets this.
+                            imageRenderMethodForWeb:
+                                ImageRenderMethodForWeb.HttpGet,
                             imageUrl: posterSrc(
                                 it.posterUrl, cacheWidthFor(context, 72)),
                             memCacheWidth: cacheWidthFor(context, 72),

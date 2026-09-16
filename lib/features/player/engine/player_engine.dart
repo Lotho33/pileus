@@ -247,10 +247,8 @@ class _ExoPlayerEngine extends PlayerEngine {
     int scaled(int baseMs, {required int minMs, required int maxMs}) =>
         (baseMs * scale).round().clamp(minMs, maxMs);
     _bufferingConfig = BetterPlayerBufferingConfiguration(
-      minBufferMs:
-          scaled(isLive ? 16000 : 20000, minMs: 4000, maxMs: 90000),
-      maxBufferMs:
-          scaled(isLive ? 24000 : 35000, minMs: 8000, maxMs: 150000),
+      minBufferMs: scaled(isLive ? 16000 : 20000, minMs: 4000, maxMs: 90000),
+      maxBufferMs: scaled(isLive ? 24000 : 35000, minMs: 8000, maxMs: 150000),
       bufferForPlaybackMs: 2500,
       bufferForPlaybackAfterRebufferMs: scaled(6000, minMs: 3000, maxMs: 20000),
     );
@@ -326,7 +324,8 @@ class _ExoPlayerEngine extends PlayerEngine {
         _buffering = false;
         _emit();
       case BetterPlayerEventType.exception:
-        final msg = e.parameters?['exception']?.toString() ?? 'Errore sconosciuto';
+        final msg =
+            e.parameters?['exception']?.toString() ?? 'Errore sconosciuto';
         perf('exo: exception: $msg');
         if (msg != _lastError) {
           _lastError = msg;
@@ -351,8 +350,8 @@ class _ExoPlayerEngine extends PlayerEngine {
     }
   }
 
-  static final _progressiveExt = RegExp(r'\.(mp4|mkv|webm|mov|avi|m4v)(\?|$)',
-      caseSensitive: false);
+  static final _progressiveExt =
+      RegExp(r'\.(mp4|mkv|webm|mov|avi|m4v)(\?|$)', caseSensitive: false);
 
   @override
   Future<void> open(String url, {required Map<String, String> headers}) async {
@@ -363,9 +362,8 @@ class _ExoPlayerEngine extends PlayerEngine {
     // clearly points at a progressive container. Without a correct hint
     // ExoPlayer picks the wrong extractor and fails with a bare
     // "Source error".
-    final format = _progressiveExt.hasMatch(url)
-        ? null
-        : BetterPlayerVideoFormat.hls;
+    final format =
+        _progressiveExt.hasMatch(url) ? null : BetterPlayerVideoFormat.hls;
     try {
       await _c.setupDataSource(
         BetterPlayerDataSource(
@@ -432,7 +430,8 @@ class _ExoPlayerEngine extends PlayerEngine {
 
   @override
   double get volume =>
-      ((_controller?.videoPlayerController?.value.volume ?? 1.0) * 100).clamp(0, 100);
+      ((_controller?.videoPlayerController?.value.volume ?? 1.0) * 100)
+          .clamp(0, 100);
 
   @override
   Duration get position =>
@@ -484,7 +483,8 @@ class _ExoPlayerEngine extends PlayerEngine {
   static String _audioLabel(BetterPlayerAsmsAudioTrack t, int i) {
     final parts = <String>[];
     if ((t.language ?? '').isNotEmpty) parts.add(t.language!.toUpperCase());
-    if ((t.label ?? '').isNotEmpty && t.label != t.language) parts.add(t.label!);
+    if ((t.label ?? '').isNotEmpty && t.label != t.language)
+      parts.add(t.label!);
     return parts.isEmpty ? 'Traccia ${i + 1}' : parts.join(' · ');
   }
 
@@ -604,8 +604,9 @@ class _ExoPlayerEngine extends PlayerEngine {
   }
 
   @override
-  Widget buildView() =>
-      _controller == null ? const SizedBox.shrink() : BetterPlayer(controller: _c);
+  Widget buildView() => _controller == null
+      ? const SizedBox.shrink()
+      : BetterPlayer(controller: _c);
 
   static const _noneTrack = MediaTrack(id: '', label: '');
 }

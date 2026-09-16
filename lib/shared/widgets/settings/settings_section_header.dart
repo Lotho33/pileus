@@ -11,8 +11,10 @@ class SettingsSectionHeader extends StatelessWidget {
   Widget build(BuildContext context) {
     return Padding(
       padding: EdgeInsets.fromLTRB(
-        AppScale.space(context, 24), AppScale.space(context, 24),
-        AppScale.space(context, 24), AppScale.space(context, 8)),
+          AppScale.space(context, 24),
+          AppScale.space(context, 24),
+          AppScale.space(context, 24),
+          AppScale.space(context, 8)),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [

@@ -9,7 +9,8 @@ class ProfileManagementCubit extends Cubit<ProfileMgmtState> {
   final void Function()? onSessionExpired;
   String? _profileId;
 
-  ProfileManagementCubit(this._repo, {this.onSessionExpired}) : super(const ProfileMgmtInitial());
+  ProfileManagementCubit(this._repo, {this.onSessionExpired})
+      : super(const ProfileMgmtInitial());
 
   Future<void> load(String profileId) async {
     _profileId = profileId;
@@ -99,8 +100,9 @@ class ProfileManagementCubit extends Cubit<ProfileMgmtState> {
       // Occupied — no-op. The UI gates this and explains why.
       return;
     }
-    await _guard(() =>
-        value ? _repo.setLastActiveProfile(id) : _repo.clearLastActiveProfile());
+    await _guard(() => value
+        ? _repo.setLastActiveProfile(id)
+        : _repo.clearLastActiveProfile());
   }
 
   /// Deletes the profile. Returns false (with the real error surfaced via

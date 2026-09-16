@@ -10,6 +10,8 @@ import '../../features/media/data/media_repository.dart';
 import '../sdui/sport_theme.dart' show sportIcon, sportAccentColor;
 import 'pileus_spinner.dart';
 import 'tv_focusable.dart';
+import 'package:cached_network_image_platform_interface/cached_network_image_platform_interface.dart'
+    show ImageRenderMethodForWeb;
 
 // ── Entry point ───────────────────────────────────────────────────────────────
 
@@ -313,6 +315,10 @@ class _HeroImage extends StatelessWidget {
           // Content
           if (hasPoster)
             CachedNetworkImage(
+              // Web-only, no-op on every other platform — see image_sizing.dart's
+              // "ImageRenderMethodForWeb.HttpGet" section for why every
+              // CachedNetworkImage call site in the app sets this.
+              imageRenderMethodForWeb: ImageRenderMethodForWeb.HttpGet,
               imageUrl: poster,
               fit: BoxFit.cover,
               memCacheWidth: cacheWidthFor(context, 640),
@@ -442,6 +448,10 @@ class _BadgeLogo extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => CachedNetworkImage(
+        // Web-only, no-op on every other platform — see image_sizing.dart's
+        // "ImageRenderMethodForWeb.HttpGet" section for why every
+        // CachedNetworkImage call site in the app sets this.
+        imageRenderMethodForWeb: ImageRenderMethodForWeb.HttpGet,
         imageUrl: url,
         width: size,
         height: size,

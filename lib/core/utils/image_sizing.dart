@@ -19,6 +19,50 @@ import '../grpc/host_resolver.dart';
 // the source resolution (no server-side resize) and caches one entry per
 // image, shared across every device on that server. Display-size
 // downscaling stays a client concern (memCacheWidth / cacheWidthFor).
+//
+// ── web: ImageRenderMethodForWeb.HttpGet on every CachedNetworkImage ────────
+//
+// Every `CachedNetworkImage(` call site in this app (33 of them, as of
+// 2026-09-16) passes `imageRenderMethodForWeb: ImageRenderMethodForWeb.HttpGet`
+// — a mechanical, repeated one-line override, referenced from each site back
+// to this comment rather than re-explained inline every time.
+//
+// `cached_network_image`'s own default on web is `HtmlImage`: it decodes
+// through a plain `<img>` element / `createImageCodecFromUrl`, handing
+// CanvasKit a browser-owned `<img>`/`ImageBitmap` to upload as a GPU texture.
+// `HttpGet` instead fetches the raw bytes itself and decodes via
+// `ui.ImmutableBuffer` — no `<img>` element, no browser-owned bitmap handle,
+// ever involved.
+//
+// This is the leading suspect for a recurring web-only bug (reported
+// 2026-09-14 through 2026-09-16): posters/hero backdrops rendering solid
+// black after ANY teardown-and-recreate of the widget showing them —
+// scrolling far enough to leave `ListView`'s cache extent and back, switching
+// plugin (a full subtree replacement, not just a scroll), or opening a
+// details page and returning to home. The browser console showed CanvasKit's
+// `makeTexture` failing with `WebGL: INVALID_VALUE: texImage2D: no image`
+// inside `Canvas._drawPicture` — exactly the signature of a texture upload
+// fed a source that's already gone, which is what happens when the old
+// widget's `<img>` element is torn down right as a freshly-recreated
+// `CachedNetworkImage` tries to build a new codec from one. `HttpGet` doesn't
+// touch an `<img>` element at any point, so that specific race can't happen.
+//
+// Two earlier, narrower fixes for pieces of this same symptom are still
+// correct and still in place — this one is broader, not a replacement:
+//   * `AutomaticKeepAliveClientMixin` on DesktopHero/MobileHero (2026-09-14)
+//     — stops the hero specifically from being torn down by ListView's
+//     cache-extent eviction on scroll (doesn't help a plugin switch, which
+//     replaces the whole subtree regardless of keep-alive).
+//   * MediaRepository.getDetails' 5-minute in-memory cache (2026-09-16) —
+//     stops a re-created hero from re-issuing the network call, but the
+//     CachedNetworkImage decode still happens fresh either way; doesn't
+//     touch the texture-upload race itself.
+// Unconfirmed as of this writing — has not yet been re-tested by the user
+// against the specific repro (switch plugin / open details / scroll back).
+// No effect on non-web platforms: every native ImageLoader ignores this
+// field entirely (see cached_network_image_platform_interface's ImageLoader
+// contract), so passing it everywhere unconditionally is a no-op on
+// Android/iOS/desktop/TV.
 
 /// Decode width in physical pixels for an image drawn [logicalWidth] wide.
 int cacheWidthFor(BuildContext context, double logicalWidth) =>

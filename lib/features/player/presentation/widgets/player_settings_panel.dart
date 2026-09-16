@@ -674,10 +674,10 @@ class _VolumeRow extends StatelessWidget {
       autofocus: autofocus,
       onUp: onUp,
       onDown: onDown,
-      onLeft: () => onChanged(
-          (volume - PlayerSettingsPanelState._volumeStep).clamp(0.0, maxVolume)),
-      onRight: () => onChanged(
-          (volume + PlayerSettingsPanelState._volumeStep).clamp(0.0, maxVolume)),
+      onLeft: () => onChanged((volume - PlayerSettingsPanelState._volumeStep)
+          .clamp(0.0, maxVolume)),
+      onRight: () => onChanged((volume + PlayerSettingsPanelState._volumeStep)
+          .clamp(0.0, maxVolume)),
       builder: (context, focused) => Container(
         decoration: BoxDecoration(
           color: focused ? AppTheme.textHigh.withValues(alpha: 0.08) : null,
@@ -717,8 +717,8 @@ class _VolumeRow extends StatelessWidget {
                 Text(
                   '${volume.round()}%',
                   style: TextStyle(
-                    color: AppTheme.primary
-                        .withValues(alpha: focused ? 1 : 0.85),
+                    color:
+                        AppTheme.primary.withValues(alpha: focused ? 1 : 0.85),
                     fontSize: AppScale.caption(context),
                     fontWeight: FontWeight.w700,
                   ),

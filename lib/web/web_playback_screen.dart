@@ -175,8 +175,8 @@ class _ViewState extends State<_View> {
       }).toJS,
     );
     if (!widget.args.isLive) {
-      _progressTimer = Timer.periodic(
-          const Duration(seconds: 15), (_) => _saveProgress());
+      _progressTimer =
+          Timer.periodic(const Duration(seconds: 15), (_) => _saveProgress());
     }
   }
 
@@ -197,6 +197,7 @@ class _ViewState extends State<_View> {
     if (_opened) return;
     _opened = true;
     _attachSource(s.resolvedUrl);
+    if (!widget.args.isLive) _markOpened();
     final seek = widget.args.seekTo;
     if (seek > 2) {
       _video.addEventListener(
@@ -250,27 +251,33 @@ class _ViewState extends State<_View> {
         // just sits on its own idle grey chrome forever (reported on
         // vixseries/vixmovie specifically, 2026-09-14 — root cause not yet
         // identified; this is what's needed to actually see it next time).
-        h.on(_hlsErrorEvent, ((JSAny? _, _HlsErrorData data) {
-          final resp = data.response;
-          debugPrint('[web player] hls.js error: type=${data.type} '
-              'details=${data.details} fatal=${data.fatal ?? false}'
-              '${resp == null ? '' : ' httpStatus=${resp.code} body=${resp.text}'}'
-              ' url=$url');
-        }).toJS);
+        h.on(
+            _hlsErrorEvent,
+            ((JSAny? _, _HlsErrorData data) {
+              final resp = data.response;
+              debugPrint('[web player] hls.js error: type=${data.type} '
+                  'details=${data.details} fatal=${data.fatal ?? false}'
+                  '${resp == null ? '' : ' httpStatus=${resp.code} body=${resp.text}'}'
+                  ' url=$url');
+            }).toJS);
         // How many renditions hls.js actually extracted from the master —
         // if this never fires, or fires with 0 levels, the manifest parse
         // itself is the failure point, not anything past it.
-        h.on(_hlsManifestParsedEvent, ((JSAny? _, _HlsManifestParsedData data) {
-          debugPrint('[web player] hls.js manifest parsed: '
-              '${data.levels?.length ?? 0} level(s) url=$url');
-        }).toJS);
+        h.on(
+            _hlsManifestParsedEvent,
+            ((JSAny? _, _HlsManifestParsedData data) {
+              debugPrint('[web player] hls.js manifest parsed: '
+                  '${data.levels?.length ?? 0} level(s) url=$url');
+            }).toJS);
         // If parsing found levels but none of these ever fire, hls.js
         // decided not to load anything — a level/autoStartLoad config
         // issue, not a network or parse failure.
         for (final evt in _hlsTraceEvents) {
-          h.on(evt, ((JSAny? _, JSAny? __) {
-            debugPrint('[web player] hls.js event: $evt url=$url');
-          }).toJS);
+          h.on(
+              evt,
+              ((JSAny? _, JSAny? __) {
+                debugPrint('[web player] hls.js event: $evt url=$url');
+              }).toJS);
         }
         h.loadSource(url);
         h.attachMedia(_video);
@@ -296,6 +303,28 @@ class _ViewState extends State<_View> {
       position: Duration(seconds: pos.toInt()),
       totalDuration:
           dur.isFinite ? Duration(seconds: dur.toInt()) : Duration.zero,
+      title: (a.title?.isNotEmpty ?? false) ? a.title! : a.showTitle,
+      showTitle: a.showTitle,
+      poster: a.poster,
+      rating: a.rating,
+      genres: a.genres,
+      plot: a.plot,
+      year: a.year,
+    );
+  }
+
+  /// Writes a continue-watching row the instant the stream opens, even at
+  /// position 0 — mycelium no longer gates Continue Watching on a minimum
+  /// position, so a title should appear there as soon as it's opened rather
+  /// than waiting for the first 15s heartbeat.
+  void _markOpened() {
+    final a = widget.args;
+    getIt<MediaRepository>().updateProgress(
+      pluginId: a.epPluginId,
+      mediaId: widget.mediaId,
+      parentId: a.parentId,
+      position: Duration.zero,
+      totalDuration: Duration.zero,
       title: (a.title?.isNotEmpty ?? false) ? a.title! : a.showTitle,
       showTitle: a.showTitle,
       poster: a.poster,

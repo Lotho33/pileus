@@ -19,6 +19,8 @@ import '../features/media/data/media_repository.dart';
 import '../features/player/resolve_and_play.dart';
 import '../shared/responsive.dart';
 import 'widgets/desktop_dialogs.dart';
+import 'package:cached_network_image_platform_interface/cached_network_image_platform_interface.dart'
+    show ImageRenderMethodForWeb;
 
 /// Desktop-native details page: a wide backdrop header with the poster and
 /// actions overlaid, then (for a series) season chips + an episode grid, and
@@ -281,6 +283,10 @@ class _Header extends StatelessWidget {
         height: h,
         child: item.posterUrl.isNotEmpty
             ? CachedNetworkImage(
+                // Web-only, no-op on every other platform — see image_sizing.dart's
+                // "ImageRenderMethodForWeb.HttpGet" section for why every
+                // CachedNetworkImage call site in the app sets this.
+                imageRenderMethodForWeb: ImageRenderMethodForWeb.HttpGet,
                 imageUrl: posterSrc(item.posterUrl, cacheWidthFor(context, w)),
                 memCacheWidth: cacheWidthFor(context, w),
                 fit: BoxFit.cover,
@@ -311,6 +317,10 @@ class _Header extends StatelessWidget {
               constraints: BoxConstraints(
                   maxHeight: big ? 130 : 100, maxWidth: big ? 460 : 360),
               child: CachedNetworkImage(
+                // Web-only, no-op on every other platform — see image_sizing.dart's
+                // "ImageRenderMethodForWeb.HttpGet" section for why every
+                // CachedNetworkImage call site in the app sets this.
+                imageRenderMethodForWeb: ImageRenderMethodForWeb.HttpGet,
                 imageUrl: logo,
                 memCacheWidth: cacheWidthFor(context, 460),
                 fit: BoxFit.contain,
@@ -415,6 +425,10 @@ class _Header extends StatelessWidget {
         fit: StackFit.expand,
         children: [
           CachedNetworkImage(
+            // Web-only, no-op on every other platform — see image_sizing.dart's
+            // "ImageRenderMethodForWeb.HttpGet" section for why every
+            // CachedNetworkImage call site in the app sets this.
+            imageRenderMethodForWeb: ImageRenderMethodForWeb.HttpGet,
             imageUrl:
                 backdropSrc(fanart, backdropCacheWidth(context), proxy: true),
             memCacheWidth: backdropCacheWidth(context),
@@ -708,6 +722,11 @@ class _EpisodeCardState extends State<_EpisodeCard> {
                     children: [
                       ep.thumbnailUrl.isNotEmpty
                           ? CachedNetworkImage(
+                              // Web-only, no-op on every other platform — see image_sizing.dart's
+                              // "ImageRenderMethodForWeb.HttpGet" section for why every
+                              // CachedNetworkImage call site in the app sets this.
+                              imageRenderMethodForWeb:
+                                  ImageRenderMethodForWeb.HttpGet,
                               imageUrl: posterSrc(
                                   ep.thumbnailUrl, cacheWidthFor(context, 176),
                                   proxy: true),
@@ -893,6 +912,11 @@ class _RelatedCardState extends State<_RelatedCard> {
                     aspectRatio: 2 / 3,
                     child: widget.poster.isNotEmpty
                         ? CachedNetworkImage(
+                            // Web-only, no-op on every other platform — see image_sizing.dart's
+                            // "ImageRenderMethodForWeb.HttpGet" section for why every
+                            // CachedNetworkImage call site in the app sets this.
+                            imageRenderMethodForWeb:
+                                ImageRenderMethodForWeb.HttpGet,
                             imageUrl: posterSrc(widget.poster,
                                 cacheWidthFor(context, widget.width),
                                 proxy: true),

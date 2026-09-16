@@ -22,6 +22,8 @@ import 'widgets/desktop_card.dart';
 import 'widgets/desktop_dialogs.dart';
 import 'widgets/desktop_hero.dart';
 import 'widgets/media_row.dart';
+import 'package:cached_network_image_platform_interface/cached_network_image_platform_interface.dart'
+    show ImageRenderMethodForWeb;
 
 /// Home for the active plugin: a wide hero + horizontal rows (Continue
 /// watching, then each catalog). One [DiscoveryBloc] per catalog, reconciled
@@ -126,8 +128,7 @@ class _DesktopHomeScreenState extends State<DesktopHomeScreen> {
                         pluginId: p.pluginId,
                         item: s.items.first,
                         bp: bp,
-                        height:
-                            (c.maxHeight * 0.62).clamp(440.0, 760.0),
+                        height: (c.maxHeight * 0.62).clamp(440.0, 760.0),
                       );
                     }
                     return SizedBox(
@@ -215,7 +216,6 @@ class _MaxWidth extends StatelessWidget {
   }
 }
 
-
 class _CatalogRowView extends StatelessWidget {
   final String pluginId;
   final CatalogDef def;
@@ -290,8 +290,7 @@ class _CwRow extends StatelessWidget {
     return BlocBuilder<ContinueWatchingBloc, ContinueWatchingState>(
       builder: (context, s) {
         if (s is! ContinueWatchingLoaded) return const SizedBox.shrink();
-        final items =
-            s.items.where((i) => i.providerID == pluginId).toList();
+        final items = s.items.where((i) => i.providerID == pluginId).toList();
         if (items.isEmpty) return const SizedBox.shrink();
         final cardW = bp.cardWidth * 1.8;
         // 16:9 art + 1-line caption + gap + hover headroom.
@@ -436,16 +435,21 @@ class _CwTileState extends State<_CwTile> {
                       children: [
                         widget.poster.isNotEmpty
                             ? CachedNetworkImage(
+                                // Web-only, no-op on every other platform — see image_sizing.dart's
+                                // "ImageRenderMethodForWeb.HttpGet" section for why every
+                                // CachedNetworkImage call site in the app sets this.
+                                imageRenderMethodForWeb:
+                                    ImageRenderMethodForWeb.HttpGet,
                                 imageUrl: posterSrc(widget.poster,
                                     cacheWidthFor(context, widget.width),
                                     proxy: true),
                                 memCacheWidth:
                                     cacheWidthFor(context, widget.width),
                                 fit: BoxFit.cover,
-                                placeholder: (_, __) => const ColoredBox(
-                                    color: AppTheme.surface2),
-                                errorWidget: (_, __, ___) => const ColoredBox(
-                                    color: AppTheme.surface2))
+                                placeholder: (_, __) =>
+                                    const ColoredBox(color: AppTheme.surface2),
+                                errorWidget: (_, __, ___) =>
+                                    const ColoredBox(color: AppTheme.surface2))
                             : const ColoredBox(color: AppTheme.surface2),
                         const Center(
                           child: Icon(Icons.play_circle_fill_rounded,
@@ -462,10 +466,8 @@ class _CwTileState extends State<_CwTile> {
                                 height: 28,
                                 decoration: BoxDecoration(
                                   shape: BoxShape.circle,
-                                  color:
-                                      Colors.black.withValues(alpha: 0.6),
-                                  border:
-                                      Border.all(color: Colors.white24),
+                                  color: Colors.black.withValues(alpha: 0.6),
+                                  border: Border.all(color: Colors.white24),
                                 ),
                                 child: const Icon(Icons.more_horiz_rounded,
                                     size: 16, color: AppTheme.textHigh),

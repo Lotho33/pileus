@@ -8,6 +8,8 @@ import '../../shared/widgets/open_catalog_item.dart';
 import '../mobile_item_sheet.dart';
 import '../mobile_live_sheet.dart';
 import 'press_scale.dart';
+import 'package:cached_network_image_platform_interface/cached_network_image_platform_interface.dart'
+    show ImageRenderMethodForWeb;
 
 /// Touch equivalent of the TV [MediaCatalogCard]: tap to open, no focus
 /// treatment. `landscape` picks a 16:9 still (live / landscape catalogs)
@@ -50,6 +52,11 @@ class MobilePosterCard extends StatelessWidget {
                 aspectRatio: ratio,
                 child: item.posterUrl.isNotEmpty
                     ? CachedNetworkImage(
+                        // Web-only, no-op on every other platform — see image_sizing.dart's
+                        // "ImageRenderMethodForWeb.HttpGet" section for why every
+                        // CachedNetworkImage call site in the app sets this.
+                        imageRenderMethodForWeb:
+                            ImageRenderMethodForWeb.HttpGet,
                         imageUrl: posterSrc(item.posterUrl, imgW),
                         memCacheWidth: imgW,
                         fit: BoxFit.cover,

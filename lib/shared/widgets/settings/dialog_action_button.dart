@@ -62,9 +62,7 @@ class DialogActionButton extends StatelessWidget {
           color: !enabled
               ? Colors.white12
               : primary
-                  ? (focused
-                      ? Color.lerp(accent, Colors.white, 0.18)!
-                      : accent)
+                  ? (focused ? Color.lerp(accent, Colors.white, 0.18)! : accent)
                   // Secondary: a faint resting fill so it reads as a button
                   // next to the filled primary, not bare text; a clear
                   // accent wash on focus.
@@ -94,8 +92,7 @@ class DialogActionButton extends StatelessWidget {
                     ? Colors.white
                     : (focused ? Colors.white : Colors.white70),
             fontSize: AppScale.space(context, 15),
-            fontWeight:
-                primary || focused ? FontWeight.w600 : FontWeight.w500,
+            fontWeight: primary || focused ? FontWeight.w600 : FontWeight.w500,
           ),
         ),
       ),

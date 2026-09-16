@@ -7,6 +7,8 @@ import '../../core/theme/app_theme.dart';
 import '../../core/utils/image_sizing.dart';
 import '../../features/media/data/media_repository.dart';
 import '../../shared/widgets/open_catalog_item.dart';
+import 'package:cached_network_image_platform_interface/cached_network_image_platform_interface.dart'
+    show ImageRenderMethodForWeb;
 
 /// Home hero — the first item of the first (non-live) carousel, shown big
 /// with logo / rating / genre and Play + Info actions. Replaces the TV
@@ -151,6 +153,10 @@ class _MobileHeroState extends State<MobileHero>
         children: [
           if (_backdrop.isNotEmpty)
             CachedNetworkImage(
+              // Web-only, no-op on every other platform — see image_sizing.dart's
+              // "ImageRenderMethodForWeb.HttpGet" section for why every
+              // CachedNetworkImage call site in the app sets this.
+              imageRenderMethodForWeb: ImageRenderMethodForWeb.HttpGet,
               imageUrl: backdropSrc(_backdrop, imgW, proxy: true),
               memCacheWidth: imgW,
               fit: BoxFit.cover,
@@ -194,6 +200,11 @@ class _MobileHeroState extends State<MobileHero>
                   width: size.width * 0.8,
                   child: (_logoUrl.isNotEmpty && !_logoUrl.endsWith('.svg'))
                       ? CachedNetworkImage(
+                          // Web-only, no-op on every other platform — see image_sizing.dart's
+                          // "ImageRenderMethodForWeb.HttpGet" section for why every
+                          // CachedNetworkImage call site in the app sets this.
+                          imageRenderMethodForWeb:
+                              ImageRenderMethodForWeb.HttpGet,
                           imageUrl: _logoUrl,
                           memCacheWidth:
                               cacheWidthFor(context, size.width * 0.8),

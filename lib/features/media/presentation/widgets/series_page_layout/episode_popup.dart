@@ -201,6 +201,11 @@ class _EpisodePopupState extends State<_EpisodePopup> {
                                         : widget.seriesPosterUrl;
                                     return thumb.isNotEmpty
                                         ? CachedNetworkImage(
+                                            // Web-only, no-op on every other platform — see image_sizing.dart's
+                                            // "ImageRenderMethodForWeb.HttpGet" section for why every
+                                            // CachedNetworkImage call site in the app sets this.
+                                            imageRenderMethodForWeb:
+                                                ImageRenderMethodForWeb.HttpGet,
                                             imageUrl: thumb,
                                             fit: thumb == item.thumbnailUrl
                                                 ? BoxFit.cover
@@ -361,8 +366,8 @@ class _EpisodePopupState extends State<_EpisodePopup> {
                                   if (_loading)
                                     Center(
                                       child: Padding(
-                                        padding:
-                                            const EdgeInsets.symmetric(vertical: 12),
+                                        padding: const EdgeInsets.symmetric(
+                                            vertical: 12),
                                         child: PileusSpinner(
                                             size: AppScale.spinnerS(context),
                                             color: AppTheme.textLow),
@@ -491,4 +496,3 @@ class _EpisodePopupState extends State<_EpisodePopup> {
     );
   }
 }
-

@@ -9,6 +9,8 @@ import '../../core/utils/image_sizing.dart';
 import '../../features/media/data/media_repository.dart';
 import '../../features/player/resolve_and_play.dart';
 import '../../shared/widgets/open_catalog_item.dart';
+import 'package:cached_network_image_platform_interface/cached_network_image_platform_interface.dart'
+    show ImageRenderMethodForWeb;
 
 /// Centered surface used by all the desktop dialogs — replaces the mobile
 /// bottom sheets, which read wrong in a window.
@@ -66,9 +68,7 @@ Future<String?> showDesktopActionDialog(
             ListTile(
               contentPadding: EdgeInsets.zero,
               leading: Icon(a.icon,
-                  color: a.danger
-                      ? const Color(0xFFFF6B6B)
-                      : AppTheme.textMid),
+                  color: a.danger ? const Color(0xFFFF6B6B) : AppTheme.textMid),
               title: Text(a.label,
                   style: TextStyle(
                       color: a.danger
@@ -172,6 +172,11 @@ class _ItemPanelState extends State<_ItemPanel> {
                   height: 144,
                   child: it.posterUrl.isNotEmpty
                       ? CachedNetworkImage(
+                          // Web-only, no-op on every other platform — see image_sizing.dart's
+                          // "ImageRenderMethodForWeb.HttpGet" section for why every
+                          // CachedNetworkImage call site in the app sets this.
+                          imageRenderMethodForWeb:
+                              ImageRenderMethodForWeb.HttpGet,
                           imageUrl: posterSrc(
                               it.posterUrl, cacheWidthFor(context, 96)),
                           memCacheWidth: cacheWidthFor(context, 96),
@@ -248,8 +253,7 @@ class _ItemPanelState extends State<_ItemPanel> {
 /// separate "info" vs "play" surface.
 Future<void> showDesktopLiveDialog(
     BuildContext context, String pluginId, CatalogItem item) {
-  return _panel(context, _LivePanel(pluginId: pluginId, item: item),
-      maxW: 460);
+  return _panel(context, _LivePanel(pluginId: pluginId, item: item), maxW: 460);
 }
 
 class _LivePanel extends StatefulWidget {

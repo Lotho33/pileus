@@ -9,6 +9,7 @@ import 'package:wakelock_plus/wakelock_plus.dart';
 import '../core/di/injection.dart';
 import '../core/perf_profile.dart';
 import '../core/theme/app_theme.dart';
+import '../features/media/data/media_repository.dart';
 import '../features/player/bloc/playback_bloc.dart';
 import '../features/player/bloc/playback_event.dart';
 import '../features/player/bloc/playback_state.dart';
@@ -51,8 +52,8 @@ class MobilePlaybackScreen extends StatelessWidget {
         }
         return bloc;
       },
-      child: _MobilePlayerView(
-          pluginId: pluginId, mediaId: mediaId, args: args),
+      child:
+          _MobilePlayerView(pluginId: pluginId, mediaId: mediaId, args: args),
     );
   }
 }
@@ -74,7 +75,10 @@ class _MobilePlayerView extends StatefulWidget {
 class _MobilePlayerViewState extends State<_MobilePlayerView> {
   late final PlayerEngine _engine;
   late final SettingsRepository _settings;
-  late final PlaybackProgress _progress;
+  // Not `final`: switching to the next episode in-place rebuilds this
+  // around the new episode's mediaId/args (see _resolveEpisodeAt) instead
+  // of tearing down and recreating the whole screen.
+  late PlaybackProgress _progress;
 
   bool _controlsVisible = true;
   bool _opened = false;
@@ -89,12 +93,43 @@ class _MobilePlayerViewState extends State<_MobilePlayerView> {
   // never reconciles the platform video surface.
   Widget? _videoView;
 
+  // ── Episode navigation (mutable during the session) ───────────────────────
+  // Mirrors the TV player's own episode-nav state (playback_screen/view.dart)
+  // — kept separate from widget.args so switching episodes doesn't need a
+  // new route/screen instance.
+  late int _curEpisodeIndex;
+  late int _curSeasonIndex;
+  late String _curMediaId;
+  late String _curSourceLabel;
+  late String? _curTitle;
+  late List<String> _curEpisodeList;
+  late List<String> _curEpisodeTitles;
+  bool _resolvingEpisode = false;
+  bool _autoAdvanced = false;
+  // Countdown shown in the closing seconds of an episode; null = hidden.
+  int? _nextEpisodeSecs;
+  bool _nextEpisodeDismissed = false;
+  StreamSubscription<Duration>? _posSub;
+  // Brief ±10s flash shown after a double-tap seek; null = hidden. Sign
+  // says which side/direction, not a duration.
+  int? _seekFeedback;
+  Timer? _seekFeedbackTimer;
+
   @override
   void initState() {
     super.initState();
     _settings = getIt<SettingsRepository>();
-    _progress =
-        PlaybackProgress(args: widget.args, mediaId: widget.mediaId);
+    _progress = PlaybackProgress(args: widget.args, mediaId: widget.mediaId);
+
+    _curEpisodeIndex = widget.args.episodeList.isEmpty
+        ? widget.args.episodeIndex
+        : widget.args.episodeIndex.clamp(0, widget.args.episodeList.length - 1);
+    _curSeasonIndex = widget.args.seasonIndex;
+    _curMediaId = widget.mediaId;
+    _curSourceLabel = widget.args.sourceLabel;
+    _curTitle = widget.args.title;
+    _curEpisodeList = widget.args.episodeList;
+    _curEpisodeTitles = widget.args.episodeTitles;
 
     SystemChrome.setPreferredOrientations(const [
       DeviceOrientation.landscapeLeft,
@@ -110,6 +145,7 @@ class _MobilePlayerViewState extends State<_MobilePlayerView> {
     _engine = PlayerEngine.create();
     _engine.onError = _onEngineError;
     _engine.addListener(_onEngine);
+    _posSub = _engine.positionStream.listen(_onPosition);
     _engine.initialize(
       PlayerSubtitleStyle(
         fontSize: _settings.getSubtitleFontSize(),
@@ -145,6 +181,8 @@ class _MobilePlayerViewState extends State<_MobilePlayerView> {
     _hideTimer?.cancel();
     _errorGrace?.cancel();
     _progressTimer?.cancel();
+    _posSub?.cancel();
+    _seekFeedbackTimer?.cancel();
     // Final save while the engine is still alive — catches everything since
     // the last heartbeat (e.g. the user backs out 8s after the last tick).
     if (!widget.args.isLive) {
@@ -217,6 +255,7 @@ class _MobilePlayerViewState extends State<_MobilePlayerView> {
     _opened = true;
     _progress.onStreamOpened();
     await _engine.open(s.resolvedUrl, headers: s.httpHeaders);
+    _progress.markStarted(_engine);
   }
 
   void _retry() {
@@ -227,17 +266,182 @@ class _MobilePlayerViewState extends State<_MobilePlayerView> {
       _playbackError = null;
       _opened = false;
     });
-    final direct = widget.args.directStreamId;
+    // A direct-stream deep link only applies to the title the screen was
+    // opened with — once the user has moved to a later episode, retry has
+    // to re-resolve that episode's own sources instead.
+    final direct =
+        _curMediaId == widget.mediaId ? widget.args.directStreamId : null;
     if (direct != null && direct.isNotEmpty) {
       bloc.add(SelectStreamEvent(pluginId: widget.pluginId, streamId: direct));
     } else {
       bloc.add(InitializeVideoEvent(
         pluginId: widget.pluginId,
-        mediaId: widget.mediaId,
-        preferredLabel: widget.args.sourceLabel,
+        mediaId: _curMediaId,
+        preferredLabel: _curSourceLabel,
       ));
     }
   }
+
+  void _seekBy(int secs) {
+    final d = _engine.duration;
+    var t = _engine.position + Duration(seconds: secs);
+    if (t < Duration.zero) t = Duration.zero;
+    if (d > Duration.zero && t > d) t = d;
+    _engine.seek(t);
+    _armAutoHide();
+  }
+
+  // ── Episode navigation ─────────────────────────────────────────────────────
+
+  bool get _hasNextEpisode =>
+      _curEpisodeIndex < _curEpisodeList.length - 1 ||
+      (_curSeasonIndex < widget.args.allSeasonIds.length - 1 &&
+          widget.args.allSeasonIds.isNotEmpty);
+
+  void _onPosition(Duration pos) {
+    if (!mounted || widget.args.isLive || !_hasNextEpisode) return;
+    final dur = _engine.duration;
+    if (dur.inSeconds <= 60) return;
+    final remaining = dur.inSeconds - pos.inSeconds;
+    if (remaining > 0 && remaining <= 30 && !_nextEpisodeDismissed) {
+      if (_nextEpisodeSecs != remaining) {
+        setState(() => _nextEpisodeSecs = remaining);
+      }
+    } else if (_nextEpisodeSecs != null) {
+      setState(() => _nextEpisodeSecs = null);
+    }
+    if (remaining <= 0 && !_autoAdvanced && !_resolvingEpisode) {
+      _autoAdvanced = true;
+      _goToNextEpisode();
+    }
+  }
+
+  Future<void> _goToNextEpisode() async {
+    if (_resolvingEpisode || !_hasNextEpisode) return;
+    _errorGrace?.cancel();
+    setState(() {
+      _resolvingEpisode = true;
+      _nextEpisodeSecs = null;
+    });
+    try {
+      await _resolveEpisodeAt(_curEpisodeIndex + 1, _curEpisodeList,
+          _curEpisodeTitles, _curSeasonIndex);
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _resolvingEpisode = false;
+          _playbackError = 'Impossibile cambiare episodio: $e';
+        });
+      }
+    }
+  }
+
+  Future<void> _resolveEpisodeAt(
+    int newIndex,
+    List<String> episodeList,
+    List<String> episodeTitles,
+    int seasonIndex,
+  ) async {
+    final repo = getIt<MediaRepository>();
+
+    if (newIndex < 0 || newIndex >= episodeList.length) {
+      // Season boundary: only forward, mobile has no "previous episode" nav.
+      final allSeasonIds = widget.args.allSeasonIds;
+      final newSeasonIndex = seasonIndex + 1;
+      if (allSeasonIds.isEmpty || newSeasonIndex >= allSeasonIds.length) {
+        if (mounted) setState(() => _resolvingEpisode = false);
+        return;
+      }
+      final browseRes = await repo.browse(
+          widget.args.epPluginId, allSeasonIds[newSeasonIndex], '');
+      final newEpisodes = browseRes.items;
+      if (newEpisodes.isEmpty) {
+        if (mounted) setState(() => _resolvingEpisode = false);
+        return;
+      }
+      final newIds = newEpisodes.map((e) => e.id).toList();
+      final newTitles = newEpisodes.map((e) => e.title).toList();
+      if (mounted) {
+        setState(() {
+          _curEpisodeList = newIds;
+          _curEpisodeTitles = newTitles;
+          _curSeasonIndex = newSeasonIndex;
+        });
+      }
+      await _resolveEpisodeAt(0, newIds, newTitles, newSeasonIndex);
+      return;
+    }
+
+    final newMediaId = episodeList[newIndex];
+    final newTitle =
+        newIndex < episodeTitles.length ? episodeTitles[newIndex] : null;
+    final streamsRes =
+        await repo.getStreams(widget.args.epPluginId, newMediaId);
+    final sources = streamsRes.sources;
+
+    // Prefer the same source label already playing; fall back to the first
+    // source rather than bouncing out to an episode picker mid-binge.
+    final match = (_curSourceLabel.isEmpty
+            ? null
+            : sources
+                .where((s) =>
+                    s.label.toLowerCase() == _curSourceLabel.toLowerCase())
+                .firstOrNull) ??
+        (sources.isNotEmpty ? sources.first : null);
+
+    if (!mounted) return;
+
+    if (match != null) {
+      _engine.stop();
+      setState(() {
+        _curEpisodeIndex = newIndex;
+        _curMediaId = newMediaId;
+        _curSourceLabel = match.label;
+        _curTitle = newTitle ?? _curTitle;
+        _opened = false;
+        _resolvingEpisode = false;
+        _autoAdvanced = false;
+        _nextEpisodeDismissed = false;
+        _playbackError = null;
+      });
+      _progress = PlaybackProgress(args: _currentArgs(), mediaId: newMediaId);
+      context.read<PlaybackBloc>().add(
+            SelectStreamEvent(
+                pluginId: widget.args.epPluginId, streamId: match.id),
+          );
+    } else {
+      setState(() => _resolvingEpisode = false);
+      _engine.stop();
+      context.pushReplacement(
+        '/episode/${widget.args.epPluginId}/${Uri.encodeComponent(newMediaId)}',
+        extra: {
+          'episodeList': episodeList,
+          'episodeTitles': episodeTitles,
+          'episodeIndex': newIndex,
+          'allSeasonIds': widget.args.allSeasonIds,
+          'allSeasonLabels': widget.args.allSeasonLabels,
+          'seasonIndex': _curSeasonIndex,
+          'sourceLabel': _curSourceLabel,
+          'showTitle': widget.args.showTitle,
+          'parentId': widget.args.parentId,
+        },
+      );
+    }
+  }
+
+  /// [widget.args] rebuilt around the episode currently playing — so
+  /// [_progress]'s continue-watching / remembered-audio-language logic
+  /// (which reads `args.episodeIndex`/`episodeList`/`mediaId`) stays correct
+  /// after switching episodes in place.
+  PlaybackArgs _currentArgs() => widget.args.copyWith(
+        title: _curTitle,
+        episodeList: _curEpisodeList,
+        episodeTitles: _curEpisodeTitles,
+        episodeIndex: _curEpisodeIndex,
+        sourceLabel: _curSourceLabel,
+        seasonIndex: _curSeasonIndex,
+        seekTo: 0,
+      );
 
   void _armAutoHide() {
     _hideTimer?.cancel();
@@ -267,61 +471,135 @@ class _MobilePlayerViewState extends State<_MobilePlayerView> {
         listener: (context, s) {
           if (s is PlaybackReady) _onReady(s);
         },
-        child: GestureDetector(
-          onTap: _toggleControls,
-          behavior: HitTestBehavior.opaque,
-          child: Stack(
-            fit: StackFit.expand,
-            children: [
+        child: Stack(
+          fit: StackFit.expand,
+          children: [
+            Positioned.fill(
+              child: Center(
+                child: _videoView ??= _engine.buildView(),
+              ),
+            ),
+            // Below the controls (added later, so they get first crack at
+            // any tap that lands on an actual button) but above the video —
+            // a single tap toggles the transport controls, a double tap on
+            // either half seeks ±10s. Not something ExoPlayer/better_player
+            // gives for free; this is the same gesture split YouTube/Netflix
+            // use, done here at the Flutter layer.
+            Positioned.fill(child: _tapZones()),
+            BlocBuilder<PlaybackBloc, PlaybackState>(
+              builder: (context, s) {
+                if (_playbackError != null) {
+                  return Positioned.fill(
+                    child: _ErrorOverlay(
+                      message: _playbackError!,
+                      onBack: _exit,
+                      onRetry: _retry,
+                    ),
+                  );
+                }
+                if (s is PlaybackFailed) {
+                  return Positioned.fill(
+                    child: _ErrorOverlay(
+                      message: s.errorMessage,
+                      onBack: _exit,
+                      onRetry: _retry,
+                    ),
+                  );
+                }
+                if (s is! PlaybackReady) {
+                  // Loading: only the spinner (dead-centre) + a back
+                  // button — no transport controls competing for the
+                  // centre of the screen.
+                  return Positioned.fill(
+                    child: _LoadingOverlay(state: s, onBack: _exit),
+                  );
+                }
+                return _controlsVisible
+                    ? Positioned.fill(child: _controls())
+                    : const SizedBox.shrink();
+              },
+            ),
+            if (_seekFeedback != null)
               Positioned.fill(
-                child: Center(
-                  child: _videoView ??= _engine.buildView(),
+                child: IgnorePointer(
+                  child: Align(
+                    alignment: _seekFeedback! < 0
+                        ? Alignment.centerLeft
+                        : Alignment.centerRight,
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 28),
+                      child: _SeekFeedback(forward: _seekFeedback! > 0),
+                    ),
+                  ),
                 ),
               ),
-              BlocBuilder<PlaybackBloc, PlaybackState>(
-                builder: (context, s) {
-                  if (_playbackError != null) {
-                    return Positioned.fill(
-                      child: _ErrorOverlay(
-                        message: _playbackError!,
-                        onBack: _exit,
-                        onRetry: _retry,
-                      ),
-                    );
-                  }
-                  if (s is PlaybackFailed) {
-                    return Positioned.fill(
-                      child: _ErrorOverlay(
-                        message: s.errorMessage,
-                        onBack: _exit,
-                        onRetry: _retry,
-                      ),
-                    );
-                  }
-                  if (s is! PlaybackReady) {
-                    // Loading: only the spinner (dead-centre) + a back
-                    // button — no transport controls competing for the
-                    // centre of the screen.
-                    return Positioned.fill(
-                      child: _LoadingOverlay(state: s, onBack: _exit),
-                    );
-                  }
-                  return _controlsVisible
-                      ? Positioned.fill(child: _controls())
-                      : const SizedBox.shrink();
-                },
+            if (_nextEpisodeSecs != null)
+              Positioned(
+                right: 16,
+                bottom: 16,
+                child: SafeArea(
+                  child: _MobileNextEpisodeBanner(
+                    secondsRemaining: _nextEpisodeSecs!,
+                    onSkip: () {
+                      _autoAdvanced = true;
+                      _goToNextEpisode();
+                    },
+                    onDismiss: () => setState(() {
+                      _nextEpisodeDismissed = true;
+                      _nextEpisodeSecs = null;
+                    }),
+                  ),
+                ),
               ),
-            ],
-          ),
+          ],
         ),
       ),
     );
   }
 
+  /// Full-screen tap layer: single tap toggles the controls, double tap on
+  /// the left/right half seeks ±10s. Live streams only get the single tap
+  /// (no seeking).
+  Widget _tapZones() {
+    if (widget.args.isLive) {
+      return GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: _toggleControls,
+      );
+    }
+    return Row(
+      children: [
+        Expanded(
+          child: GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            onTap: _toggleControls,
+            onDoubleTap: () => _seekWithFeedback(-10),
+          ),
+        ),
+        Expanded(
+          child: GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            onTap: _toggleControls,
+            onDoubleTap: () => _seekWithFeedback(10),
+          ),
+        ),
+      ],
+    );
+  }
+
+  void _seekWithFeedback(int delta) {
+    _seekBy(delta);
+    _seekFeedbackTimer?.cancel();
+    setState(() => _seekFeedback = delta);
+    _seekFeedbackTimer = Timer(const Duration(milliseconds: 650), () {
+      if (mounted) setState(() => _seekFeedback = null);
+    });
+  }
+
   Widget _controls() {
     final title = widget.args.showTitle.isNotEmpty
-        ? '${widget.args.showTitle} · ${widget.args.title ?? ''}'
-        : (widget.args.title ?? '');
+        ? '${widget.args.showTitle} · ${_curTitle ?? ''}'
+        : (_curTitle ?? '');
 
     return Container(
       color: Colors.black38,
@@ -342,6 +620,25 @@ class _MobilePlayerViewState extends State<_MobilePlayerView> {
                     style: const TextStyle(color: Colors.white, fontSize: 14),
                   ),
                 ),
+                if (_hasNextEpisode)
+                  IconButton(
+                    icon: _resolvingEpisode
+                        ? const SizedBox(
+                            width: 20,
+                            height: 20,
+                            child: CircularProgressIndicator(
+                                strokeWidth: 2, color: Colors.white),
+                          )
+                        : const Icon(Icons.skip_next_rounded,
+                            color: Colors.white),
+                    tooltip: 'Episodio successivo',
+                    onPressed: _resolvingEpisode
+                        ? null
+                        : () {
+                            _autoAdvanced = true;
+                            _goToNextEpisode();
+                          },
+                  ),
                 IconButton(
                   icon: const Icon(Icons.tune_rounded, color: Colors.white),
                   tooltip: 'Video, audio e sottotitoli',
@@ -393,8 +690,7 @@ class _MobilePlayerViewState extends State<_MobilePlayerView> {
                             max: maxMs,
                             activeColor: AppTheme.primary,
                             onChanged: (v) {
-                              _engine
-                                  .seek(Duration(milliseconds: v.toInt()));
+                              _engine.seek(Duration(milliseconds: v.toInt()));
                               _armAutoHide();
                             },
                           ),
@@ -452,9 +748,7 @@ class _MobilePlayerViewState extends State<_MobilePlayerView> {
                   setSheet(() {});
                 },
               );
-          final nothing = video.length < 2 &&
-              audio.length < 2 &&
-              subs.isEmpty;
+          final nothing = video.length < 2 && audio.length < 2 && subs.isEmpty;
           return SafeArea(
             child: ListView(
               shrinkWrap: true,
@@ -587,8 +881,8 @@ class _ErrorOverlay extends StatelessWidget {
               const SizedBox(height: 14),
               const Text(
                 'Riproduzione non riuscita',
-                style: TextStyle(
-                    color: Colors.white, fontWeight: FontWeight.w700),
+                style:
+                    TextStyle(color: Colors.white, fontWeight: FontWeight.w700),
               ),
               const SizedBox(height: 6),
               Text(message,
@@ -617,6 +911,69 @@ class _ErrorOverlay extends StatelessWidget {
             ],
           ),
         ),
+      ),
+    );
+  }
+}
+
+class _MobileNextEpisodeBanner extends StatelessWidget {
+  final int secondsRemaining;
+  final VoidCallback onSkip;
+  final VoidCallback onDismiss;
+  const _MobileNextEpisodeBanner({
+    required this.secondsRemaining,
+    required this.onSkip,
+    required this.onDismiss,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: const Color(0xF2141428),
+      borderRadius: BorderRadius.circular(10),
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(14, 10, 8, 10),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text('Prossimo episodio tra ${secondsRemaining}s',
+                style: const TextStyle(color: Colors.white, fontSize: 13)),
+            const SizedBox(width: 10),
+            FilledButton(
+              onPressed: onSkip,
+              style: FilledButton.styleFrom(
+                backgroundColor: AppTheme.primary,
+                padding: const EdgeInsets.symmetric(horizontal: 14),
+              ),
+              child: const Text('Salta'),
+            ),
+            IconButton(
+              icon: const Icon(Icons.close, color: Colors.white54, size: 18),
+              onPressed: onDismiss,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _SeekFeedback extends StatelessWidget {
+  final bool forward;
+  const _SeekFeedback({required this.forward});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: const BoxDecoration(
+        color: Colors.black45,
+        shape: BoxShape.circle,
+      ),
+      child: Icon(
+        forward ? Icons.forward_10_rounded : Icons.replay_10_rounded,
+        color: Colors.white,
+        size: 36,
       ),
     );
   }

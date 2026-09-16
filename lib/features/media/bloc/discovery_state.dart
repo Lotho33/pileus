@@ -69,9 +69,16 @@ class DiscoveryLoaded extends DiscoveryState {
 
   @override
   List<Object?> get props => [
-        items, hasMore, fromCache, isLoadingMore,
-        pluginId, catalogId, currentPage,
-        searchQuery, searchPage, activeFilters,
+        items,
+        hasMore,
+        fromCache,
+        isLoadingMore,
+        pluginId,
+        catalogId,
+        currentPage,
+        searchQuery,
+        searchPage,
+        activeFilters,
       ];
 }
 

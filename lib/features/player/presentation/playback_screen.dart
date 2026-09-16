@@ -36,7 +36,6 @@ part 'playback_screen/view.dart';
 part 'playback_screen/next_episode_banner.dart';
 part 'playback_screen/error_overlay.dart';
 
-
 // ─────────────────────────────────────────────────────────────────────────────
 // Entry point — risolve PlaybackArgs dall'extra di GoRouter
 // ─────────────────────────────────────────────────────────────────────────────

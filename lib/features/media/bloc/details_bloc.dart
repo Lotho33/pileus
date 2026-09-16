@@ -9,17 +9,22 @@ class DetailsBloc extends Bloc<DetailsEvent, DetailsState> {
   final MediaRepository _repo;
   final void Function()? onSessionExpired;
 
-  DetailsBloc(this._repo, {this.onSessionExpired}) : super(const DetailsInitial()) {
+  DetailsBloc(this._repo, {this.onSessionExpired})
+      : super(const DetailsInitial()) {
     on<LoadDetailsEvent>(_onLoadDetails);
   }
 
-  Future<void> _onLoadDetails(LoadDetailsEvent event, Emitter<DetailsState> emit) async {
+  Future<void> _onLoadDetails(
+      LoadDetailsEvent event, Emitter<DetailsState> emit) async {
     emit(const DetailsLoading());
     try {
       final response = await _repo.getDetails(event.pluginId, event.mediaId);
       emit(DetailsLoaded(response));
     } catch (e) {
-      if (isUnauthenticated(e)) { onSessionExpired?.call(); return; }
+      if (isUnauthenticated(e)) {
+        onSessionExpired?.call();
+        return;
+      }
       emit(DetailsError(e.toString()));
     }
   }

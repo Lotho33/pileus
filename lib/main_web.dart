@@ -75,7 +75,8 @@ class _WebStartupError extends StatelessWidget {
                     textAlign: TextAlign.center,
                     maxLines: 6,
                     overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(color: Colors.white38, fontSize: 13)),
+                    style:
+                        const TextStyle(color: Colors.white38, fontSize: 13)),
               ],
             ),
           ),

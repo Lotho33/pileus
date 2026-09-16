@@ -617,6 +617,28 @@ class _PlaybackViewState extends State<_PlaybackView> {
     );
   }
 
+  /// Writes a continue-watching row the instant the stream opens, even at
+  /// position 0 — mycelium no longer gates Continue Watching on a minimum
+  /// position, so a title should appear there as soon as it's opened rather
+  /// than waiting for the first 15s heartbeat.
+  void _markOpened() {
+    if (_progressCleared) return;
+    getIt<MediaRepository>().updateProgress(
+      pluginId: widget.args.epPluginId,
+      mediaId: _currentMediaId,
+      parentId: _parentId,
+      position: _engine.position,
+      totalDuration: _engine.duration,
+      title: (_currentTitle?.isNotEmpty ?? false) ? _currentTitle! : _showTitle,
+      showTitle: _showTitle,
+      poster: widget.args.poster,
+      rating: _rating,
+      genres: _genres,
+      plot: _plot,
+      year: _year,
+    );
+  }
+
   // ── Resume-from-timestamp ─────────────────────────────────────────────────
 
   // Issue the resume seek once a stream is opened. A seek issued right after
@@ -774,14 +796,10 @@ class _PlaybackViewState extends State<_PlaybackView> {
             pluginId: widget.args.epPluginId,
             mediaId: nextId,
             parentId: _parentId,
-            // 31 s, and totalDuration left at 0 on purpose: mycelium's
-            // GetContinueWatching filter drops any row with
-            // `progress_time < 30`, and only applies its 3-95% "watched
-            // fraction" window when `total_time > 0`. So this is the
-            // smallest position that still surfaces as an "up next" row.
-            // The card's bar reads 0% (progressFraction needs total_time).
-            // Trade-off: resuming this row starts ~30 s in — past the
-            // recap/logo stings on most episodes.
+            // 31 s, and totalDuration left at 0 on purpose: the card's bar
+            // reads 0% (progressFraction needs total_time), and resuming
+            // this row starts ~30 s in — past the recap/logo stings on most
+            // episodes.
             position: const Duration(seconds: 31),
             title: nextTitle.isNotEmpty ? nextTitle : _showTitle,
             showTitle: _showTitle,
@@ -898,6 +916,7 @@ class _PlaybackViewState extends State<_PlaybackView> {
     perf('screen: engine.open()  host=${Uri.tryParse(url)?.host ?? '?'}'
         '  headers=${headers.length}');
     _engine.open(url, headers: headers);
+    if (!widget.args.isLive) _markOpened();
     _issueResumeSeek();
   }
 
@@ -1499,4 +1518,3 @@ class _PlaybackViewState extends State<_PlaybackView> {
     );
   }
 }
-

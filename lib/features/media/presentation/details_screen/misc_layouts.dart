@@ -41,6 +41,10 @@ class _MusicLayout extends StatelessWidget {
               borderRadius: BorderRadius.circular(12),
               child: item.posterUrl.isNotEmpty
                   ? CachedNetworkImage(
+                      // Web-only, no-op on every other platform — see image_sizing.dart's
+                      // "ImageRenderMethodForWeb.HttpGet" section for why every
+                      // CachedNetworkImage call site in the app sets this.
+                      imageRenderMethodForWeb: ImageRenderMethodForWeb.HttpGet,
                       imageUrl: posterSrc(
                           item.posterUrl, cacheWidthFor(context, 280)),
                       width: 280,
@@ -114,6 +118,11 @@ class _VodClipLayout extends StatelessWidget {
               children: [
                 item.posterUrl.isNotEmpty
                     ? CachedNetworkImage(
+                        // Web-only, no-op on every other platform — see image_sizing.dart's
+                        // "ImageRenderMethodForWeb.HttpGet" section for why every
+                        // CachedNetworkImage call site in the app sets this.
+                        imageRenderMethodForWeb:
+                            ImageRenderMethodForWeb.HttpGet,
                         imageUrl: backdropSrc(
                             item.posterUrl, backdropCacheWidth(context)),
                         width: double.infinity,

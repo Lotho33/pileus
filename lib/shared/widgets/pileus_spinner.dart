@@ -96,13 +96,16 @@ class _PileusLoadingSwitcherState extends State<PileusLoadingSwitcher> {
       return;
     }
     final shownAt = _shownAt;
-    final elapsed = shownAt == null ? widget.minVisible : DateTime.now().difference(shownAt);
+    final elapsed = shownAt == null
+        ? widget.minVisible
+        : DateTime.now().difference(shownAt);
     final remaining = widget.minVisible - elapsed;
     if (remaining <= Duration.zero) {
       setState(() => _effectiveLoading = false);
     } else {
       Future.delayed(remaining, () {
-        if (mounted && !widget.isLoading) setState(() => _effectiveLoading = false);
+        if (mounted && !widget.isLoading)
+          setState(() => _effectiveLoading = false);
       });
     }
   }

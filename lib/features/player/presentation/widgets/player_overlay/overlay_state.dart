@@ -392,8 +392,7 @@ class PlayerOverlayState extends State<PlayerOverlay> {
                 initialData: widget.engine.position,
                 builder: (_, posSnap) {
                   return StreamBuilder<Duration>(
-                    stream:
-                        widget.active ? widget.engine.durationStream : null,
+                    stream: widget.active ? widget.engine.durationStream : null,
                     initialData: widget.engine.duration,
                     builder: (_, durSnap) {
                       final pos = posSnap.data ?? Duration.zero;
@@ -438,4 +437,3 @@ class PlayerOverlayState extends State<PlayerOverlay> {
     );
   }
 }
-

@@ -199,4 +199,3 @@ class _QuickSearchBarState extends State<_QuickSearchBar> {
     );
   }
 }
-

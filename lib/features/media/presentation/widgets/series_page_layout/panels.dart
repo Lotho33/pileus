@@ -66,6 +66,10 @@ class _SeasonPosterPanel extends StatelessWidget {
         aspectRatio: 2 / 3,
         child: posterUrl.isNotEmpty
             ? CachedNetworkImage(
+                // Web-only, no-op on every other platform — see image_sizing.dart's
+                // "ImageRenderMethodForWeb.HttpGet" section for why every
+                // CachedNetworkImage call site in the app sets this.
+                imageRenderMethodForWeb: ImageRenderMethodForWeb.HttpGet,
                 imageUrl: posterSrc(posterUrl, cacheWidthFor(context, 360)),
                 fit: BoxFit.cover,
                 memCacheWidth: cacheWidthFor(context, 360),
@@ -79,4 +83,3 @@ class _SeasonPosterPanel extends StatelessWidget {
     );
   }
 }
-

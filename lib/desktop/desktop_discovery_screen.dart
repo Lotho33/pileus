@@ -64,8 +64,7 @@ class _DesktopDiscoveryScreenState extends State<DesktopDiscoveryScreen> {
             '"$host:${ServerPorts.http}" non è un server Mycelium.');
       }
       final fpRaw = info['grpc_tls_fingerprint'] as String?;
-      final tlsFingerprint =
-          (fpRaw != null && fpRaw.isNotEmpty) ? fpRaw : null;
+      final tlsFingerprint = (fpRaw != null && fpRaw.isNotEmpty) ? fpRaw : null;
 
       try {
         final sock = await Socket.connect(host, ServerPorts.grpc,

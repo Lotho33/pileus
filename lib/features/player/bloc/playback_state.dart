@@ -14,7 +14,6 @@ class FetchingStreams extends PlaybackState {
   const FetchingStreams();
 }
 
-
 class ResolvingMediaStream extends PlaybackState {
   const ResolvingMediaStream();
 }

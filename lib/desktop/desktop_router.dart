@@ -23,13 +23,10 @@ final GoRouter desktopRouter = GoRouter(
   routes: [
     GoRoute(path: '/splash', builder: (_, __) => const DesktopSplashScreen()),
     GoRoute(
-        path: '/discovery',
-        builder: (_, __) => const DesktopDiscoveryScreen()),
+        path: '/discovery', builder: (_, __) => const DesktopDiscoveryScreen()),
+    GoRoute(path: '/pairing', builder: (_, __) => const DesktopPairingScreen()),
     GoRoute(
-        path: '/pairing', builder: (_, __) => const DesktopPairingScreen()),
-    GoRoute(
-        path: '/profiles',
-        builder: (_, __) => const DesktopProfilesScreen()),
+        path: '/profiles', builder: (_, __) => const DesktopProfilesScreen()),
     GoRoute(path: '/home', builder: (_, __) => const DesktopShell()),
     GoRoute(
       path: '/details/:pluginId/:mediaId',

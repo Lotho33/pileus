@@ -182,6 +182,11 @@ class _LiveCardViewState extends State<_LiveCardView> {
                     borderRadius: const BorderRadius.all(Radius.circular(12)),
                     child: widget.posterUrl.isNotEmpty
                         ? CachedNetworkImage(
+                            // Web-only, no-op on every other platform — see image_sizing.dart's
+                            // "ImageRenderMethodForWeb.HttpGet" section for why every
+                            // CachedNetworkImage call site in the app sets this.
+                            imageRenderMethodForWeb:
+                                ImageRenderMethodForWeb.HttpGet,
                             imageUrl: posterSrc(widget.posterUrl,
                                 cacheWidthFor(context, widget.width),
                                 proxy: true),

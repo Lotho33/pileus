@@ -28,7 +28,6 @@ part 'quick_search_area/area_state.dart';
 part 'quick_search_area/search_bar.dart';
 part 'quick_search_area/see_all_button.dart';
 
-
 // ── quick search ─────────────────────────────────────────────────────────
 // Reached by pressing up from the first catalog row (see
 // onNavigateUpFromCarousel in home_screen.dart's _PluginPageBody) — scoped
@@ -69,4 +68,3 @@ class QuickSearchArea extends StatefulWidget {
   @override
   State<QuickSearchArea> createState() => _QuickSearchAreaState();
 }
-

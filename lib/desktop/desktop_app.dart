@@ -60,8 +60,7 @@ class PileusDesktopApp extends StatelessWidget {
             final f = (w / 1280).clamp(1.0, 1.32);
             return MediaQuery(
               data: mq.copyWith(
-                textScaler:
-                    TextScaler.linear(math.min(base * f, base + 0.7)),
+                textScaler: TextScaler.linear(math.min(base * f, base + 0.7)),
               ),
               child: child!,
             );

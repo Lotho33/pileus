@@ -207,8 +207,7 @@ class _SettingsPluginsBodyState extends State<_SettingsPluginsBody> {
                                         .requestFocus())
                                 : () => _pluginFn(state.plugins[i + 1].pluginId)
                                     .requestFocus(),
-                            onTap: () => _openPlugin(
-                                state.plugins[i].pluginId,
+                            onTap: () => _openPlugin(state.plugins[i].pluginId,
                                 state.plugins[i].name),
                           ),
                         if (_hidden.isNotEmpty) ...[

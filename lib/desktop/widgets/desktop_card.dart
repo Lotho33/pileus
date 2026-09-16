@@ -7,6 +7,8 @@ import '../../core/utils/image_sizing.dart';
 import '../../features/player/resolve_and_play.dart';
 import '../../shared/widgets/open_catalog_item.dart';
 import 'desktop_dialogs.dart';
+import 'package:cached_network_image_platform_interface/cached_network_image_platform_interface.dart'
+    show ImageRenderMethodForWeb;
 
 /// Point-and-click catalog card for the desktop rows. Hover lifts and scales
 /// it and fades in a Play / Info overlay; left-click opens details,
@@ -116,11 +118,15 @@ class _DesktopCardState extends State<DesktopCard> {
                         children: [
                           if (widget.item.posterUrl.isNotEmpty)
                             CachedNetworkImage(
+                              // Web-only, no-op on every other platform — see image_sizing.dart's
+                              // "ImageRenderMethodForWeb.HttpGet" section for why every
+                              // CachedNetworkImage call site in the app sets this.
+                              imageRenderMethodForWeb:
+                                  ImageRenderMethodForWeb.HttpGet,
                               imageUrl: posterSrc(widget.item.posterUrl, imgW),
                               memCacheWidth: imgW,
                               fit: BoxFit.cover,
-                              fadeInDuration:
-                                  const Duration(milliseconds: 160),
+                              fadeInDuration: const Duration(milliseconds: 160),
                               placeholder: (_, __) =>
                                   const ColoredBox(color: AppTheme.surface2),
                               errorWidget: (_, __, ___) =>
@@ -204,9 +210,7 @@ class _HoverOverlay extends StatelessWidget {
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
                     Icon(
-                        live
-                            ? Icons.sensors_rounded
-                            : Icons.play_arrow_rounded,
+                        live ? Icons.sensors_rounded : Icons.play_arrow_rounded,
                         size: 18,
                         color: AppTheme.bg),
                     const SizedBox(width: 4),

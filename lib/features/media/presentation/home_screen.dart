@@ -3,7 +3,8 @@ import 'dart:ui' show ImageFilter;
 
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter_svg/flutter_svg.dart';
-import 'package:flutter/foundation.dart' show ValueListenable, ValueNotifier, kDebugMode;
+import 'package:flutter/foundation.dart'
+    show ValueListenable, ValueNotifier, kDebugMode;
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:flutter/services.dart';
@@ -49,6 +50,8 @@ import '../bloc/plugin_bloc.dart';
 import '../bloc/plugin_event.dart';
 import '../bloc/plugin_state.dart';
 import '../data/continue_watching_item.dart';
+import 'package:cached_network_image_platform_interface/cached_network_image_platform_interface.dart'
+    show ImageRenderMethodForWeb;
 
 part 'home_screen/home_view.dart';
 part 'home_screen/plugin_page.dart';

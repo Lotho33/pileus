@@ -109,8 +109,7 @@ class PluginCatalogPrefs {
   factory PluginCatalogPrefs.fromJson(Map<String, dynamic> json) =>
       PluginCatalogPrefs(
         order: (json['order'] as List?)?.cast<String>() ?? const [],
-        hidden:
-            ((json['hidden'] as List?)?.cast<String>() ?? const []).toSet(),
+        hidden: ((json['hidden'] as List?)?.cast<String>() ?? const []).toSet(),
       );
 
   Map<String, dynamic> toJson() => {

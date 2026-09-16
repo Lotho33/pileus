@@ -67,8 +67,7 @@ class _MobileDiscoveryScreenState extends State<MobileDiscoveryScreen> {
             '"$host:${ServerPorts.http}" non è un server Mycelium.');
       }
       final fpRaw = info['grpc_tls_fingerprint'] as String?;
-      final tlsFingerprint =
-          (fpRaw != null && fpRaw.isNotEmpty) ? fpRaw : null;
+      final tlsFingerprint = (fpRaw != null && fpRaw.isNotEmpty) ? fpRaw : null;
 
       // 2. gRPC side (:50051) — pairing and every catalog call go here, and
       //    it's often bound/published separately from :8000. Fail loudly
@@ -92,7 +91,8 @@ class _MobileDiscoveryScreenState extends State<MobileDiscoveryScreen> {
       if (mounted) setState(() => _error = e.message);
     } catch (_) {
       if (mounted) {
-        setState(() => _error = 'Nessun server Mycelium raggiungibile a "$host".');
+        setState(
+            () => _error = 'Nessun server Mycelium raggiungibile a "$host".');
       }
     } finally {
       if (mounted) setState(() => _busy = false);

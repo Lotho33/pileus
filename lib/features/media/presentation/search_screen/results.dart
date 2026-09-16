@@ -4,7 +4,6 @@
 // all parts.
 part of '../search_screen.dart';
 
-
 // ── Search carousel — fixed-slot horizontal carousel (6 cards) ────────────────
 // Wraps the shared CardCarouselBlockView (SDUI module). Load-more is an
 // explicit D-pad-reachable arrow past the last card (see _LoadMoreArrow),

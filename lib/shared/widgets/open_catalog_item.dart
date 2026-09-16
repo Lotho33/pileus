@@ -24,7 +24,8 @@ void openCatalogItem(BuildContext ctx, String pluginId, CatalogItem item) {
     // blank behind a spinner until GetDetails round-trips.
     ctx.push('/details/$pluginId/${Uri.encodeComponent(item.id)}', extra: item);
   } else if (item.isDir) {
-    ctx.push('/browse/$pluginId/${Uri.encodeComponent(item.id)}', extra: item.title);
+    ctx.push('/browse/$pluginId/${Uri.encodeComponent(item.id)}',
+        extra: item.title);
   } else {
     // extra: item — the catalog item is already fully loaded and its
     // fanart/poster already decoded/cached from wherever the user tapped

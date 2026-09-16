@@ -82,6 +82,10 @@ class _LogoWidget extends StatelessWidget {
       );
     }
     return CachedNetworkImage(
+      // Web-only, no-op on every other platform — see image_sizing.dart's
+      // "ImageRenderMethodForWeb.HttpGet" section for why every
+      // CachedNetworkImage call site in the app sets this.
+      imageRenderMethodForWeb: ImageRenderMethodForWeb.HttpGet,
       imageUrl: posterSrc(url, cacheWidthFor(context, width)),
       width: width,
       height: height,
@@ -412,4 +416,3 @@ class _Dot extends StatelessWidget {
     );
   }
 }
-

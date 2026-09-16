@@ -74,6 +74,11 @@ dependencies:
 
   # Image caching
   cached_network_image: ^3.4.1
+  # Direct dep only for ImageRenderMethodForWeb, referenced at every
+  # CachedNetworkImage call site (see image_sizing.dart) — was already a
+  # transitive dep of cached_network_image itself; listed directly now that
+  # the app imports it by name, rather than relying on transitive resolution.
+  cached_network_image_platform_interface: ^4.1.1
 
   # Utils
   uuid: ^4.4.2

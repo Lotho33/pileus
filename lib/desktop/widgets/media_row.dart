@@ -109,8 +109,7 @@ class _MediaRowState extends State<MediaRow> {
                     controller: _c,
                     scrollDirection: Axis.horizontal,
                     clipBehavior: Clip.none,
-                    padding:
-                        EdgeInsets.symmetric(horizontal: widget.gutter),
+                    padding: EdgeInsets.symmetric(horizontal: widget.gutter),
                     itemCount: widget.itemCount,
                     physics: const ClampingScrollPhysics(),
                     separatorBuilder: (_, __) => const SizedBox(width: 14),

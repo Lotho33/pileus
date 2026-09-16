@@ -10,6 +10,8 @@ import '../../features/player/resolve_and_play.dart';
 import '../../shared/responsive.dart';
 import '../../shared/widgets/open_catalog_item.dart';
 import 'desktop_dialogs.dart';
+import 'package:cached_network_image_platform_interface/cached_network_image_platform_interface.dart'
+    show ImageRenderMethodForWeb;
 
 /// Large-screen hero: the first item of the active plugin's first non-live
 /// catalog, shown as a wide backdrop with a left-aligned logo / metadata and
@@ -168,6 +170,10 @@ class _DesktopHeroState extends State<DesktopHero>
         children: [
           if (_backdrop.isNotEmpty)
             CachedNetworkImage(
+              // Web-only, no-op on every other platform — see image_sizing.dart's
+              // "ImageRenderMethodForWeb.HttpGet" section for why every
+              // CachedNetworkImage call site in the app sets this.
+              imageRenderMethodForWeb: ImageRenderMethodForWeb.HttpGet,
               imageUrl: backdropSrc(_backdrop, imgW),
               memCacheWidth: imgW,
               fit: BoxFit.cover,
@@ -219,13 +225,17 @@ class _DesktopHeroState extends State<DesktopHero>
                         constraints:
                             BoxConstraints(maxHeight: logoH, maxWidth: logoW),
                         child: CachedNetworkImage(
+                          // Web-only, no-op on every other platform — see image_sizing.dart's
+                          // "ImageRenderMethodForWeb.HttpGet" section for why every
+                          // CachedNetworkImage call site in the app sets this.
+                          imageRenderMethodForWeb:
+                              ImageRenderMethodForWeb.HttpGet,
                           imageUrl: _logoUrl,
-                          memCacheWidth:
-                              cacheWidthFor(context, logoW),
+                          memCacheWidth: cacheWidthFor(context, logoW),
                           fit: BoxFit.contain,
                           alignment: Alignment.centerLeft,
-                          errorWidget: (_, __, ___) =>
-                              _TitleText(it.title, size: widget.bp.heroTitleSize),
+                          errorWidget: (_, __, ___) => _TitleText(it.title,
+                              size: widget.bp.heroTitleSize),
                         ),
                       )
                     else if (_enriched)

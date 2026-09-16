@@ -50,7 +50,9 @@ SduiCardVariant _variantFor(CatalogDef catalogDef) {
       // Unset, or a future value this client doesn't recognize yet —
       // forward-compat contract: fall back to the legacy type-based
       // inference rather than crash or silently drop content.
-      return catalogDef.type == 'live' ? SduiCardVariant.live : SduiCardVariant.poster;
+      return catalogDef.type == 'live'
+          ? SduiCardVariant.live
+          : SduiCardVariant.poster;
   }
 }
 
@@ -61,7 +63,8 @@ SduiCardVariant _variantFor(CatalogDef catalogDef) {
 /// [sduiSchemaForCatalogDef] because it runs before the row's items are
 /// loaded). Keeping both call sites on this one function is what stops
 /// them drifting apart.
-bool isFeaturedCatalog(CatalogDef catalogDef) => catalogDef.styleHint == 'featured';
+bool isFeaturedCatalog(CatalogDef catalogDef) =>
+    catalogDef.styleHint == 'featured';
 
 /// Centralizes `extra[...]` parsing for a catalog card. Single source of
 /// truth for both the home-screen catalog rows and the search results

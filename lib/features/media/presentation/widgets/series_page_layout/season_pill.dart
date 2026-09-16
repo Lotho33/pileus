@@ -112,4 +112,3 @@ class _SeasonPillState extends State<_SeasonPill> {
     );
   }
 }
-

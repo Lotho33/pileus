@@ -96,4 +96,3 @@ class _LoadMoreCardView extends StatelessWidget {
     );
   }
 }
-

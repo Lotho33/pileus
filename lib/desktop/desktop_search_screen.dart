@@ -2,8 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
 import '../core/di/injection.dart';
-import '../core/grpc/clients/media_client.dart'
-    show PluginInfo, SearchFilter;
+import '../core/grpc/clients/media_client.dart' show PluginInfo, SearchFilter;
 import '../core/theme/app_theme.dart';
 import '../features/auth/bloc/auth_bloc.dart';
 import '../features/auth/bloc/auth_event.dart';
@@ -46,7 +45,8 @@ class _DesktopSearchScreenState extends State<DesktopSearchScreen> {
     super.initState();
     _bloc = DiscoveryBloc(
       getIt<MediaRepository>(),
-      onSessionExpired: () => getIt<AuthBloc>().add(const SessionExpiredEvent()),
+      onSessionExpired: () =>
+          getIt<AuthBloc>().add(const SessionExpiredEvent()),
     );
   }
 
@@ -117,8 +117,8 @@ class _DesktopSearchScreenState extends State<DesktopSearchScreen> {
     }
     _focus.unfocus();
     setState(() => _submitted = q.isEmpty ? '·' : q);
-    _bloc.add(SearchRequestEvent(
-        pluginId: id, query: q, filters: Map.of(_active)));
+    _bloc.add(
+        SearchRequestEvent(pluginId: id, query: q, filters: Map.of(_active)));
   }
 
   Future<void> _openFilters() async {
@@ -227,8 +227,7 @@ class _DesktopSearchScreenState extends State<DesktopSearchScreen> {
                         );
                       }
                       if (s is DiscoveryLoading) {
-                        return const Center(
-                            child: CircularProgressIndicator());
+                        return const Center(child: CircularProgressIndicator());
                       }
                       if (s is DiscoveryError) {
                         return const _Hint(
@@ -243,11 +242,10 @@ class _DesktopSearchScreenState extends State<DesktopSearchScreen> {
                         }
                         final capH =
                             captionBoxHeight(context, bp.cardTitleSize);
-                        final cellH =
-                            bp.cardWidth * 1.5 + 8 + capH + 20;
+                        final cellH = bp.cardWidth * 1.5 + 8 + capH + 20;
                         return GridView.builder(
-                          padding: EdgeInsets.fromLTRB(
-                              bp.gutter, 10, bp.gutter, 40),
+                          padding:
+                              EdgeInsets.fromLTRB(bp.gutter, 10, bp.gutter, 40),
                           gridDelegate:
                               SliverGridDelegateWithMaxCrossAxisExtent(
                             maxCrossAxisExtent: bp.cardWidth + 24,
@@ -306,8 +304,7 @@ class _SearchField extends StatelessWidget {
         fillColor: AppTheme.surface,
         hintText: hint,
         hintStyle: const TextStyle(color: AppTheme.textLow, fontSize: 15),
-        prefixIcon:
-            const Icon(Icons.search, size: 20, color: AppTheme.textMid),
+        prefixIcon: const Icon(Icons.search, size: 20, color: AppTheme.textMid),
         suffixIcon: ValueListenableBuilder<TextEditingValue>(
           valueListenable: controller,
           builder: (_, v, __) => v.text.isEmpty
@@ -347,16 +344,15 @@ class _PluginDropdown extends StatelessWidget {
 
   Future<void> _open(BuildContext context) async {
     final box = context.findRenderObject() as RenderBox;
-    final overlay =
-        Overlay.of(context).context.findRenderObject() as RenderBox;
+    final overlay = Overlay.of(context).context.findRenderObject() as RenderBox;
     final topLeft =
         box.localToGlobal(box.size.bottomLeft(Offset.zero), ancestor: overlay);
     final picked = await showMenu<String>(
       context: context,
       color: AppTheme.surface,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      position: RelativeRect.fromLTRB(
-          topLeft.dx, topLeft.dy + 4, topLeft.dx, 0),
+      position:
+          RelativeRect.fromLTRB(topLeft.dx, topLeft.dy + 4, topLeft.dx, 0),
       items: [
         for (final p in plugins)
           PopupMenuItem<String>(
@@ -388,8 +384,8 @@ class _PluginDropdown extends StatelessWidget {
             mainAxisSize: MainAxisSize.min,
             children: [
               Text(label,
-                  style: const TextStyle(
-                      color: AppTheme.textHigh, fontSize: 13)),
+                  style:
+                      const TextStyle(color: AppTheme.textHigh, fontSize: 13)),
               const Icon(Icons.arrow_drop_down_rounded,
                   color: AppTheme.textMid),
             ],

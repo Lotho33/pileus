@@ -556,6 +556,11 @@ class _ContinueWatchingCardState extends State<_ContinueWatchingCard> {
                   borderRadius: BorderRadius.circular(10),
                   child: widget.item.poster.isNotEmpty
                       ? CachedNetworkImage(
+                          // Web-only, no-op on every other platform — see image_sizing.dart's
+                          // "ImageRenderMethodForWeb.HttpGet" section for why every
+                          // CachedNetworkImage call site in the app sets this.
+                          imageRenderMethodForWeb:
+                              ImageRenderMethodForWeb.HttpGet,
                           imageUrl: posterSrc(widget.item.poster,
                               cacheWidthFor(context, widget.width),
                               proxy: true),
@@ -846,4 +851,3 @@ class _SkeletonRow extends StatelessWidget {
     );
   }
 }
-

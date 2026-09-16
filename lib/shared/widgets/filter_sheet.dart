@@ -64,7 +64,13 @@ class _FilterSheet extends StatefulWidget {
 class _FilterSheetState extends State<_FilterSheet> {
   late Map<String, String> _draft = Map.of(widget.active);
 
-  static const _supported = {'select', 'multiselect', 'bool', 'number', 'range'};
+  static const _supported = {
+    'select',
+    'multiselect',
+    'bool',
+    'number',
+    'range'
+  };
 
   void _set(String id, String value) {
     setState(() {
@@ -189,12 +195,14 @@ class _FilterRow extends StatelessWidget {
         ),
         const SizedBox(height: 10),
         switch (filter.type) {
-          'select' => _SelectField(filter: filter, value: value, onChanged: onChanged),
+          'select' =>
+            _SelectField(filter: filter, value: value, onChanged: onChanged),
           'multiselect' =>
             _MultiField(filter: filter, value: value, onChanged: onChanged),
           'bool' => _BoolField(value: value, onChanged: onChanged),
           'number' => _NumberField(value: value, onChanged: onChanged),
-          'range' => _RangeField(filter: filter, value: value, onChanged: onChanged),
+          'range' =>
+            _RangeField(filter: filter, value: value, onChanged: onChanged),
           _ => const SizedBox.shrink(),
         },
       ],

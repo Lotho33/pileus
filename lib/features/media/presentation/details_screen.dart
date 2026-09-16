@@ -20,13 +20,14 @@ import '../bloc/details_state.dart';
 import '../data/media_repository.dart';
 import 'widgets/details_common.dart';
 import 'widgets/series_page_layout.dart';
+import 'package:cached_network_image_platform_interface/cached_network_image_platform_interface.dart'
+    show ImageRenderMethodForWeb;
 
 part 'details_screen/movie_layout.dart';
 part 'details_screen/live_event_layout.dart';
 part 'details_screen/anime_movie_layout.dart';
 part 'details_screen/misc_layouts.dart';
 part 'details_screen/watch_button.dart';
-
 
 // ── Layout ratios — baseline 1920×1080 ────────────────────────────────────────
 // Used inside LayoutBuilder: multiply by bc.maxWidth or bc.maxHeight.
@@ -191,7 +192,6 @@ class _DetailsContent extends StatelessWidget {
     return _MovieLayout(pluginId: pluginId, item: item, movie: movie);
   }
 }
-
 
 // ── Shared helpers ────────────────────────────────────────────────────────────
 

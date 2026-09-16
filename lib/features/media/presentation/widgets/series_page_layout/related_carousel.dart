@@ -495,6 +495,11 @@ class _RelatedCard extends StatelessWidget {
                     borderRadius: BorderRadius.circular(6.5),
                     child: poster.isNotEmpty
                         ? CachedNetworkImage(
+                            // Web-only, no-op on every other platform — see image_sizing.dart's
+                            // "ImageRenderMethodForWeb.HttpGet" section for why every
+                            // CachedNetworkImage call site in the app sets this.
+                            imageRenderMethodForWeb:
+                                ImageRenderMethodForWeb.HttpGet,
                             imageUrl:
                                 posterSrc(poster, cacheWidthFor(context, _w)),
                             fit: BoxFit.cover,
@@ -558,4 +563,3 @@ class _RelatedCard extends StatelessWidget {
     );
   }
 }
-

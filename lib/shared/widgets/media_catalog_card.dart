@@ -4,6 +4,8 @@ import 'package:flutter/material.dart';
 import '../../core/theme/app_scale.dart';
 import '../../core/utils/image_sizing.dart';
 import 'tv_focusable.dart';
+import 'package:cached_network_image_platform_interface/cached_network_image_platform_interface.dart'
+    show ImageRenderMethodForWeb;
 
 const _kFocusColor = Color(0xFF7C6AF7);
 
@@ -107,6 +109,11 @@ class MediaCatalogCard extends StatelessWidget {
                   children: [
                     posterUrl.isNotEmpty
                         ? CachedNetworkImage(
+                            // Web-only, no-op on every other platform — see image_sizing.dart's
+                            // "ImageRenderMethodForWeb.HttpGet" section for why every
+                            // CachedNetworkImage call site in the app sets this.
+                            imageRenderMethodForWeb:
+                                ImageRenderMethodForWeb.HttpGet,
                             imageUrl: posterSrc(
                                 posterUrl, cacheWidthFor(context, width)),
                             fit: BoxFit.cover,

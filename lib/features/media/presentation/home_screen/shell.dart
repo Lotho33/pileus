@@ -1379,4 +1379,3 @@ class _StandardHomeShellState extends State<_StandardHomeShell> {
 // _HeroBackground/_SportGradientBg were extracted to
 // widgets/home_hero_background.dart (HomeHeroBackground) — first piece
 // split out per the design audit's file-size recommendation (§08).
-

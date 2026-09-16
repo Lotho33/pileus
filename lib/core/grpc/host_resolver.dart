@@ -49,8 +49,7 @@ String? get _envHost {
 // package:shelf" is the dev server, not mycelium, which is Go).
 String _webHost() {
   try {
-    final saved =
-        DeviceSession.readFrom(getIt<SharedPreferences>())?.grpcHost;
+    final saved = DeviceSession.readFrom(getIt<SharedPreferences>())?.grpcHost;
     if (saved != null && saved.isNotEmpty) return saved;
     final host = Uri.base.host;
     return host.isNotEmpty ? host : 'mycelium.local';
@@ -164,7 +163,8 @@ String? myceliumHttpBase() {
       // origin isn't mycelium) must actually be used here too, or every
       // /plugin-icon//pileus/info//img request keeps silently hitting the
       // page's own origin regardless of what was saved (2026-09-14).
-      final saved = DeviceSession.readFrom(getIt<SharedPreferences>())?.grpcHost;
+      final saved =
+          DeviceSession.readFrom(getIt<SharedPreferences>())?.grpcHost;
       if (saved != null && saved.isNotEmpty && saved != u.host) {
         return 'http://$saved:$_myceliumHttpPort';
       }

@@ -2,6 +2,8 @@ import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 
 import '../../../../core/utils/image_sizing.dart';
+import 'package:cached_network_image_platform_interface/cached_network_image_platform_interface.dart'
+    show ImageRenderMethodForWeb;
 
 class PlayerAudioArtwork extends StatelessWidget {
   final String? poster;
@@ -27,6 +29,10 @@ class PlayerAudioArtwork extends StatelessWidget {
               ),
               child: hasPoster
                   ? CachedNetworkImage(
+                      // Web-only, no-op on every other platform — see image_sizing.dart's
+                      // "ImageRenderMethodForWeb.HttpGet" section for why every
+                      // CachedNetworkImage call site in the app sets this.
+                      imageRenderMethodForWeb: ImageRenderMethodForWeb.HttpGet,
                       imageUrl: poster!,
                       fit: BoxFit.cover,
                       memCacheWidth: cacheWidthFor(context, 240),

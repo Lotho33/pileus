@@ -35,7 +35,8 @@ class _MobileSplashScreenState extends State<MobileSplashScreen> {
     // hot restart, back-navigation to /splash, or AppStartedEvent
     // re-emitting a state equal to the current one — the listener never
     // fires. Route off the current state once, post-frame.
-    WidgetsBinding.instance.addPostFrameCallback((_) => _maybeRoute(_auth.state));
+    WidgetsBinding.instance
+        .addPostFrameCallback((_) => _maybeRoute(_auth.state));
     _bootTimeout = Timer(const Duration(seconds: 20),
         () => _maybeRoute(_auth.state, fallback: '/discovery'));
   }
@@ -80,15 +81,15 @@ class _MobileSplashScreenState extends State<MobileSplashScreen> {
               SvgPicture.asset(
                 'assets/branding/pileus_icon.svg',
                 height: 96,
-                colorFilter: const ColorFilter.mode(
-                    AppTheme.textHigh, BlendMode.srcIn),
+                colorFilter:
+                    const ColorFilter.mode(AppTheme.textHigh, BlendMode.srcIn),
               ),
               const SizedBox(height: 24),
               SvgPicture.asset(
                 'assets/branding/pileus_wordmark.svg',
                 height: 34,
-                colorFilter: const ColorFilter.mode(
-                    AppTheme.textHigh, BlendMode.srcIn),
+                colorFilter:
+                    const ColorFilter.mode(AppTheme.textHigh, BlendMode.srcIn),
               ),
               const SizedBox(height: 40),
               const SizedBox(

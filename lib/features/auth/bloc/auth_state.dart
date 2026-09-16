@@ -31,7 +31,6 @@ class ProfileSelectionRequired extends AuthState {
   List<Object?> get props => [profiles];
 }
 
-
 class AuthenticatedState extends AuthState {
   final String jwt;
   final String activeProfileId;

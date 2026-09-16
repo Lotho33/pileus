@@ -98,11 +98,12 @@ class _UpdateBody extends StatelessWidget {
           ),
           if (notes != null) ...[
             const SizedBox(height: 12),
-            Text('Novità', style: TextStyle(
-                color: AppTheme.textLow,
-                fontSize: AppScale.caption(context),
-                fontWeight: FontWeight.w700,
-                letterSpacing: 1.2)),
+            Text('Novità',
+                style: TextStyle(
+                    color: AppTheme.textLow,
+                    fontSize: AppScale.caption(context),
+                    fontWeight: FontWeight.w700,
+                    letterSpacing: 1.2)),
             const SizedBox(height: 4),
             ConstrainedBox(
               constraints:

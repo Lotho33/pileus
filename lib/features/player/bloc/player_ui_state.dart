@@ -37,8 +37,13 @@ class PlayerUiState extends Equatable {
   }
 
   @override
-  List<Object?> get props =>
-      [overlayVisible, settingsOpen, buffering, bufferingPercent, nextEpisodeSecs];
+  List<Object?> get props => [
+        overlayVisible,
+        settingsOpen,
+        buffering,
+        bufferingPercent,
+        nextEpisodeSecs
+      ];
 }
 
 const _sentinel = Object();

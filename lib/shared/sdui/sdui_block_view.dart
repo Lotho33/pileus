@@ -20,7 +20,8 @@ class SduiBlockView extends StatelessWidget {
   /// so they don't need their own interaction bag today.
   final CardCarouselInteraction? carouselInteraction;
 
-  const SduiBlockView({super.key, required this.block, this.carouselInteraction});
+  const SduiBlockView(
+      {super.key, required this.block, this.carouselInteraction});
 
   @override
   Widget build(BuildContext context) {

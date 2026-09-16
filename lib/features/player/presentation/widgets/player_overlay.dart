@@ -16,7 +16,6 @@ part 'player_overlay/overlay_state.dart';
 part 'player_overlay/buttons.dart';
 part 'player_overlay/live_overlay.dart';
 
-
 // ─────────────────────────────────────────────────────────────────────────────
 // Overlay VOD: top bar + centro play/skip/episodio + seekbar in basso
 // ─────────────────────────────────────────────────────────────────────────────
@@ -93,4 +92,3 @@ class PlayerOverlay extends StatefulWidget {
   @override
   State<PlayerOverlay> createState() => PlayerOverlayState();
 }
-

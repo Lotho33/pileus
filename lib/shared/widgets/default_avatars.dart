@@ -55,7 +55,10 @@ class DefaultAvatarView extends StatelessWidget {
         gradient: LinearGradient(
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
-          colors: [entry.color.withValues(alpha: 0.85), entry.color.withValues(alpha: 0.35)],
+          colors: [
+            entry.color.withValues(alpha: 0.85),
+            entry.color.withValues(alpha: 0.35)
+          ],
         ),
       ),
       alignment: Alignment.center,

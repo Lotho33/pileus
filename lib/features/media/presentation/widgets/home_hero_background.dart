@@ -5,6 +5,8 @@ import '../../../../core/grpc/clients/media_client.dart';
 import '../../../../core/perf_profile.dart';
 import '../../../../core/utils/image_sizing.dart';
 import '../../../../shared/sdui/sport_theme.dart';
+import 'package:cached_network_image_platform_interface/cached_network_image_platform_interface.dart'
+    show ImageRenderMethodForWeb;
 
 // ── hero background — full-bleed fanart with crossfade ───────────────────────
 // Image fills the screen; a bottom gradient fades it seamlessly into the dark
@@ -98,6 +100,10 @@ class _HomeHeroBackgroundState extends State<HomeHeroBackground> {
           const ColoredBox(color: Color(0xFF0A0A0F)),
         Positioned.fill(
           child: CachedNetworkImage(
+            // Web-only, no-op on every other platform — see image_sizing.dart's
+            // "ImageRenderMethodForWeb.HttpGet" section for why every
+            // CachedNetworkImage call site in the app sets this.
+            imageRenderMethodForWeb: ImageRenderMethodForWeb.HttpGet,
             imageUrl: backdropSrc(url, srcW, proxy: true),
             fit: BoxFit.cover,
             alignment: const Alignment(0, -0.25),

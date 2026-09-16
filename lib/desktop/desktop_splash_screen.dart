@@ -74,15 +74,15 @@ class _DesktopSplashScreenState extends State<DesktopSplashScreen> {
               SvgPicture.asset(
                 'assets/branding/pileus_icon.svg',
                 height: 112,
-                colorFilter: const ColorFilter.mode(
-                    AppTheme.textHigh, BlendMode.srcIn),
+                colorFilter:
+                    const ColorFilter.mode(AppTheme.textHigh, BlendMode.srcIn),
               ),
               const SizedBox(height: 28),
               SvgPicture.asset(
                 'assets/branding/pileus_wordmark.svg',
                 height: 40,
-                colorFilter: const ColorFilter.mode(
-                    AppTheme.textHigh, BlendMode.srcIn),
+                colorFilter:
+                    const ColorFilter.mode(AppTheme.textHigh, BlendMode.srcIn),
               ),
               const SizedBox(height: 44),
               const SizedBox(
@@ -151,7 +151,9 @@ class DesktopAuthCard extends StatelessWidget {
                       const SizedBox(height: 8),
                       Text(subtitle,
                           style: const TextStyle(
-                              color: AppTheme.textMid, fontSize: 13, height: 1.4)),
+                              color: AppTheme.textMid,
+                              fontSize: 13,
+                              height: 1.4)),
                       const SizedBox(height: 20),
                       ...children,
                     ],

@@ -10,6 +10,8 @@ import '../../../shared/widgets/error_retry_view.dart';
 import '../../../shared/widgets/pileus_spinner.dart';
 import '../../../shared/widgets/tv_focusable.dart';
 import '../data/media_repository.dart';
+import 'package:cached_network_image_platform_interface/cached_network_image_platform_interface.dart'
+    show ImageRenderMethodForWeb;
 
 class EpisodeDetailScreen extends StatefulWidget {
   final String pluginId;
@@ -274,6 +276,10 @@ class _EpisodeBodyState extends State<_EpisodeBody> {
         if (item.posterUrl.isNotEmpty)
           Positioned.fill(
             child: CachedNetworkImage(
+              // Web-only, no-op on every other platform — see image_sizing.dart's
+              // "ImageRenderMethodForWeb.HttpGet" section for why every
+              // CachedNetworkImage call site in the app sets this.
+              imageRenderMethodForWeb: ImageRenderMethodForWeb.HttpGet,
               imageUrl:
                   backdropSrc(item.posterUrl, backdropCacheWidth(context)),
               fit: BoxFit.cover,
@@ -330,8 +336,8 @@ class _EpisodeBodyState extends State<_EpisodeBody> {
                 // ~1.35× readability boost, these fonts were sized for *and
                 // then* scaled up again on top, same double-scaling bug
                 // details_screen.dart had already fixed elsewhere.
-                final s = AppScale.contentScale(context,
-                    hasFooter: true, floor: 0.5);
+                final s =
+                    AppScale.contentScale(context, hasFooter: true, floor: 0.5);
                 return Center(
                   child: ConstrainedBox(
                     constraints: const BoxConstraints(maxWidth: 1100),
@@ -354,6 +360,11 @@ class _EpisodeBodyState extends State<_EpisodeBody> {
                                     aspectRatio: 16 / 9,
                                     child: item.posterUrl.isNotEmpty
                                         ? CachedNetworkImage(
+                                            // Web-only, no-op on every other platform — see image_sizing.dart's
+                                            // "ImageRenderMethodForWeb.HttpGet" section for why every
+                                            // CachedNetworkImage call site in the app sets this.
+                                            imageRenderMethodForWeb:
+                                                ImageRenderMethodForWeb.HttpGet,
                                             imageUrl: posterSrc(item.posterUrl,
                                                 cacheWidthFor(context, 460)),
                                             fit: BoxFit.cover,

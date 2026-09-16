@@ -5,7 +5,8 @@ class SkipInterval {
   final double start;
   final double end;
 
-  const SkipInterval({required this.type, required this.start, required this.end});
+  const SkipInterval(
+      {required this.type, required this.start, required this.end});
 
   String get label => switch (type) {
         SkipType.op => 'Salta sigla',

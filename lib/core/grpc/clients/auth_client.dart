@@ -40,9 +40,9 @@ class AuthGrpcClient {
       _stub.createProfile(request,
           options: CallOptions(timeout: _defaultRpcTimeout));
 
-  Future<ListProfilesResponse> listProfiles() => _stub.listProfiles(
-      ListProfilesRequest(),
-      options: CallOptions(timeout: _defaultRpcTimeout));
+  Future<ListProfilesResponse> listProfiles() =>
+      _stub.listProfiles(ListProfilesRequest(),
+          options: CallOptions(timeout: _defaultRpcTimeout));
 
   Future<DeleteProfileResponse> deleteProfile(DeleteProfileRequest request) =>
       _stub.deleteProfile(request,

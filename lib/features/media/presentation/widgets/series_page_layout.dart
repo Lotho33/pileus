@@ -19,6 +19,8 @@ import '../../../../shared/utils/safe_focus.dart';
 import '../../../../shared/widgets/pileus_spinner.dart';
 import '../../../../shared/widgets/tv_focusable.dart';
 import 'details_common.dart';
+import 'package:cached_network_image_platform_interface/cached_network_image_platform_interface.dart'
+    show ImageRenderMethodForWeb;
 
 part 'series_page_layout/page.dart';
 part 'series_page_layout/season_pill.dart';
@@ -27,7 +29,6 @@ part 'series_page_layout/panels.dart';
 part 'series_page_layout/episode_popup.dart';
 part 'series_page_layout/related_carousel.dart';
 part 'series_page_layout/related_popup.dart';
-
 
 // Series/anime detail page and its related-items ecosystem — extracted
 // from details_screen.dart, the single largest piece of that file
@@ -106,4 +107,3 @@ class SeriesLayout extends StatelessWidget {
 //   └────────────┴──────────────────────────────────────────┘
 //   CORRELATI  [card][card]...
 //   SIMILI     [card][card]...
-

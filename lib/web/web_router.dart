@@ -40,14 +40,10 @@ final GoRouter webRouter = GoRouter(
   initialLocation: '/splash',
   routes: [
     GoRoute(path: '/splash', builder: (_, __) => const DesktopSplashScreen()),
+    GoRoute(path: '/discovery', builder: (_, __) => const WebDiscoveryScreen()),
+    GoRoute(path: '/pairing', builder: (_, __) => const DesktopPairingScreen()),
     GoRoute(
-        path: '/discovery',
-        builder: (_, __) => const WebDiscoveryScreen()),
-    GoRoute(
-        path: '/pairing', builder: (_, __) => const DesktopPairingScreen()),
-    GoRoute(
-        path: '/profiles',
-        builder: (_, __) => const DesktopProfilesScreen()),
+        path: '/profiles', builder: (_, __) => const DesktopProfilesScreen()),
     GoRoute(
       path: '/home',
       builder: (context, __) => webResponsive(

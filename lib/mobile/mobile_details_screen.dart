@@ -16,6 +16,8 @@ import '../features/media/bloc/details_event.dart';
 import '../features/media/bloc/details_state.dart';
 import '../features/media/data/media_repository.dart';
 import '../features/player/resolve_and_play.dart';
+import 'package:cached_network_image_platform_interface/cached_network_image_platform_interface.dart'
+    show ImageRenderMethodForWeb;
 
 class MobileDetailsScreen extends StatelessWidget {
   final String pluginId;
@@ -195,6 +197,10 @@ class _Body extends StatelessWidget {
         height: 156,
         child: item.posterUrl.isNotEmpty
             ? CachedNetworkImage(
+                // Web-only, no-op on every other platform — see image_sizing.dart's
+                // "ImageRenderMethodForWeb.HttpGet" section for why every
+                // CachedNetworkImage call site in the app sets this.
+                imageRenderMethodForWeb: ImageRenderMethodForWeb.HttpGet,
                 imageUrl:
                     posterSrc(item.posterUrl, cacheWidthFor(context, 104)),
                 memCacheWidth: cacheWidthFor(context, 104),
@@ -226,8 +232,7 @@ class _Body extends StatelessWidget {
           [
             if (item.rating > 0) '★ ${item.rating.toStringAsFixed(1)}',
             if (item.year > 0) '${item.year}',
-            if (_isSeries && seasons.isNotEmpty)
-              '${seasons.length} stagioni',
+            if (_isSeries && seasons.isNotEmpty) '${seasons.length} stagioni',
           ].join('  ·  '),
           maxLines: 2,
           overflow: TextOverflow.ellipsis,
@@ -259,6 +264,11 @@ class _Body extends StatelessWidget {
                     fit: StackFit.expand,
                     children: [
                       CachedNetworkImage(
+                        // Web-only, no-op on every other platform — see image_sizing.dart's
+                        // "ImageRenderMethodForWeb.HttpGet" section for why every
+                        // CachedNetworkImage call site in the app sets this.
+                        imageRenderMethodForWeb:
+                            ImageRenderMethodForWeb.HttpGet,
                         imageUrl: backdropSrc(
                             _fanart, backdropCacheWidth(context),
                             proxy: true),
@@ -308,78 +318,78 @@ class _Body extends StatelessWidget {
               ),
             ),
           Padding(
-            padding: EdgeInsets.fromLTRB(16, noImage ? 16 : overlap + 14, 16, 28),
+            padding:
+                EdgeInsets.fromLTRB(16, noImage ? 16 : overlap + 14, 16, 28),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 if (_genres.isNotEmpty)
-                    Padding(
-                      padding: const EdgeInsets.only(bottom: 12),
-                      child: Wrap(
-                        spacing: 6,
-                        runSpacing: 6,
-                        children: [
-                          for (final g in _genres.take(4))
-                            Chip(
-                              label: Text(g,
-                                  style: const TextStyle(fontSize: 11)),
-                              visualDensity: VisualDensity.compact,
-                              backgroundColor: AppTheme.surface,
-                              side: const BorderSide(color: AppTheme.border),
-                            ),
-                        ],
-                      ),
-                    ),
-                  FilledButton.icon(
-                    onPressed: () => _play(context),
-                    icon: const Icon(Icons.play_arrow_rounded),
-                    label: Text(
-                        _isSeries ? 'Riproduci 1ª puntata' : 'Riproduci'),
-                    style: FilledButton.styleFrom(
-                      minimumSize: const Size.fromHeight(46),
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 12),
+                    child: Wrap(
+                      spacing: 6,
+                      runSpacing: 6,
+                      children: [
+                        for (final g in _genres.take(4))
+                          Chip(
+                            label:
+                                Text(g, style: const TextStyle(fontSize: 11)),
+                            visualDensity: VisualDensity.compact,
+                            backgroundColor: AppTheme.surface,
+                            side: const BorderSide(color: AppTheme.border),
+                          ),
+                      ],
                     ),
                   ),
-                  const SizedBox(height: 16),
-                  if (loading && _plot.isEmpty)
-                    const Padding(
-                      padding: EdgeInsets.symmetric(vertical: 8),
-                      child: LinearProgressIndicator(),
-                    ),
-                  if (_plot.isNotEmpty)
-                    Text(
-                      _plot,
-                      style: const TextStyle(
-                          color: AppTheme.textMid, fontSize: 14, height: 1.45),
-                    ),
-                  if (_isSeries && seasons.isNotEmpty) ...[
-                    const SizedBox(height: 20),
-                    _Seasons(
-                      seasons: seasons,
-                      pluginId: pluginId,
-                      onPlayEpisode: (season, eps, i) {
-                        resolveAndPlay(
-                          context,
-                          pluginId,
-                          eps[i].id,
-                          extra: <String, dynamic>{
-                            'title': eps[i].title,
-                            'showTitle': item.title,
-                            'poster': item.posterUrl,
-                            'parentId': season.directoryId,
-                            'episodeList': eps.map((e) => e.id).toList(),
-                            'episodeTitles': eps.map((e) => e.title).toList(),
-                            'episodeIndex': i,
-                          },
-                        );
-                      },
-                    ),
-                  ],
-                  _RelatedRow(pluginId: pluginId, details: details),
+                FilledButton.icon(
+                  onPressed: () => _play(context),
+                  icon: const Icon(Icons.play_arrow_rounded),
+                  label: Text(_isSeries ? 'Riproduci 1ª puntata' : 'Riproduci'),
+                  style: FilledButton.styleFrom(
+                    minimumSize: const Size.fromHeight(46),
+                  ),
+                ),
+                const SizedBox(height: 16),
+                if (loading && _plot.isEmpty)
+                  const Padding(
+                    padding: EdgeInsets.symmetric(vertical: 8),
+                    child: LinearProgressIndicator(),
+                  ),
+                if (_plot.isNotEmpty)
+                  Text(
+                    _plot,
+                    style: const TextStyle(
+                        color: AppTheme.textMid, fontSize: 14, height: 1.45),
+                  ),
+                if (_isSeries && seasons.isNotEmpty) ...[
+                  const SizedBox(height: 20),
+                  _Seasons(
+                    seasons: seasons,
+                    pluginId: pluginId,
+                    onPlayEpisode: (season, eps, i) {
+                      resolveAndPlay(
+                        context,
+                        pluginId,
+                        eps[i].id,
+                        extra: <String, dynamic>{
+                          'title': eps[i].title,
+                          'showTitle': item.title,
+                          'poster': item.posterUrl,
+                          'parentId': season.directoryId,
+                          'episodeList': eps.map((e) => e.id).toList(),
+                          'episodeTitles': eps.map((e) => e.title).toList(),
+                          'episodeIndex': i,
+                        },
+                      );
+                    },
+                  ),
                 ],
-              ),
+                _RelatedRow(pluginId: pluginId, details: details),
+              ],
             ),
-          ],
-        ),
+          ),
+        ],
+      ),
     );
   }
 }
@@ -444,9 +454,8 @@ class _SeasonsState extends State<_Seasons> {
     final eps = _cache[widget.seasons[_sel].directoryId] ?? const [];
     if (_shown >= eps.length) return;
     final pos = _scrollPos;
-    final notScrollable = pos == null ||
-        !pos.hasContentDimensions ||
-        pos.maxScrollExtent <= 4;
+    final notScrollable =
+        pos == null || !pos.hasContentDimensions || pos.maxScrollExtent <= 4;
     final nearBottom = pos != null &&
         pos.hasContentDimensions &&
         pos.pixels >= pos.maxScrollExtent - 700;
@@ -490,8 +499,8 @@ class _SeasonsState extends State<_Seasons> {
               final s = widget.seasons[i];
               final selected = i == _sel;
               return ChoiceChip(
-                label: Text(
-                    s.label.isNotEmpty ? s.label : 'Stagione ${s.number}'),
+                label:
+                    Text(s.label.isNotEmpty ? s.label : 'Stagione ${s.number}'),
                 selected: selected,
                 onSelected: (_) {
                   setState(() {
@@ -515,38 +524,44 @@ class _SeasonsState extends State<_Seasons> {
             Padding(
               padding: const EdgeInsets.only(bottom: 4),
               child: ListTile(
-              contentPadding: EdgeInsets.zero,
-              leading: ClipRRect(
-                borderRadius: BorderRadius.circular(6),
-                child: SizedBox(
-                  width: 92,
-                  height: 52,
-                  child: eps[i].thumbnailUrl.isNotEmpty
-                      ? CachedNetworkImage(
-                          imageUrl: posterSrc(eps[i].thumbnailUrl,
-                              cacheWidthFor(context, 92),
-                              proxy: true),
-                          memCacheWidth: cacheWidthFor(context, 92),
-                          fit: BoxFit.cover,
-                          errorWidget: (_, __, ___) =>
-                              const ColoredBox(color: AppTheme.surface2),
-                        )
-                      : const ColoredBox(color: AppTheme.surface2),
+                contentPadding: EdgeInsets.zero,
+                leading: ClipRRect(
+                  borderRadius: BorderRadius.circular(6),
+                  child: SizedBox(
+                    width: 92,
+                    height: 52,
+                    child: eps[i].thumbnailUrl.isNotEmpty
+                        ? CachedNetworkImage(
+                            // Web-only, no-op on every other platform — see image_sizing.dart's
+                            // "ImageRenderMethodForWeb.HttpGet" section for why every
+                            // CachedNetworkImage call site in the app sets this.
+                            imageRenderMethodForWeb:
+                                ImageRenderMethodForWeb.HttpGet,
+                            imageUrl: posterSrc(
+                                eps[i].thumbnailUrl, cacheWidthFor(context, 92),
+                                proxy: true),
+                            memCacheWidth: cacheWidthFor(context, 92),
+                            fit: BoxFit.cover,
+                            errorWidget: (_, __, ___) =>
+                                const ColoredBox(color: AppTheme.surface2),
+                          )
+                        : const ColoredBox(color: AppTheme.surface2),
+                  ),
                 ),
+                title: Text(
+                  '${eps[i].episodeNumber}. ${eps[i].title}',
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style:
+                      const TextStyle(color: AppTheme.textHigh, fontSize: 14),
+                ),
+                subtitle: eps[i].duration > 0
+                    ? Text('${eps[i].duration} min',
+                        style: const TextStyle(
+                            color: AppTheme.textLow, fontSize: 12))
+                    : null,
+                onTap: () => widget.onPlayEpisode(season, eps, i),
               ),
-              title: Text(
-                '${eps[i].episodeNumber}. ${eps[i].title}',
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
-                style: const TextStyle(color: AppTheme.textHigh, fontSize: 14),
-              ),
-              subtitle: eps[i].duration > 0
-                  ? Text('${eps[i].duration} min',
-                      style: const TextStyle(
-                          color: AppTheme.textLow, fontSize: 12))
-                  : null,
-              onTap: () => widget.onPlayEpisode(season, eps, i),
-            ),
             ),
           if (eps.length > _shown)
             const Padding(
@@ -648,6 +663,11 @@ class _RelatedRow extends StatelessWidget {
                                 aspectRatio: 2 / 3,
                                 child: poster.isNotEmpty
                                     ? CachedNetworkImage(
+                                        // Web-only, no-op on every other platform — see image_sizing.dart's
+                                        // "ImageRenderMethodForWeb.HttpGet" section for why every
+                                        // CachedNetworkImage call site in the app sets this.
+                                        imageRenderMethodForWeb:
+                                            ImageRenderMethodForWeb.HttpGet,
                                         imageUrl: posterSrc(poster,
                                             cacheWidthFor(context, cardW),
                                             proxy: true),

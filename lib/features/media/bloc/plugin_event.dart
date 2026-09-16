@@ -29,7 +29,6 @@ class RefreshPluginsEvent extends PluginEvent {
   List<Object?> get props => [force];
 }
 
-
 class LoadPluginSettingsEvent extends PluginEvent {
   final String pluginId;
   final String profileId;

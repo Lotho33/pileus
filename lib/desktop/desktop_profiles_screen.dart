@@ -10,6 +10,8 @@ import '../features/auth/bloc/auth_event.dart';
 import '../features/auth/bloc/auth_state.dart';
 import '../shared/widgets/text_prompt_dialog.dart';
 import '../shared/widgets/default_avatars.dart';
+import 'package:cached_network_image_platform_interface/cached_network_image_platform_interface.dart'
+    show ImageRenderMethodForWeb;
 
 /// Desktop profile picker: a centred, hover-highlighted avatar wall — the
 /// large-screen take on the mobile grid.
@@ -144,6 +146,11 @@ class _ProfileTileState extends State<_ProfileTile> {
                                 size: _kTile)
                             : p.avatarUrl.isNotEmpty
                                 ? CachedNetworkImage(
+                                    // Web-only, no-op on every other platform — see image_sizing.dart's
+                                    // "ImageRenderMethodForWeb.HttpGet" section for why every
+                                    // CachedNetworkImage call site in the app sets this.
+                                    imageRenderMethodForWeb:
+                                        ImageRenderMethodForWeb.HttpGet,
                                     imageUrl: p.avatarUrl,
                                     memCacheWidth: 320,
                                     fit: BoxFit.cover,

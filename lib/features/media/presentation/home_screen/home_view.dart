@@ -566,4 +566,3 @@ bool _isPluginReady(PluginInfo p) =>
     p.statusLabel != 'syncing' &&
     p.statusLabel != 'error' &&
     p.catalogs.isNotEmpty;
-

@@ -46,7 +46,8 @@ class _MobilePluginsScreenState extends State<MobilePluginsScreen> {
     super.dispose();
   }
 
-  Set<String> _idsOf(Iterable<PluginInfo> l) => l.map((p) => p.pluginId).toSet();
+  Set<String> _idsOf(Iterable<PluginInfo> l) =>
+      l.map((p) => p.pluginId).toSet();
 
   void _seed(List<PluginInfo> fromBloc, {bool viaSetState = false}) {
     void apply() {
@@ -70,9 +71,8 @@ class _MobilePluginsScreenState extends State<MobilePluginsScreen> {
       final prefs = await _repo.loadPluginPrefs();
       final all = await _repo.listAllPlugins();
       if (!mounted) return;
-      setState(() => _hidden = all
-          .where((p) => prefs.hiddenPlugins.contains(p.pluginId))
-          .toList());
+      setState(() => _hidden =
+          all.where((p) => prefs.hiddenPlugins.contains(p.pluginId)).toList());
     } catch (_) {
       if (mounted) setState(() {});
     }
@@ -199,8 +199,7 @@ class _MobilePluginsScreenState extends State<MobilePluginsScreen> {
                         _header('Nascosti'),
                         for (final p in _hidden)
                           ListTile(
-                            title: Text(
-                                p.name.isNotEmpty ? p.name : p.pluginId,
+                            title: Text(p.name.isNotEmpty ? p.name : p.pluginId,
                                 style:
                                     const TextStyle(color: AppTheme.textMid)),
                             trailing: IconButton(

@@ -26,6 +26,8 @@ import 'widgets/mobile_hero.dart';
 import 'widgets/mobile_poster_card.dart';
 import 'widgets/plugin_switcher_pill.dart';
 import 'widgets/press_scale.dart';
+import 'package:cached_network_image_platform_interface/cached_network_image_platform_interface.dart'
+    show ImageRenderMethodForWeb;
 
 class MobileHomeScreen extends StatelessWidget {
   const MobileHomeScreen({super.key});
@@ -92,8 +94,8 @@ class _MobileHomeViewState extends State<_MobileHomeView> {
     for (final p in plugins) {
       if (p.pluginId == id) match = p;
     }
-    final found =
-        match ?? plugins.firstWhere((p) => p.isReady, orElse: () => plugins.first);
+    final found = match ??
+        plugins.firstWhere((p) => p.isReady, orElse: () => plugins.first);
     if (found.pluginId != id) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (mounted) _activePlugin.value = found.pluginId;
@@ -148,7 +150,8 @@ class _MobileHomeViewState extends State<_MobileHomeView> {
         final active = _active(plugins);
 
         final Widget body = switch (state) {
-          PluginLoading() || PluginInitial() =>
+          PluginLoading() ||
+          PluginInitial() =>
             const Center(child: CircularProgressIndicator()),
           PluginError(:final message) => _ErrorBody(
               message: message,
@@ -211,7 +214,7 @@ class _HomeTopBar extends StatelessWidget {
               mainAxisSize: MainAxisSize.min,
               children: [
                 Padding(
-                  padding: const EdgeInsets.fromLTRB(16, 10, 8, 6),
+                  padding: const EdgeInsets.fromLTRB(16, 10, 8, 10),
                   child: Row(
                     children: [
                       SvgPicture.asset(
@@ -220,7 +223,21 @@ class _HomeTopBar extends StatelessWidget {
                         colorFilter: const ColorFilter.mode(
                             AppTheme.textHigh, BlendMode.srcIn),
                       ),
-                      const Spacer(),
+                      // The pill sits between the wordmark and the profile
+                      // button rather than on a row of its own below
+                      // (2026-09-16) — Expanded+Center so it's free to be
+                      // absent (plugins.length <= 1) without leaving a gap,
+                      // and doesn't fight the wordmark/profile button for
+                      // space when its label is long.
+                      Expanded(
+                        child: Center(
+                          child: PluginSwitcherPill(
+                            plugins: plugins,
+                            active: active,
+                            onSelect: onSelect,
+                          ),
+                        ),
+                      ),
                       IconButton(
                         onPressed: onProfile,
                         tooltip: 'Profilo',
@@ -233,11 +250,6 @@ class _HomeTopBar extends StatelessWidget {
                       ),
                     ],
                   ),
-                ),
-                PluginSwitcherPill(
-                  plugins: plugins,
-                  active: active,
-                  onSelect: onSelect,
                 ),
               ],
             ),
@@ -522,8 +534,7 @@ class _CwRail extends StatelessWidget {
         if (s is! ContinueWatchingLoaded) return const SizedBox.shrink();
         // Only this plugin's own resume entries — a title from another
         // plugin belongs on that plugin's home, not here.
-        final items =
-            s.items.where((i) => i.providerID == pluginId).toList();
+        final items = s.items.where((i) => i.providerID == pluginId).toList();
         if (items.isEmpty) return const SizedBox.shrink();
         return Padding(
           padding: const EdgeInsets.only(top: 20),
@@ -609,8 +620,8 @@ class _CwCard extends StatelessWidget {
               ),
             ),
             ListTile(
-              leading:
-                  const Icon(Icons.play_arrow_rounded, color: AppTheme.textHigh),
+              leading: const Icon(Icons.play_arrow_rounded,
+                  color: AppTheme.textHigh),
               title: const Text('Riprendi',
                   style: TextStyle(color: AppTheme.textHigh)),
               onTap: () {
@@ -628,16 +639,15 @@ class _CwCard extends StatelessWidget {
                 // For an episode, parentID is the season/show directory —
                 // that's what getDetails resolves to the series page (with
                 // its season picker). Movies have no parent → the item id.
-                final target = item.parentID.isNotEmpty
-                    ? item.parentID
-                    : item.playableID;
+                final target =
+                    item.parentID.isNotEmpty ? item.parentID : item.playableID;
                 context.push(
                     '/details/${item.providerID}/${Uri.encodeComponent(target)}');
               },
             ),
             ListTile(
-              leading: const Icon(Icons.delete_outline,
-                  color: Color(0xFFFF6B6B)),
+              leading:
+                  const Icon(Icons.delete_outline, color: Color(0xFFFF6B6B)),
               title: const Text('Rimuovi da Continua a guardare',
                   style: TextStyle(color: Color(0xFFFF6B6B))),
               onTap: () {
@@ -678,6 +688,11 @@ class _CwCard extends StatelessWidget {
                     aspectRatio: 16 / 9,
                     child: item.poster.isNotEmpty
                         ? CachedNetworkImage(
+                            // Web-only, no-op on every other platform — see image_sizing.dart's
+                            // "ImageRenderMethodForWeb.HttpGet" section for why every
+                            // CachedNetworkImage call site in the app sets this.
+                            imageRenderMethodForWeb:
+                                ImageRenderMethodForWeb.HttpGet,
                             imageUrl: posterSrc(item.poster, imgW, proxy: true),
                             memCacheWidth: imgW,
                             fit: BoxFit.cover,
