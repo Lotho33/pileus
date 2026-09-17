@@ -104,8 +104,9 @@ class _PileusLoadingSwitcherState extends State<PileusLoadingSwitcher> {
       setState(() => _effectiveLoading = false);
     } else {
       Future.delayed(remaining, () {
-        if (mounted && !widget.isLoading)
+        if (mounted && !widget.isLoading) {
           setState(() => _effectiveLoading = false);
+        }
       });
     }
   }

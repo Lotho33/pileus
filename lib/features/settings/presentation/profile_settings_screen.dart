@@ -312,8 +312,9 @@ class _AvatarPickerGridState extends State<_AvatarPickerGrid> {
   /// calls this on Up so leaving it lands back where the user actually was
   /// instead of always resetting to the first tile.
   void focusCurrent() {
-    if (_focused >= 0 && _focused < _nodes.length)
+    if (_focused >= 0 && _focused < _nodes.length) {
       _nodes[_focused].requestFocus();
+    }
   }
 
   void _moveFocus(int delta) {

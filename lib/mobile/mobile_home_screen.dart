@@ -553,7 +553,9 @@ class _CwRail extends StatelessWidget {
                 ),
               ),
               SizedBox(
-                height: 240 * 9 / 16 + 44,
+                // +14 over the old constant: room for the series-name
+                // overline the card can now show above the episode title.
+                height: 240 * 9 / 16 + 58,
                 child: ListView.separated(
                   scrollDirection: Axis.horizontal,
                   padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -726,8 +728,21 @@ class _CwCard extends StatelessWidget {
               ),
             ),
             const SizedBox(height: 6),
+            // Series name (overline) + what's actually playing (episode/movie
+            // title) — was collapsed to just the series name before, which
+            // silently dropped the episode number/name entirely. Matches the
+            // TV card's overline+title convention.
+            if (item.showTitle.isNotEmpty &&
+                item.showTitle.toLowerCase() != item.title.toLowerCase())
+              Text(
+                item.showTitle,
+                maxLines: 1,
+                textAlign: TextAlign.center,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(color: AppTheme.textLow, fontSize: 11),
+              ),
             Text(
-              item.showTitle.isNotEmpty ? item.showTitle : item.title,
+              item.title,
               maxLines: 1,
               textAlign: TextAlign.center,
               overflow: TextOverflow.ellipsis,

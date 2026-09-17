@@ -15,6 +15,7 @@ import '../features/player/bloc/playback_event.dart';
 import '../features/player/bloc/playback_state.dart';
 import '../features/player/engine/player_engine.dart';
 import '../features/player/models/playback_args.dart';
+import '../features/player/playback_episode_cache.dart';
 import '../features/settings/data/settings_repository.dart';
 import '../shared/player/playback_progress.dart';
 
@@ -114,6 +115,8 @@ class _MobilePlayerViewState extends State<_MobilePlayerView> {
   // says which side/direction, not a duration.
   int? _seekFeedback;
   Timer? _seekFeedbackTimer;
+  bool _engineInitialized = false;
+  late final int _bufMiB;
 
   @override
   void initState() {
@@ -141,21 +144,19 @@ class _MobilePlayerViewState extends State<_MobilePlayerView> {
         ? _settings.getLiveBufferMiB()
         : _settings.getPlayerBufferMiB();
     if (lowPowerUi) bufMiB = bufMiB.clamp(4, widget.args.isLive ? 10 : 16);
+    _bufMiB = bufMiB;
 
     _engine = PlayerEngine.create();
     _engine.onError = _onEngineError;
     _engine.addListener(_onEngine);
     _posSub = _engine.positionStream.listen(_onPosition);
-    _engine.initialize(
-      PlayerSubtitleStyle(
-        fontSize: _settings.getSubtitleFontSize(),
-        color: _settings.getSubtitleColor(),
-        backgroundEnabled: _settings.getSubtitleBgEnabled(),
-        bottomPadding: _settings.getSubtitleBottomPadding(),
-      ),
-      isLive: widget.args.isLive,
-      bufferMiB: bufMiB,
-    );
+    // Native controller creation deferred to _ensureEngineInitialized(),
+    // called right before the first engine.open() — not here. Mirrors the TV
+    // player's own fix for a reported whole-screen freeze on weak hardware:
+    // a native player view sitting mounted-but-idle for the whole
+    // resolve/spinner window (which can be several seconds on a slow plugin)
+    // is worse than not existing yet. buildView() already renders
+    // SizedBox.shrink() until initialize() has run.
 
     // Persist watch progress so Continue Watching stays in sync with the TV
     // (same 15s heartbeat + dispose save the TV player uses). Live has no
@@ -165,7 +166,34 @@ class _MobilePlayerViewState extends State<_MobilePlayerView> {
           const Duration(seconds: 15), (_) => _progress.save(_engine));
     }
 
+    // One-shot background fetch: a launch path that only knows a single
+    // episode (Continue Watching, a search/quick-play deep link) carries no
+    // episodeList — this fills it in so "episodio successivo" still shows up
+    // a beat after playback starts instead of never.
+    _resolveEpisodeListIfMissing();
+
     _armAutoHide();
+  }
+
+  void _ensureEngineInitialized() {
+    if (_engineInitialized) return;
+    _engineInitialized = true;
+    _engine.initialize(
+      PlayerSubtitleStyle(
+        fontSize: _settings.getSubtitleFontSize(),
+        color: _settings.getSubtitleColor(),
+        backgroundEnabled: _settings.getSubtitleBgEnabled(),
+        bottomPadding: _settings.getSubtitleBottomPadding(),
+      ),
+      isLive: widget.args.isLive,
+      bufferMiB: _bufMiB,
+    );
+    // The `??=` in build() cached the SizedBox.shrink() placeholder from
+    // every build before this ran — drop it and force a rebuild so the next
+    // build picks up the real buildView() now that the engine actually has
+    // a controller. Without this the platform view would never mount:
+    // nothing else is guaranteed to clear the cached placeholder promptly.
+    if (mounted) setState(() => _videoView = null);
   }
 
   @override
@@ -253,6 +281,7 @@ class _MobilePlayerViewState extends State<_MobilePlayerView> {
   Future<void> _onReady(PlaybackReady s) async {
     if (_opened) return;
     _opened = true;
+    _ensureEngineInitialized();
     _progress.onStreamOpened();
     await _engine.open(s.resolvedUrl, headers: s.httpHeaders);
     _progress.markStarted(_engine);
@@ -297,6 +326,91 @@ class _MobilePlayerViewState extends State<_MobilePlayerView> {
       _curEpisodeIndex < _curEpisodeList.length - 1 ||
       (_curSeasonIndex < widget.args.allSeasonIds.length - 1 &&
           widget.args.allSeasonIds.isNotEmpty);
+
+  // One-shot: rebuild the episode list when the launch path didn't pass one
+  // — a Continue Watching tap carries only the single episode (parentId +
+  // its own title), same gap the TV player already backfills for (see
+  // playback_screen/view.dart's _resolveEpisodeListIfMissing). _curMediaId
+  // here can be a resolved stream id rather than a bare episode id, so a
+  // direct id match isn't guaranteed — falls back to title, then a loose
+  // substring match.
+  Future<void> _resolveEpisodeListIfMissing() async {
+    if (widget.args.isLive ||
+        _curEpisodeList.isNotEmpty ||
+        widget.args.parentId.isEmpty) {
+      return;
+    }
+    final target = (_curTitle ?? '').trim().toLowerCase();
+    final cacheKey = '${widget.args.epPluginId} ${widget.args.parentId}';
+    final cached = playbackEpisodeCache[cacheKey];
+    if (cached != null && cached.length >= 2) {
+      _applyResolvedEpisodes(cached, target);
+      return;
+    }
+    try {
+      final repo = getIt<MediaRepository>();
+      final res =
+          await repo.browse(widget.args.epPluginId, widget.args.parentId, '');
+      if (!mounted) return;
+
+      var eps = <({String id, String title})>[];
+      if (res.episodes.isNotEmpty) {
+        eps = [for (final e in res.episodes) (id: e.id, title: e.title)];
+      } else {
+        eps = [
+          for (final e in res.items)
+            if (!e.isDir) (id: e.id, title: e.title),
+        ];
+      }
+
+      // The parent may itself be a list of season directories — walk a
+      // bounded number of them looking for one whose episode titles match.
+      if (eps.length < 2) {
+        final seasonDirs = res.items.where((i) => i.isDir).toList();
+        for (final s in seasonDirs.take(8)) {
+          if (!mounted) return;
+          final sr = await repo.browse(widget.args.epPluginId, s.id, '');
+          final se = sr.episodes.isNotEmpty
+              ? [for (final e in sr.episodes) (id: e.id, title: e.title)]
+              : [
+                  for (final e in sr.items)
+                    if (!e.isDir) (id: e.id, title: e.title),
+                ];
+          if (se.length > 1 &&
+              (target.isEmpty ||
+                  se.any((e) => e.title.trim().toLowerCase() == target))) {
+            eps = se;
+            break;
+          }
+        }
+      }
+
+      if (!mounted || eps.length < 2) return;
+      playbackEpisodeCache[cacheKey] = eps;
+      _applyResolvedEpisodes(eps, target);
+    } catch (_) {
+      // ignore — no next-episode nav this session
+    }
+  }
+
+  void _applyResolvedEpisodes(
+      List<({String id, String title})> eps, String target) {
+    if (!mounted) return;
+    var idx = eps.indexWhere((e) => e.id == _curMediaId);
+    if (idx < 0 && target.isNotEmpty) {
+      idx = eps.indexWhere((e) => e.title.trim().toLowerCase() == target);
+    }
+    if (idx < 0) {
+      idx =
+          eps.indexWhere((e) => e.id.length >= 8 && _curMediaId.contains(e.id));
+    }
+    if (idx < 0) return;
+    setState(() {
+      _curEpisodeList = [for (final e in eps) e.id];
+      _curEpisodeTitles = [for (final e in eps) e.title];
+      _curEpisodeIndex = idx;
+    });
+  }
 
   void _onPosition(Duration pos) {
     if (!mounted || widget.args.isLive || !_hasNextEpisode) return;

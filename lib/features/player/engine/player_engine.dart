@@ -483,8 +483,9 @@ class _ExoPlayerEngine extends PlayerEngine {
   static String _audioLabel(BetterPlayerAsmsAudioTrack t, int i) {
     final parts = <String>[];
     if ((t.language ?? '').isNotEmpty) parts.add(t.language!.toUpperCase());
-    if ((t.label ?? '').isNotEmpty && t.label != t.language)
+    if ((t.label ?? '').isNotEmpty && t.label != t.language) {
       parts.add(t.label!);
+    }
     return parts.isEmpty ? 'Traccia ${i + 1}' : parts.join(' · ');
   }
 
