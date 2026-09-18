@@ -1,7 +1,7 @@
 name: pileus
 description: "Pileus - Flutter TV client for Mycelium streaming backend."
 publish_to: 'none'
-version: 1.3.4+0
+version: 1.3.5+0
 
 environment:
   # Bumped from ^3.5.0: web_playback_screen.dart's hls.js diagnostics
