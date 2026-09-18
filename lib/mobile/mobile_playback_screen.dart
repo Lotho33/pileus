@@ -7,6 +7,8 @@ import 'package:go_router/go_router.dart';
 import 'package:wakelock_plus/wakelock_plus.dart';
 
 import '../core/di/injection.dart';
+import '../core/grpc/clients/media_client.dart'
+    show DetailsResponse, ResolveResponse;
 import '../core/perf_profile.dart';
 import '../core/theme/app_theme.dart';
 import '../features/media/data/media_repository.dart';
@@ -105,18 +107,45 @@ class _MobilePlayerViewState extends State<_MobilePlayerView> {
   late String? _curTitle;
   late List<String> _curEpisodeList;
   late List<String> _curEpisodeTitles;
+  // Fresh per-episode metadata (poster/plot/rating/duration/year) once known
+  // — null means "nothing fresher than widget.args yet", so _currentArgs()
+  // falls back to the original launch value (see PlaybackArgs.copyWith).
+  // Without this, everything except title/episode index kept dragging the
+  // very first episode's values forward forever (the Continue Watching
+  // poster bug).
+  String? _curPoster;
+  String? _curPlot;
+  double? _curRating;
+  int? _curDurationSeconds;
+  int? _curYear;
   bool _resolvingEpisode = false;
   bool _autoAdvanced = false;
   // Countdown shown in the closing seconds of an episode; null = hidden.
   int? _nextEpisodeSecs;
   bool _nextEpisodeDismissed = false;
   StreamSubscription<Duration>? _posSub;
-  // Brief ±10s flash shown after a double-tap seek; null = hidden. Sign
-  // says which side/direction, not a duration.
-  int? _seekFeedback;
-  Timer? _seekFeedbackTimer;
   bool _engineInitialized = false;
   late final int _bufMiB;
+
+  // ── Next-episode prefetch ──────────────────────────────────────────────────
+  // Warmed at ~80% through the current episode (see _onPosition) so
+  // advancing doesn't cold-resolve (getStreams + resolveStream, which can
+  // take several seconds on a slow plugin) with the screen sitting on a
+  // spinner. _prefetchedMediaId is null whenever nothing is cached, or
+  // doesn't match the episode actually being switched to (e.g. the user
+  // hit "previous" instead) — _resolveEpisodeAt falls back to a cold
+  // resolve in that case, same as before this existed.
+  bool _prefetching = false;
+  String? _prefetchedMediaId;
+  String? _prefetchedUrl;
+  Map<String, String>? _prefetchedHeaders;
+  String? _prefetchedSourceLabel;
+  String? _prefetchedTitle;
+  String? _prefetchedPoster;
+  String? _prefetchedPlot;
+  double? _prefetchedRating;
+  int? _prefetchedDurationSeconds;
+  int? _prefetchedYear;
 
   @override
   void initState() {
@@ -210,7 +239,6 @@ class _MobilePlayerViewState extends State<_MobilePlayerView> {
     _errorGrace?.cancel();
     _progressTimer?.cancel();
     _posSub?.cancel();
-    _seekFeedbackTimer?.cancel();
     // Final save while the engine is still alive — catches everything since
     // the last heartbeat (e.g. the user backs out 8s after the last tick).
     if (!widget.args.isLive) {
@@ -327,6 +355,10 @@ class _MobilePlayerViewState extends State<_MobilePlayerView> {
       (_curSeasonIndex < widget.args.allSeasonIds.length - 1 &&
           widget.args.allSeasonIds.isNotEmpty);
 
+  bool get _hasPreviousEpisode =>
+      _curEpisodeIndex > 0 ||
+      (_curSeasonIndex > 0 && widget.args.allSeasonIds.isNotEmpty);
+
   // One-shot: rebuild the episode list when the launch path didn't pass one
   // — a Continue Watching tap carries only the single episode (parentId +
   // its own title), same gap the TV player already backfills for (see
@@ -413,9 +445,21 @@ class _MobilePlayerViewState extends State<_MobilePlayerView> {
   }
 
   void _onPosition(Duration pos) {
-    if (!mounted || widget.args.isLive || !_hasNextEpisode) return;
+    if (!mounted || widget.args.isLive) return;
     final dur = _engine.duration;
     if (dur.inSeconds <= 60) return;
+
+    // Warm the next episode (stream + fresh metadata) once we're most of
+    // the way through this one — same-season only, a season-boundary next
+    // still resolves cold (rarer, and finding it needs its own browse()).
+    if (!_prefetching &&
+        _curEpisodeIndex + 1 < _curEpisodeList.length &&
+        _prefetchedMediaId != _curEpisodeList[_curEpisodeIndex + 1] &&
+        pos.inSeconds / dur.inSeconds >= 0.80) {
+      _prefetchNextEpisode();
+    }
+
+    if (!_hasNextEpisode) return;
     final remaining = dur.inSeconds - pos.inSeconds;
     if (remaining > 0 && remaining <= 30 && !_nextEpisodeDismissed) {
       if (_nextEpisodeSecs != remaining) {
@@ -428,6 +472,96 @@ class _MobilePlayerViewState extends State<_MobilePlayerView> {
       _autoAdvanced = true;
       _goToNextEpisode();
     }
+  }
+
+  /// Best-effort: resolves the next episode's stream + fetches its own
+  /// metadata (poster/plot/rating/year) ahead of time and caches it, so
+  /// _resolveEpisodeAt can open it directly instead of cold-resolving
+  /// (getStreams + resolveStream, which on a slow plugin is several
+  /// seconds spent staring at a spinner right when the episode you were
+  /// watching just ended). Any failure here is silent — the actual switch
+  /// just falls back to the normal cold path.
+  Future<void> _prefetchNextEpisode() async {
+    if (_curEpisodeIndex + 1 >= _curEpisodeList.length) return;
+    final nextId = _curEpisodeList[_curEpisodeIndex + 1];
+    if (_prefetchedMediaId == nextId) return;
+    _prefetching = true;
+    try {
+      final repo = getIt<MediaRepository>();
+      final nextTitle = _curEpisodeIndex + 1 < _curEpisodeTitles.length
+          ? _curEpisodeTitles[_curEpisodeIndex + 1]
+          : null;
+
+      final streamsRes = await repo.getStreams(widget.args.epPluginId, nextId);
+      if (!mounted) return;
+      final sources = streamsRes.sources;
+      final match = (_curSourceLabel.isEmpty
+              ? null
+              : sources
+                  .where((s) =>
+                      s.label.toLowerCase() == _curSourceLabel.toLowerCase())
+                  .firstOrNull) ??
+          (sources.isNotEmpty ? sources.first : null);
+      if (match == null) return;
+
+      ResolveResponse? resolved;
+      await for (final ev in repo
+          .resolveStream(widget.args.epPluginId, match.id)
+          .timeout(const Duration(seconds: 25))) {
+        if (ev.hasResult()) {
+          resolved = ev.result;
+          break;
+        }
+      }
+      if (!mounted || resolved == null || resolved.resolvedUrl.isEmpty) {
+        return;
+      }
+
+      DetailsResponse? details;
+      try {
+        details = await repo.getDetails(widget.args.epPluginId, nextId);
+      } catch (_) {
+        // metadata is a bonus — a resolved stream with no fresh
+        // poster/plot is still a win over cold-resolving later.
+      }
+      if (!mounted) return;
+
+      final ep =
+          (details != null && details.hasEpisode()) ? details.episode : null;
+      _prefetchedMediaId = nextId;
+      _prefetchedUrl = resolved.resolvedUrl;
+      _prefetchedHeaders = resolved.httpHeaders;
+      _prefetchedSourceLabel = match.label;
+      _prefetchedTitle = (details != null && details.item.title.isNotEmpty)
+          ? details.item.title
+          : nextTitle;
+      _prefetchedPoster = (details != null && details.item.posterUrl.isNotEmpty)
+          ? details.item.posterUrl
+          : null;
+      _prefetchedPlot = (ep != null && ep.plot.isNotEmpty) ? ep.plot : null;
+      _prefetchedRating = (ep != null && ep.vote > 0) ? ep.vote : null;
+      _prefetchedDurationSeconds =
+          (ep != null && ep.duration > 0) ? ep.duration * 60 : null;
+      _prefetchedYear =
+          (details != null && details.item.year > 0) ? details.item.year : null;
+    } catch (_) {
+      // ignore — falls back to a cold resolve when actually switching
+    } finally {
+      _prefetching = false;
+    }
+  }
+
+  void _clearPrefetch() {
+    _prefetchedMediaId = null;
+    _prefetchedUrl = null;
+    _prefetchedHeaders = null;
+    _prefetchedSourceLabel = null;
+    _prefetchedTitle = null;
+    _prefetchedPoster = null;
+    _prefetchedPlot = null;
+    _prefetchedRating = null;
+    _prefetchedDurationSeconds = null;
+    _prefetchedYear = null;
   }
 
   Future<void> _goToNextEpisode() async {
@@ -450,6 +584,26 @@ class _MobilePlayerViewState extends State<_MobilePlayerView> {
     }
   }
 
+  Future<void> _goToPreviousEpisode() async {
+    if (_resolvingEpisode || !_hasPreviousEpisode) return;
+    _errorGrace?.cancel();
+    setState(() {
+      _resolvingEpisode = true;
+      _nextEpisodeSecs = null;
+    });
+    try {
+      await _resolveEpisodeAt(_curEpisodeIndex - 1, _curEpisodeList,
+          _curEpisodeTitles, _curSeasonIndex);
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _resolvingEpisode = false;
+          _playbackError = 'Impossibile cambiare episodio: $e';
+        });
+      }
+    }
+  }
+
   Future<void> _resolveEpisodeAt(
     int newIndex,
     List<String> episodeList,
@@ -459,10 +613,13 @@ class _MobilePlayerViewState extends State<_MobilePlayerView> {
     final repo = getIt<MediaRepository>();
 
     if (newIndex < 0 || newIndex >= episodeList.length) {
-      // Season boundary: only forward, mobile has no "previous episode" nav.
+      // Season boundary, either direction: newIndex < 0 steps back a season
+      // (landing on its last episode), past the end steps forward one.
       final allSeasonIds = widget.args.allSeasonIds;
-      final newSeasonIndex = seasonIndex + 1;
-      if (allSeasonIds.isEmpty || newSeasonIndex >= allSeasonIds.length) {
+      final newSeasonIndex = newIndex < 0 ? seasonIndex - 1 : seasonIndex + 1;
+      if (allSeasonIds.isEmpty ||
+          newSeasonIndex < 0 ||
+          newSeasonIndex >= allSeasonIds.length) {
         if (mounted) setState(() => _resolvingEpisode = false);
         return;
       }
@@ -482,15 +639,69 @@ class _MobilePlayerViewState extends State<_MobilePlayerView> {
           _curSeasonIndex = newSeasonIndex;
         });
       }
-      await _resolveEpisodeAt(0, newIds, newTitles, newSeasonIndex);
+      final targetIndex = newIndex < 0 ? newIds.length - 1 : 0;
+      await _resolveEpisodeAt(targetIndex, newIds, newTitles, newSeasonIndex);
       return;
     }
 
     final newMediaId = episodeList[newIndex];
     final newTitle =
         newIndex < episodeTitles.length ? episodeTitles[newIndex] : null;
-    final streamsRes =
-        await repo.getStreams(widget.args.epPluginId, newMediaId);
+
+    // Warm path: this exact episode was already resolved in the background
+    // near the end of the previous one (see _prefetchNextEpisode) — skip
+    // getStreams/resolveStream entirely and open the cached URL directly,
+    // bypassing PlaybackBloc so there's no ResolvingMediaStream spinner
+    // flash in between.
+    if (_prefetchedMediaId == newMediaId && _prefetchedUrl != null) {
+      final url = _prefetchedUrl!;
+      final headers = _prefetchedHeaders ?? const <String, String>{};
+      final sourceLabel = _prefetchedSourceLabel;
+      final title = _prefetchedTitle;
+      final poster = _prefetchedPoster;
+      final plot = _prefetchedPlot;
+      final rating = _prefetchedRating;
+      final durationSeconds = _prefetchedDurationSeconds;
+      final year = _prefetchedYear;
+      _clearPrefetch();
+      _engine.stop();
+      setState(() {
+        _curEpisodeIndex = newIndex;
+        _curMediaId = newMediaId;
+        _curSourceLabel = sourceLabel ?? _curSourceLabel;
+        _curTitle = title ?? newTitle ?? _curTitle;
+        _curPoster = poster;
+        _curPlot = plot;
+        _curRating = rating;
+        _curDurationSeconds = durationSeconds;
+        _curYear = year;
+        _opened = true;
+        _resolvingEpisode = false;
+        _autoAdvanced = false;
+        _nextEpisodeDismissed = false;
+        _playbackError = null;
+      });
+      _progress = PlaybackProgress(args: _currentArgs(), mediaId: newMediaId);
+      _progress.onStreamOpened();
+      await _engine.open(url, headers: headers);
+      if (mounted) _progress.markStarted(_engine);
+      return;
+    }
+    _clearPrefetch();
+
+    // Cold path: fetch the stream sources and this episode's own metadata
+    // (poster/plot/rating/year) in parallel — without the latter, every
+    // field kept dragging the very first episode's values forward forever
+    // (the stale Continue Watching poster bug).
+    final streamsFuture = repo.getStreams(widget.args.epPluginId, newMediaId);
+    DetailsResponse? details;
+    try {
+      details = await repo.getDetails(widget.args.epPluginId, newMediaId);
+    } catch (_) {
+      // metadata is a nice-to-have — a stream that still resolves is what
+      // actually matters here.
+    }
+    final streamsRes = await streamsFuture;
     final sources = streamsRes.sources;
 
     // Prefer the same source label already playing; fall back to the first
@@ -506,12 +717,26 @@ class _MobilePlayerViewState extends State<_MobilePlayerView> {
     if (!mounted) return;
 
     if (match != null) {
+      final ep =
+          (details != null && details.hasEpisode()) ? details.episode : null;
       _engine.stop();
       setState(() {
         _curEpisodeIndex = newIndex;
         _curMediaId = newMediaId;
         _curSourceLabel = match.label;
-        _curTitle = newTitle ?? _curTitle;
+        _curTitle = (details != null && details.item.title.isNotEmpty)
+            ? details.item.title
+            : (newTitle ?? _curTitle);
+        _curPoster = (details != null && details.item.posterUrl.isNotEmpty)
+            ? details.item.posterUrl
+            : null;
+        _curPlot = (ep != null && ep.plot.isNotEmpty) ? ep.plot : null;
+        _curRating = (ep != null && ep.vote > 0) ? ep.vote : null;
+        _curDurationSeconds =
+            (ep != null && ep.duration > 0) ? ep.duration * 60 : null;
+        _curYear = (details != null && details.item.year > 0)
+            ? details.item.year
+            : null;
         _opened = false;
         _resolvingEpisode = false;
         _autoAdvanced = false;
@@ -555,6 +780,11 @@ class _MobilePlayerViewState extends State<_MobilePlayerView> {
         sourceLabel: _curSourceLabel,
         seasonIndex: _curSeasonIndex,
         seekTo: 0,
+        poster: _curPoster,
+        plot: _curPlot,
+        rating: _curRating,
+        durationSeconds: _curDurationSeconds,
+        year: _curYear,
       );
 
   void _armAutoHide() {
@@ -585,129 +815,73 @@ class _MobilePlayerViewState extends State<_MobilePlayerView> {
         listener: (context, s) {
           if (s is PlaybackReady) _onReady(s);
         },
-        child: Stack(
-          fit: StackFit.expand,
-          children: [
-            Positioned.fill(
-              child: Center(
-                child: _videoView ??= _engine.buildView(),
-              ),
-            ),
-            // Below the controls (added later, so they get first crack at
-            // any tap that lands on an actual button) but above the video —
-            // a single tap toggles the transport controls, a double tap on
-            // either half seeks ±10s. Not something ExoPlayer/better_player
-            // gives for free; this is the same gesture split YouTube/Netflix
-            // use, done here at the Flutter layer.
-            Positioned.fill(child: _tapZones()),
-            BlocBuilder<PlaybackBloc, PlaybackState>(
-              builder: (context, s) {
-                if (_playbackError != null) {
-                  return Positioned.fill(
-                    child: _ErrorOverlay(
-                      message: _playbackError!,
-                      onBack: _exit,
-                      onRetry: _retry,
-                    ),
-                  );
-                }
-                if (s is PlaybackFailed) {
-                  return Positioned.fill(
-                    child: _ErrorOverlay(
-                      message: s.errorMessage,
-                      onBack: _exit,
-                      onRetry: _retry,
-                    ),
-                  );
-                }
-                if (s is! PlaybackReady) {
-                  // Loading: only the spinner (dead-centre) + a back
-                  // button — no transport controls competing for the
-                  // centre of the screen.
-                  return Positioned.fill(
-                    child: _LoadingOverlay(state: s, onBack: _exit),
-                  );
-                }
-                return _controlsVisible
-                    ? Positioned.fill(child: _controls())
-                    : const SizedBox.shrink();
-              },
-            ),
-            if (_seekFeedback != null)
+        child: GestureDetector(
+          onTap: _toggleControls,
+          behavior: HitTestBehavior.opaque,
+          child: Stack(
+            fit: StackFit.expand,
+            children: [
               Positioned.fill(
-                child: IgnorePointer(
-                  child: Align(
-                    alignment: _seekFeedback! < 0
-                        ? Alignment.centerLeft
-                        : Alignment.centerRight,
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 28),
-                      child: _SeekFeedback(forward: _seekFeedback! > 0),
+                child: Center(
+                  child: _videoView ??= _engine.buildView(),
+                ),
+              ),
+              BlocBuilder<PlaybackBloc, PlaybackState>(
+                builder: (context, s) {
+                  if (_playbackError != null) {
+                    return Positioned.fill(
+                      child: _ErrorOverlay(
+                        message: _playbackError!,
+                        onBack: _exit,
+                        onRetry: _retry,
+                      ),
+                    );
+                  }
+                  if (s is PlaybackFailed) {
+                    return Positioned.fill(
+                      child: _ErrorOverlay(
+                        message: s.errorMessage,
+                        onBack: _exit,
+                        onRetry: _retry,
+                      ),
+                    );
+                  }
+                  if (s is! PlaybackReady) {
+                    // Loading: only the spinner (dead-centre) + a back
+                    // button — no transport controls competing for the
+                    // centre of the screen.
+                    return Positioned.fill(
+                      child: _LoadingOverlay(state: s, onBack: _exit),
+                    );
+                  }
+                  return _controlsVisible
+                      ? Positioned.fill(child: _controls())
+                      : const SizedBox.shrink();
+                },
+              ),
+              if (_nextEpisodeSecs != null)
+                Positioned(
+                  right: 16,
+                  bottom: 16,
+                  child: SafeArea(
+                    child: _MobileNextEpisodeBanner(
+                      secondsRemaining: _nextEpisodeSecs!,
+                      onSkip: () {
+                        _autoAdvanced = true;
+                        _goToNextEpisode();
+                      },
+                      onDismiss: () => setState(() {
+                        _nextEpisodeDismissed = true;
+                        _nextEpisodeSecs = null;
+                      }),
                     ),
                   ),
                 ),
-              ),
-            if (_nextEpisodeSecs != null)
-              Positioned(
-                right: 16,
-                bottom: 16,
-                child: SafeArea(
-                  child: _MobileNextEpisodeBanner(
-                    secondsRemaining: _nextEpisodeSecs!,
-                    onSkip: () {
-                      _autoAdvanced = true;
-                      _goToNextEpisode();
-                    },
-                    onDismiss: () => setState(() {
-                      _nextEpisodeDismissed = true;
-                      _nextEpisodeSecs = null;
-                    }),
-                  ),
-                ),
-              ),
-          ],
+            ],
+          ),
         ),
       ),
     );
-  }
-
-  /// Full-screen tap layer: single tap toggles the controls, double tap on
-  /// the left/right half seeks ±10s. Live streams only get the single tap
-  /// (no seeking).
-  Widget _tapZones() {
-    if (widget.args.isLive) {
-      return GestureDetector(
-        behavior: HitTestBehavior.opaque,
-        onTap: _toggleControls,
-      );
-    }
-    return Row(
-      children: [
-        Expanded(
-          child: GestureDetector(
-            behavior: HitTestBehavior.opaque,
-            onTap: _toggleControls,
-            onDoubleTap: () => _seekWithFeedback(-10),
-          ),
-        ),
-        Expanded(
-          child: GestureDetector(
-            behavior: HitTestBehavior.opaque,
-            onTap: _toggleControls,
-            onDoubleTap: () => _seekWithFeedback(10),
-          ),
-        ),
-      ],
-    );
-  }
-
-  void _seekWithFeedback(int delta) {
-    _seekBy(delta);
-    _seekFeedbackTimer?.cancel();
-    setState(() => _seekFeedback = delta);
-    _seekFeedbackTimer = Timer(const Duration(milliseconds: 650), () {
-      if (mounted) setState(() => _seekFeedback = null);
-    });
   }
 
   Widget _controls() {
@@ -734,6 +908,20 @@ class _MobilePlayerViewState extends State<_MobilePlayerView> {
                     style: const TextStyle(color: Colors.white, fontSize: 14),
                   ),
                 ),
+                if (_hasPreviousEpisode)
+                  IconButton(
+                    icon: _resolvingEpisode
+                        ? const SizedBox(
+                            width: 20,
+                            height: 20,
+                            child: CircularProgressIndicator(
+                                strokeWidth: 2, color: Colors.white),
+                          )
+                        : const Icon(Icons.skip_previous_rounded,
+                            color: Colors.white),
+                    tooltip: 'Episodio precedente',
+                    onPressed: _resolvingEpisode ? null : _goToPreviousEpisode,
+                  ),
                 if (_hasNextEpisode)
                   IconButton(
                     icon: _resolvingEpisode
@@ -761,20 +949,37 @@ class _MobilePlayerViewState extends State<_MobilePlayerView> {
               ],
             ),
             const Spacer(),
-            Center(
-              child: IconButton(
-                iconSize: 64,
-                icon: Icon(
-                  _engine.playing
-                      ? Icons.pause_circle_filled_rounded
-                      : Icons.play_circle_fill_rounded,
-                  color: Colors.white,
+            Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                if (!widget.args.isLive)
+                  IconButton(
+                    iconSize: 40,
+                    icon: const Icon(Icons.replay_10_rounded,
+                        color: Colors.white),
+                    onPressed: () => _seekBy(-10),
+                  ),
+                IconButton(
+                  iconSize: 64,
+                  icon: Icon(
+                    _engine.playing
+                        ? Icons.pause_circle_filled_rounded
+                        : Icons.play_circle_fill_rounded,
+                    color: Colors.white,
+                  ),
+                  onPressed: () {
+                    _engine.playOrPause();
+                    _armAutoHide();
+                  },
                 ),
-                onPressed: () {
-                  _engine.playOrPause();
-                  _armAutoHide();
-                },
-              ),
+                if (!widget.args.isLive)
+                  IconButton(
+                    iconSize: 40,
+                    icon: const Icon(Icons.forward_10_rounded,
+                        color: Colors.white),
+                    onPressed: () => _seekBy(10),
+                  ),
+              ],
             ),
             const Spacer(),
             if (!widget.args.isLive)
@@ -1067,27 +1272,6 @@ class _MobileNextEpisodeBanner extends StatelessWidget {
             ),
           ],
         ),
-      ),
-    );
-  }
-}
-
-class _SeekFeedback extends StatelessWidget {
-  final bool forward;
-  const _SeekFeedback({required this.forward});
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(14),
-      decoration: const BoxDecoration(
-        color: Colors.black45,
-        shape: BoxShape.circle,
-      ),
-      child: Icon(
-        forward ? Icons.forward_10_rounded : Icons.replay_10_rounded,
-        color: Colors.white,
-        size: 36,
       ),
     );
   }

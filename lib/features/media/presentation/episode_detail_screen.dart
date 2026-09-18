@@ -244,6 +244,13 @@ class _EpisodeBodyState extends State<_EpisodeBody> {
       extra: {
         'streamId': source.id,
         'title': widget.item.title,
+        // The episode's own thumbnail — without this, updateProgress always
+        // got an empty poster from this screen, and mycelium's "keep if
+        // empty" upsert then left whatever poster the series/first episode
+        // had stuck in Continue Watching forever, regardless of which
+        // episode was actually playing (title/episode kept updating fine,
+        // only the cover never did).
+        'poster': widget.item.posterUrl,
         'episodeList': widget.episodeList,
         'episodeTitles': widget.episodeTitles,
         'episodeIndex': widget.episodeIndex,

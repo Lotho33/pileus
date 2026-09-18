@@ -1,0 +1,89 @@
+# Builds the Windows desktop app for a `vX.Y.Z` tag: an Inno Setup installer
+# (.exe) plus a portable .zip, attached to the matching GitHub Release
+# (created if the android/web release.yml run hasn't made it yet). Run by
+# hand: Actions -> windows -> Run workflow, with the tag as input.
+#
+# Unlike .forgejo/workflows/windows.yml (same build, but blocked on a
+# self-hosted Windows runner that was never registered — see PROGRESS.md),
+# this uses GitHub's own hosted `windows-latest` runner: no self-hosted
+# infra, no extra secret. GITHUB_TOKEN (builtin, `contents: write` below)
+# covers release creation + asset upload via softprops/action-gh-release,
+# same as the android/web jobs in release.yml.
+
+name: windows
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "existing tag to build, e.g. v1.4.0"
+        required: true
+
+permissions:
+  contents: write # create/update the GitHub Release
+
+defaults:
+  run:
+    shell: pwsh
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ inputs.tag }}
+
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: Derive version
+        id: v
+        run: |
+          $name = "${{ inputs.tag }}".TrimStart('v')
+          "name=$name"                     | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+          "build=${{ github.run_number }}" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+
+      - run: |
+          flutter config --enable-windows-desktop
+          flutter pub get
+
+      - name: Build Windows release
+        run: |
+          $ErrorActionPreference = 'Stop'
+          flutter build windows --release -t lib/main_desktop.dart `
+            --build-name="${{ steps.v.outputs.name }}" `
+            --build-number="${{ steps.v.outputs.build }}" `
+            --dart-define=PILEUS_GITHUB_REPO="${{ github.repository }}" `
+            --dart-define=PILEUS_MYCELIUM_HOST="${{ vars.PILEUS_MYCELIUM_HOST }}"
+
+      - name: Install Inno Setup
+        run: choco install innosetup --no-progress -y
+
+      - name: Package (installer + portable zip)
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $v = "${{ steps.v.outputs.name }}"
+          New-Item -ItemType Directory -Force dist | Out-Null
+          $rel = "build/windows/x64/runner/Release"
+
+          # Portable zip
+          Compress-Archive -Path "$rel/*" -DestinationPath "dist/pileus-$v-windows-x64-portable.zip" -Force
+
+          # Installer — iscc lands on PATH after the choco install above,
+          # but a fresh PATH from a prior step isn't always picked up by the
+          # current pwsh process, so call it by its known install location.
+          & "$env:ProgramFiles(x86)\Inno Setup 6\iscc.exe" "packaging\windows\pileus.iss" "/DAppVersion=$v"
+
+          # Checksums
+          Get-ChildItem dist -File | ForEach-Object {
+            (Get-FileHash $_.FullName -Algorithm SHA256).Hash.ToLower() + "  " + $_.Name
+          } | Out-File -Encoding ascii "dist/SHA256SUMS-windows.txt"
+
+      - name: GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ inputs.tag }}
+          files: dist/*

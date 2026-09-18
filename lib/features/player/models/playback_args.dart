@@ -105,6 +105,11 @@ class PlaybackArgs {
     String? sourceLabel,
     int? seasonIndex,
     int? seekTo,
+    String? poster,
+    String? plot,
+    double? rating,
+    int? durationSeconds,
+    int? year,
   }) {
     return PlaybackArgs(
       isAudio: isAudio,
@@ -123,15 +128,15 @@ class PlaybackArgs {
       seasonIndex: seasonIndex ?? this.seasonIndex,
       liveSources: liveSources,
       liveSourceLabels: liveSourceLabels,
-      poster: poster,
+      poster: (poster != null && poster.isNotEmpty) ? poster : this.poster,
       parentId: parentId,
       seekTo: seekTo ?? this.seekTo,
       showTitle: showTitle,
-      plot: plot,
-      rating: rating,
-      durationSeconds: durationSeconds,
+      plot: (plot != null && plot.isNotEmpty) ? plot : this.plot,
+      rating: rating ?? this.rating,
+      durationSeconds: durationSeconds ?? this.durationSeconds,
       genres: genres,
-      year: year,
+      year: year ?? this.year,
     );
   }
 }

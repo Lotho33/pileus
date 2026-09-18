@@ -793,14 +793,25 @@ class _MpvPlayerEngine extends PlayerEngine {
   @override
   double get volume => _volume;
 
+  // initialize() is now called lazily (right before the first open(), not
+  // eagerly in initState — see _ensureEngineInitialized() in the TV/desktop
+  // player screens) so every state getter below can be read from an overlay
+  // rebuild that happens *before* _player exists (the whole
+  // FetchingStreams/ResolvingMediaStream/PlaybackResolveProgress window).
+  // Touching the `late final` field directly threw LateInitializationError
+  // on every single one of those rebuilds — reported 2026-09-18, mpv/desktop
+  // backend, spamming "Another exception was thrown" throughout the loading
+  // spinner. _playerCreated is the same guard stop()/dispose() already used.
   @override
-  Duration get position => _player.state.position;
+  Duration get position =>
+      _playerCreated ? _player.state.position : Duration.zero;
 
   @override
-  Duration get duration => _player.state.duration;
+  Duration get duration =>
+      _playerCreated ? _player.state.duration : Duration.zero;
 
   @override
-  bool get playing => _player.state.playing;
+  bool get playing => _playerCreated && _player.state.playing;
 
   @override
   bool get buffering => _buffering;
@@ -810,6 +821,7 @@ class _MpvPlayerEngine extends PlayerEngine {
 
   @override
   Size? get videoSize {
+    if (!_playerCreated) return null;
     final w = _player.state.width, h = _player.state.height;
     if (w == null || h == null || w == 0 || h == 0) return null;
     return Size(w.toDouble(), h.toDouble());
