@@ -1,5 +1,6 @@
 import 'dart:convert';
 
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/widgets.dart';
 
 import '../grpc/host_resolver.dart';
@@ -115,6 +116,9 @@ String? _imgProxy(String upstream) {
 /// [proxy] routes them through mycelium's `/img` WebP proxy (home carousels
 /// pass `true`; detail pages leave it `false` and load the upstream URL
 /// directly). The proxy fails open, so `true` is always safe.
+///
+/// On web, [proxy] is forced on regardless of what the caller passed — see
+/// [_forceProxyOnWeb].
 String posterSrc(String upstream, int targetPx, {bool proxy = false}) {
   if (upstream.isEmpty) return upstream;
   final lower = upstream.toLowerCase();
@@ -122,7 +126,7 @@ String posterSrc(String upstream, int targetPx, {bool proxy = false}) {
   if (lower.contains('image.tmdb.org/t/p/')) {
     return _rewriteTmdb(upstream, _tmdbPosterLadder, targetPx);
   }
-  if (!proxy) return upstream;
+  if (!proxy && !_forceProxyOnWeb) return upstream;
   return _imgProxy(upstream) ?? upstream;
 }
 
@@ -133,6 +137,9 @@ String posterSrc(String upstream, int targetPx, {bool proxy = false}) {
 /// reason is gone now that the proxy is a Catmull-Rom-quality WebP transcode
 /// with no downscale, but detail pages stay direct by the same
 /// home-carousels-only rule as posterSrc).
+///
+/// On web, [proxy] is forced on regardless of what the caller passed — see
+/// [_forceProxyOnWeb].
 String backdropSrc(String upstream, int targetPx, {bool proxy = false}) {
   if (upstream.isEmpty) return upstream;
   final lower = upstream.toLowerCase();
@@ -141,6 +148,23 @@ String backdropSrc(String upstream, int targetPx, {bool proxy = false}) {
     return _rewriteTmdb(upstream, _tmdbBackdropLadder, targetPx,
         allowOriginal: true);
   }
-  if (!proxy) return upstream;
+  if (!proxy && !_forceProxyOnWeb) return upstream;
   return _imgProxy(upstream) ?? upstream;
 }
+
+// A `proxy: false` call site (every detail page) means "load the upstream
+// URL directly" — a deliberate choice on native, where an HTTP client has no
+// concept of CORS. On web this app always renders CachedNetworkImage with
+// ImageRenderMethodForWeb.HttpGet (see the big comment up top): it fetches
+// the bytes itself via the browser's fetch(), which — unlike a plain `<img
+// src>` — genuinely enforces CORS on the response. A plugin's own image
+// host essentially never sends Access-Control-Allow-Origin, so every direct
+// (non-proxied) image on a detail page silently failed to load on web,
+// falling back to the surface2 placeholder — a dark navy tile a user reports
+// as "immagine nera/vuota". mycelium's `/img` proxy already sets
+// Access-Control-Allow-Origin: * (and, since the 2026-09-14 CORS/black-poster
+// fix, serves a decode failure same-origin instead of redirecting out to a
+// foreign non-CORS host) — routing every non-TMDB web image through it,
+// unconditionally, is what actually makes HttpGet's own fix hold on detail
+// pages too, not just the home carousels that already passed `proxy: true`.
+const bool _forceProxyOnWeb = kIsWeb;
