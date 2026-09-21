@@ -1,6 +1,8 @@
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:grpc/service_api.dart';
 
 import '../auth_interceptor.dart';
+import '../request_gate.dart';
 import '../generated/media.pbgrpc.dart';
 
 export '../generated/media.pbgrpc.dart'
@@ -63,6 +65,13 @@ export '../generated/media.pbgrpc.dart'
 // call like the ones below).
 const _defaultRpcTimeout = Duration(seconds: 20);
 
+// Web only — see RequestGate. Null elsewhere: native gRPC is one multiplexed
+// HTTP/2 connection with no per-origin connection cap to protect.
+final RequestGate? _contentGate = kIsWeb ? RequestGate(3) : null;
+
+Future<T> _gated<T>(String pluginId, Future<T> Function() call) =>
+    _contentGate == null ? call() : _contentGate!.run(call, group: pluginId);
+
 class MediaGrpcClient {
   late final MediaPipelineClient _mediaStub;
   late final PluginServiceClient _pluginStub;
@@ -72,22 +81,32 @@ class MediaGrpcClient {
     _pluginStub = PluginServiceClient(channel, interceptors: [interceptor]);
   }
 
-  Future<CatalogResponse> getCatalog(CatalogRequest request) => _mediaStub
-      .getCatalog(request, options: CallOptions(timeout: _defaultRpcTimeout));
+  Future<CatalogResponse> getCatalog(CatalogRequest request) => _gated(
+      request.pluginId,
+      () => _mediaStub.getCatalog(request,
+          options: CallOptions(timeout: _defaultRpcTimeout)));
 
   Future<SearchFiltersResponse> getSearchFilters(
           SearchFiltersRequest request) =>
-      _mediaStub.getSearchFilters(request,
-          options: CallOptions(timeout: _defaultRpcTimeout));
+      _gated(
+          request.pluginId,
+          () => _mediaStub.getSearchFilters(request,
+              options: CallOptions(timeout: _defaultRpcTimeout)));
 
-  Future<SearchResponse> search(SearchRequest request) => _mediaStub
-      .search(request, options: CallOptions(timeout: _defaultRpcTimeout));
+  Future<SearchResponse> search(SearchRequest request) => _gated(
+      request.pluginId,
+      () => _mediaStub.search(request,
+          options: CallOptions(timeout: _defaultRpcTimeout)));
 
-  Future<DetailsResponse> getDetails(DetailsRequest request) => _mediaStub
-      .getDetails(request, options: CallOptions(timeout: _defaultRpcTimeout));
+  Future<DetailsResponse> getDetails(DetailsRequest request) => _gated(
+      request.pluginId,
+      () => _mediaStub.getDetails(request,
+          options: CallOptions(timeout: _defaultRpcTimeout)));
 
-  Future<BrowseResponse> browse(BrowseRequest request) => _mediaStub
-      .browse(request, options: CallOptions(timeout: _defaultRpcTimeout));
+  Future<BrowseResponse> browse(BrowseRequest request) => _gated(
+      request.pluginId,
+      () => _mediaStub.browse(request,
+          options: CallOptions(timeout: _defaultRpcTimeout)));
 
   Future<StreamsResponse> getStreams(StreamsRequest request) => _mediaStub
       .getStreams(request, options: CallOptions(timeout: _defaultRpcTimeout));

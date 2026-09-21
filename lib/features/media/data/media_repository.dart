@@ -202,8 +202,32 @@ class MediaRepository {
     return (catalog: response, fromCache: false);
   }
 
-  Future<SearchFiltersResponse> getSearchFilters(String pluginId) =>
-      _client.getSearchFilters(SearchFiltersRequest(pluginId: pluginId));
+  // Filters are static per plugin (the plugins themselves cache them for
+  // 24h), yet the search screen asked for them at boot and again on every
+  // plugin switch — three identical GetSearchFilters in one web page load,
+  // each holding a browser connection and a plugin Lua state. One shared
+  // in-flight call, and a short session cache. Empty answers are never
+  // cached: the server returns an empty list (not an error) for a plugin
+  // that isn't ready yet, and that must not stick.
+  static const _filtersCacheTtl = Duration(minutes: 10);
+  final Map<String, (SearchFiltersResponse, DateTime)> _filtersCache = {};
+  final Map<String, Future<SearchFiltersResponse>> _filtersInFlight = {};
+
+  Future<SearchFiltersResponse> getSearchFilters(String pluginId) {
+    final cached = _filtersCache[pluginId];
+    if (cached != null &&
+        DateTime.now().difference(cached.$2) < _filtersCacheTtl) {
+      return Future.value(cached.$1);
+    }
+    return _filtersInFlight[pluginId] ??= _client
+        .getSearchFilters(SearchFiltersRequest(pluginId: pluginId))
+        .then((resp) {
+      if (resp.filters.isNotEmpty) {
+        _filtersCache[pluginId] = (resp, DateTime.now());
+      }
+      return resp;
+    }).whenComplete(() => _filtersInFlight.remove(pluginId));
+  }
 
   Future<SearchResponse> search(
     String pluginId,
@@ -234,6 +258,7 @@ class MediaRepository {
   // exist" 404 for 24h if this reused the catalog cache's TTL.
   static const _detailsCacheTtl = Duration(minutes: 5);
   final Map<String, (DetailsResponse, DateTime)> _detailsCache = {};
+  final Map<String, Future<DetailsResponse>> _detailsInFlight = {};
 
   Future<DetailsResponse> getDetails(String pluginId, String mediaId) async {
     final key = '$pluginId|$mediaId';
@@ -242,10 +267,13 @@ class MediaRepository {
         DateTime.now().difference(cached.$2) < _detailsCacheTtl) {
       return cached.$1;
     }
-    final resp = await _client
-        .getDetails(DetailsRequest(pluginId: pluginId, mediaId: mediaId));
-    _detailsCache[key] = (resp, DateTime.now());
-    return resp;
+    // Two heroes built in the same frame used to fire the same call twice.
+    return _detailsInFlight[key] ??= _client
+        .getDetails(DetailsRequest(pluginId: pluginId, mediaId: mediaId))
+        .then((resp) {
+      _detailsCache[key] = (resp, DateTime.now());
+      return resp;
+    }).whenComplete(() => _detailsInFlight.remove(key));
   }
 
   Future<BrowseResponse> browse(
@@ -297,8 +325,19 @@ class MediaRepository {
     }
   }
 
+  // LoadPluginsEvent is dispatched by auth, home, search and the shell at
+  // about the same moment (4 ListPlugins in one web page load). They all want
+  // the same wire response — profile prefs/order are applied per caller below,
+  // so sharing the network call is safe across a profile switch.
+  Future<PluginListResponse>? _listPluginsInFlight;
+
+  Future<PluginListResponse> _fetchPluginList() =>
+      _listPluginsInFlight ??= _client
+          .listPlugins()
+          .whenComplete(() => _listPluginsInFlight = null);
+
   Future<List<PluginInfo>> _orderedPlugins() async {
-    final resp = await _client.listPlugins();
+    final resp = await _fetchPluginList();
     // mycelium-core's ListPlugins ranges over a Go map internally, so the
     // wire order is randomized on every single call — never rely on it.
     // Sorting here gives a stable fallback (both for a profile that never
