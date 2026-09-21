@@ -18,7 +18,11 @@ class DetailsBloc extends Bloc<DetailsEvent, DetailsState> {
       LoadDetailsEvent event, Emitter<DetailsState> emit) async {
     emit(const DetailsLoading());
     try {
-      final response = await _repo.getDetails(event.pluginId, event.mediaId);
+      final response = await _repo.getDetails(
+        event.pluginId,
+        event.mediaId,
+        urgent: true,
+      );
       emit(DetailsLoaded(response));
     } catch (e) {
       if (isUnauthenticated(e)) {

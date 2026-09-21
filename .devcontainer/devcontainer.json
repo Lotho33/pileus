@@ -26,6 +26,17 @@
       "onAutoForward": "ignore"
     }
   },
+  // Web dev server (`flutter run -d web-server`, see docs/WEB.md). The
+  // container is on the host network, so this is already reachable at
+  // http://localhost:8080 with no forwarding — the entry only labels it in
+  // VS Code's Ports view and stops it from being auto-forwarded (a second,
+  // redundant forward on top of the host-network one).
+  "portsAttributes": {
+    "8080": {
+      "label": "Pileus web (dev server)",
+      "onAutoForward": "ignore"
+    }
+  },
   "customizations": {
     "vscode": {
       "extensions": [
@@ -33,7 +44,32 @@
         "dart-code.flutter"
       ],
       "settings": {
-        "dart.flutterSdkPath": "/opt/flutter"
+        "dart.flutterSdkPath": "/opt/flutter",
+        "dart.checkForSdkUpdates": false,
+        "dart.openDevTools": "never",
+        "dart.flutterHotReloadOnSave": "manual",
+        "dart.previewFlutterUiGuides": true,
+        "dart.showTodos": true,
+        "files.watcherExclude": {
+          "**/build/**": true,
+          "**/.dart_tool/**": true,
+          "**/.gradle/**": true
+        },
+        "search.exclude": {
+          "**/build": true,
+          "**/.dart_tool": true,
+          "**/lib/core/grpc/generated": true
+        },
+        "[dart]": {
+          "editor.formatOnSave": true,
+          "editor.formatOnType": true,
+          "editor.rulers": [80],
+          "editor.selectionHighlight": false,
+          "editor.suggest.snippetsPreventQuickSuggestions": false,
+          "editor.suggestSelection": "first",
+          "editor.tabCompletion": "onlySnippets",
+          "editor.wordBasedSuggestions": "off"
+        }
       }
     }
   },

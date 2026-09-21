@@ -59,7 +59,20 @@ RUN mkdir -p "${ANDROID_HOME}/cmdline-tools" \
     && yes | "${ANDROID_HOME}/cmdline-tools/latest/bin/sdkmanager" --licenses > /dev/null \
     && "${ANDROID_HOME}/cmdline-tools/latest/bin/sdkmanager" \
        "platform-tools" "platforms;android-36" "build-tools;36.0.0" \
+       "platforms;android-35" "build-tools;35.0.0" "cmake;3.22.1" \
     && flutter config --android-sdk "${ANDROID_HOME}"
+
+# Android 35 platform/build-tools and CMake 3.22.1 are not targeted by our own
+# gradle files, but a plugin's build (or the Flutter gradle plugin) pulls them
+# in on the very first `flutter build apk` — ~2 minutes of SDK downloads that
+# used to happen inside every fresh container. Baked in here instead.
+#
+# Engine artifacts for every target this project runs on (Linux desktop dev,
+# Android TV/mobile, web/PWA). Without this the first `flutter run`/`build`
+# for each target downloads them on the spot. The Flutter SDK itself is
+# cloned from `stable` at image build time, so rebuilding the image is also
+# how you pick up a new Flutter release.
+RUN flutter precache --linux --android --web
 
 # GTK's native Wayland path crashes `flutter run -d linux` on the host this
 # devcontainer runs on (FlutterEngineRemoveView kInvalidArguments on

@@ -260,12 +260,24 @@ class MediaRepository {
   final Map<String, (DetailsResponse, DateTime)> _detailsCache = {};
   final Map<String, Future<DetailsResponse>> _detailsInFlight = {};
 
-  Future<DetailsResponse> getDetails(String pluginId, String mediaId) async {
+  // [urgent]: a screen the user just opened (DetailsBloc). It must not join
+  // an in-flight call started by a background hero — that one may still be
+  // parked in the web RequestGate queue — so it fires its own, skipping the
+  // queue, and refreshes the cache for everyone else.
+  Future<DetailsResponse> getDetails(String pluginId, String mediaId,
+      {bool urgent = false}) async {
     final key = '$pluginId|$mediaId';
     final cached = _detailsCache[key];
     if (cached != null &&
         DateTime.now().difference(cached.$2) < _detailsCacheTtl) {
       return cached.$1;
+    }
+    if (urgent) {
+      final resp = await _client.getDetails(
+          DetailsRequest(pluginId: pluginId, mediaId: mediaId),
+          urgent: true);
+      _detailsCache[key] = (resp, DateTime.now());
+      return resp;
     }
     // Two heroes built in the same frame used to fire the same call twice.
     return _detailsInFlight[key] ??= _client
