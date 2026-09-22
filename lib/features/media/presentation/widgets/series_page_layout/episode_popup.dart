@@ -86,21 +86,83 @@ class _EpisodePopupState extends State<_EpisodePopup> {
     // the other's real result — but both used to swallow *any* error,
     // unauthenticated included, leaving the user looking at an emptied-out
     // popup with no sign the session had actually expired (2026-09 audit).
+    perf('episode_popup: _loadAll start '
+        '${widget.pluginId}/${widget.item.id}');
     final repo = getIt<MediaRepository>();
     var sessionExpired = false;
-    final results = await Future.wait([
-      repo.getStreams(widget.pluginId, widget.item.id).catchError((e) {
-        if (isUnauthenticated(e)) sessionExpired = true;
-        return StreamsResponse();
-      }),
-      repo.getDetails(widget.pluginId, widget.item.id).catchError((e) {
-        if (isUnauthenticated(e)) sessionExpired = true;
-        return DetailsResponse();
-      }),
-    ]);
+    // Each future's own completion is logged separately, BEFORE it enters
+    // Future.wait — 2026-09-22: a live trace showed both the getStreams and
+    // getDetails RPCs logging "ok" (media_client.dart's own timing) while
+    // the "Future.wait resolved" line below never printed, for 30+ minutes,
+    // across two separate episode taps — something between an RPC
+    // completing and Future.wait registering it never ran. This narrows
+    // down which of the two (or Future.wait itself) is where it actually
+    // stalls.
+    final streamsFuture = repo
+        .getStreams(widget.pluginId, widget.item.id)
+        .then((v) {
+      perf('episode_popup: streamsFuture completed '
+          'sources=${v.sources.length}');
+      return v;
+    }).catchError((e) {
+      if (isUnauthenticated(e)) sessionExpired = true;
+      perf('episode_popup: getStreams failed: $e');
+      return StreamsResponse();
+    });
+    // urgent: true — see the trace this whole diagnostic block was added
+    // for: the non-urgent path's dedup/cache Future chain was the one that
+    // stalled on Android TV, not this RPC itself. Also just the right
+    // semantics here regardless: a freshly opened popup is exactly the
+    // "screen the user just opened" case [urgent] exists for.
+    final detailsFuture = repo
+        .getDetails(widget.pluginId, widget.item.id, urgent: true)
+        .then((v) {
+      perf('episode_popup: detailsFuture completed '
+          'hasEpisode=${v.hasEpisode()}');
+      return v;
+    }).catchError((e) {
+      if (isUnauthenticated(e)) sessionExpired = true;
+      perf('episode_popup: getDetails failed: $e');
+      return DetailsResponse();
+    });
+    // Safety net, not a fix: both RPCs are individually bounded (the client's
+    // own read timeout, ~50s), so this should never actually fire — but a
+    // live trace (2026-09-22) showed both completing while the Future.wait
+    // below them never did, for 30+ minutes, leaving the popup on its
+    // spinner with no way out short of backing out of the dialog entirely.
+    // 15s is comfortably past how long either RPC normally takes; on expiry
+    // this falls through to the same "no sources" state as a real empty
+    // result, which the D-pad can already back out of.
+    List<Object>? results;
+    try {
+      results =
+          await Future.wait([streamsFuture, detailsFuture]).timeout(
+              const Duration(seconds: 15));
+    } on TimeoutException {
+      perf('episode_popup: Future.wait TIMED OUT — see streamsFuture/'
+          'detailsFuture completion lines above (or their absence)');
+    }
+    perf('episode_popup: Future.wait resolved mounted=$mounted '
+        'sessionExpired=$sessionExpired timedOut=${results == null}');
     if (!mounted) return;
+    if (results == null) {
+      setState(() => _loading = false);
+      if (_sources.isEmpty) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted) _closeFn.requestFocus();
+        });
+      }
+      return;
+    }
     if (sessionExpired) {
+      // Was: `return;` here without ever clearing `_loading` — the popup
+      // stayed on its spinner forever (SessionExpiredEvent's own effect,
+      // e.g. a login screen, could show up separately, but THIS dialog
+      // never learned the fetch was over and never repainted). Close it
+      // instead of leaving a dead spinner behind whatever SessionExpiredEvent
+      // triggers.
       getIt<AuthBloc>().add(const SessionExpiredEvent());
+      if (Navigator.of(context).canPop()) Navigator.of(context).pop();
       return;
     }
     final streamsResp = results[0] as StreamsResponse;
@@ -110,6 +172,7 @@ class _EpisodePopupState extends State<_EpisodePopup> {
       _details = detailsResp.hasEpisode() ? detailsResp.episode : null;
       _loading = false;
     });
+    perf('episode_popup: setState done sources=${_sources.length}');
     if (_sources.isEmpty) {
       // No play button will be built to catch autofocus — put it on the ✕ so
       // the popup still responds to the D-pad.

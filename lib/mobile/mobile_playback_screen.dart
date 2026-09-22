@@ -492,7 +492,14 @@ class _MobilePlayerViewState extends State<_MobilePlayerView> {
           ? _curEpisodeTitles[_curEpisodeIndex + 1]
           : null;
 
-      final streamsRes = await repo.getStreams(widget.args.epPluginId, nextId);
+      // Timeout, not just the outer try/catch: a hang here (not a thrown
+      // error) would leave `_prefetching` stuck true forever — the
+      // `finally` below never runs on a stuck await — silently disabling
+      // prefetch for the rest of the session and pushing every "next
+      // episode" onto the cold path in _resolveEpisodeAt instead.
+      final streamsRes = await repo
+          .getStreams(widget.args.epPluginId, nextId)
+          .timeout(const Duration(seconds: 20));
       if (!mounted) return;
       final sources = streamsRes.sources;
       final match = (_curSourceLabel.isEmpty
@@ -519,10 +526,13 @@ class _MobilePlayerViewState extends State<_MobilePlayerView> {
 
       DetailsResponse? details;
       try {
-        details = await repo.getDetails(widget.args.epPluginId, nextId);
+        details = await repo
+            .getDetails(widget.args.epPluginId, nextId)
+            .timeout(const Duration(seconds: 8));
       } catch (_) {
         // metadata is a bonus — a resolved stream with no fresh
-        // poster/plot is still a win over cold-resolving later.
+        // poster/plot is still a win over cold-resolving later. Already
+        // catches a timeout too, not just a thrown error.
       }
       if (!mounted) return;
 
@@ -623,8 +633,13 @@ class _MobilePlayerViewState extends State<_MobilePlayerView> {
         if (mounted) setState(() => _resolvingEpisode = false);
         return;
       }
-      final browseRes = await repo.browse(
-          widget.args.epPluginId, allSeasonIds[newSeasonIndex], '');
+      // Timeout: this await isn't inside its own try/catch, only the outer
+      // one in _goToNextEpisode/_goToPreviousEpisode — which catches a
+      // thrown error fine, but not a hang (nothing would ever throw, the
+      // spinner would just never clear). Same reasoning as the calls below.
+      final browseRes = await repo
+          .browse(widget.args.epPluginId, allSeasonIds[newSeasonIndex], '')
+          .timeout(const Duration(seconds: 20));
       final newEpisodes = browseRes.items;
       if (newEpisodes.isEmpty) {
         if (mounted) setState(() => _resolvingEpisode = false);
@@ -693,13 +708,28 @@ class _MobilePlayerViewState extends State<_MobilePlayerView> {
     // (poster/plot/rating/year) in parallel — without the latter, every
     // field kept dragging the very first episode's values forward forever
     // (the stale Continue Watching poster bug).
-    final streamsFuture = repo.getStreams(widget.args.epPluginId, newMediaId);
+    //
+    // Both timed: `.timeout()` on streamsFuture surfaces as a thrown
+    // TimeoutException, caught by the try/catch around this whole call in
+    // _goToNextEpisode/_goToPreviousEpisode (clears _resolvingEpisode, shows
+    // an error) — without it, a hang here (not a thrown error, the RPC just
+    // never returning) left the spinner on those buttons forever, nothing
+    // in the call chain able to time it out on its own. urgent: true on
+    // getDetails for the same reason as episode_popup.dart (2026-09):
+    // a live Android TV trace showed the non-urgent dedup/cache path stall
+    // for 15-30+s past when the RPC itself had already answered — this is
+    // the same "user is actively waiting" shape that fix targeted.
+    final streamsFuture = repo
+        .getStreams(widget.args.epPluginId, newMediaId)
+        .timeout(const Duration(seconds: 20));
     DetailsResponse? details;
     try {
-      details = await repo.getDetails(widget.args.epPluginId, newMediaId);
+      details = await repo
+          .getDetails(widget.args.epPluginId, newMediaId, urgent: true)
+          .timeout(const Duration(seconds: 8));
     } catch (_) {
       // metadata is a nice-to-have — a stream that still resolves is what
-      // actually matters here.
+      // actually matters here. Already catches a timeout too.
     }
     final streamsRes = await streamsFuture;
     final sources = streamsRes.sources;

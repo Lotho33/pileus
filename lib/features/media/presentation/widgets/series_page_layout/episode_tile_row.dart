@@ -111,6 +111,8 @@ class _EpisodeTileRowState extends State<_EpisodeTileRow> {
       final epNumW = (sh * (72.0 / 1080.0)).clamp(40.0, 144.0);
 
       void openPopup() {
+        perf('episode_tile_row: openPopup '
+            '${widget.pluginId}/${widget.item.id}');
         showDialog(
           context: context,
           barrierColor: Colors.black.withValues(alpha: 0.75),

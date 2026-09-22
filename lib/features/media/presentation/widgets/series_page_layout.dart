@@ -14,6 +14,7 @@ import '../../../../core/grpc/grpc_errors.dart';
 import '../../../../core/theme/app_scale.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../../../core/utils/image_sizing.dart';
+import '../../../../core/utils/perf_log.dart';
 import '../../data/media_repository.dart';
 import '../../../../shared/utils/safe_focus.dart';
 import '../../../../shared/widgets/pileus_spinner.dart';

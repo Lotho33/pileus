@@ -280,12 +280,39 @@ class MediaRepository {
       return resp;
     }
     // Two heroes built in the same frame used to fire the same call twice.
-    return _detailsInFlight[key] ??= _client
-        .getDetails(DetailsRequest(pluginId: pluginId, mediaId: mediaId))
-        .then((resp) {
+    //
+    // Plain async/await + try/finally, not a `.then().whenComplete()` chain
+    // — a live Android TV trace (2026-09-22) showed the underlying RPC
+    // itself answer in 47ms (media_client.dart's own timing) while a
+    // listener attached just outside this method (episode_popup.dart) never
+    // saw it complete for 15-30+ seconds, though the value DID land in
+    // _detailsCache in that window (confirmed by a retry moments later
+    // hitting the cache with no fresh RPC) — i.e. the combinator chain
+    // itself ran, just far later than any sane network latency explains,
+    // specifically on that hardware. getStreams, which has no such
+    // wrapping (a bare pass-through to _client.getStreams), never showed
+    // the same stall in the same traces. Root cause not confirmed from
+    // here, but the correlation is exact and repeated — this removes the
+    // extra Future-combinator layer for every non-urgent caller (heroes
+    // included, not just the popup that surfaced it) instead of only
+    // working around it at one call site.
+    final inFlight = _detailsInFlight[key];
+    if (inFlight != null) return inFlight;
+    final future = _fetchAndCacheDetails(pluginId, mediaId, key);
+    _detailsInFlight[key] = future;
+    return future;
+  }
+
+  Future<DetailsResponse> _fetchAndCacheDetails(
+      String pluginId, String mediaId, String key) async {
+    try {
+      final resp = await _client
+          .getDetails(DetailsRequest(pluginId: pluginId, mediaId: mediaId));
       _detailsCache[key] = (resp, DateTime.now());
       return resp;
-    }).whenComplete(() => _detailsInFlight.remove(key));
+    } finally {
+      _detailsInFlight.remove(key);
+    }
   }
 
   Future<BrowseResponse> browse(
