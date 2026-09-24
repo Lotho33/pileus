@@ -7,6 +7,7 @@ import '../core/grpc/clients/media_client.dart' hide ContinueWatchingItem;
 import '../core/theme/app_theme.dart';
 import '../core/utils/image_sizing.dart';
 import '../features/media/data/media_repository.dart';
+import '../shared/sdui/sport_theme.dart' show isLiveNow, liveStartTimeLabel;
 import 'package:cached_network_image_platform_interface/cached_network_image_platform_interface.dart'
     show ImageRenderMethodForWeb;
 
@@ -89,6 +90,8 @@ class _LiveSheetState extends State<_LiveSheet> {
   @override
   Widget build(BuildContext context) {
     final it = widget.item;
+    final isLive = isLiveNow(it.extra);
+    final startTime = liveStartTimeLabel(it.extra);
     final sportCat = it.extra['sport_cat'] ?? '';
     final competition = it.extra['competition'] ?? '';
     final plot = it.extra['plot'] ?? '';
@@ -131,24 +134,38 @@ class _LiveSheetState extends State<_LiveSheet> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Row(
-                        children: [
-                          Container(
-                            width: 7,
-                            height: 7,
-                            decoration: const BoxDecoration(
-                                color: Color(0xFFFF3B3B),
-                                shape: BoxShape.circle),
-                          ),
-                          const SizedBox(width: 5),
-                          const Text('IN DIRETTA',
-                              style: TextStyle(
+                      if (isLive)
+                        Row(
+                          children: [
+                            Container(
+                              width: 7,
+                              height: 7,
+                              decoration: const BoxDecoration(
                                   color: Color(0xFFFF3B3B),
-                                  fontSize: 11,
-                                  fontWeight: FontWeight.w700,
-                                  letterSpacing: 1.2)),
-                        ],
-                      ),
+                                  shape: BoxShape.circle),
+                            ),
+                            const SizedBox(width: 5),
+                            const Text('IN DIRETTA',
+                                style: TextStyle(
+                                    color: Color(0xFFFF3B3B),
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.w700,
+                                    letterSpacing: 1.2)),
+                          ],
+                        )
+                      else if (startTime != null)
+                        Row(
+                          children: [
+                            const Icon(Icons.schedule_rounded,
+                                size: 13, color: AppTheme.textMid),
+                            const SizedBox(width: 4),
+                            Text('Inizio $startTime',
+                                style: const TextStyle(
+                                    color: AppTheme.textMid,
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.w600)),
+                          ],
+                        ),
                       const SizedBox(height: 4),
                       Text(it.title,
                           maxLines: 2,

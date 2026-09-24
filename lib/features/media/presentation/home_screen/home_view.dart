@@ -32,12 +32,16 @@ class _HomeViewState extends State<_HomeView> {
   // Fire TV Stick.
   final ValueNotifier<bool> _navVisibleVN = ValueNotifier(false);
   bool _playerWasActive = false;
-  // Second, delayed continue-watching reload after the player closes — see
-  // _onNav. The player's final progress save (in its dispose()) is a
-  // fire-and-forget gRPC call, so the immediate reload right after the pop
-  // often reaches mycelium before that write commits and comes back with the
-  // pre-watch list. This retry, a beat later, picks up the fresh row.
+  // Second and third, delayed continue-watching reloads after the player
+  // closes — see _onNav. The player's final progress save (in its
+  // dispose()) is a fire-and-forget gRPC call, so the immediate reload right
+  // after the pop often reaches mycelium before that write commits and comes
+  // back with the pre-watch list. The 1.5s retry picks up the fresh row in
+  // the common case; the 4s one is a safety net for a slow/loaded server
+  // where even that isn't enough — cheap to add, and better than silently
+  // showing a stale row if the first retry loses the race.
   Timer? _cwReloadTimer;
+  Timer? _cwReloadTimer2;
   GoRouter? _router;
 
   List<FocusNode> _pluginFocusNodes = [];
@@ -144,12 +148,17 @@ class _HomeViewState extends State<_HomeView> {
       _cwReloadTimer = Timer(const Duration(milliseconds: 1500), () {
         if (mounted) bloc.add(const LoadContinueWatchingEvent());
       });
+      _cwReloadTimer2?.cancel();
+      _cwReloadTimer2 = Timer(const Duration(milliseconds: 4000), () {
+        if (mounted) bloc.add(const LoadContinueWatchingEvent());
+      });
     }
   }
 
   @override
   void dispose() {
     _cwReloadTimer?.cancel();
+    _cwReloadTimer2?.cancel();
     _fadeOutTimer?.cancel();
     _router?.routerDelegate.removeListener(_onNav);
     for (final n in _pluginFocusNodes) {

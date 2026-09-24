@@ -402,36 +402,7 @@ class _PluginNavItemState extends State<_PluginNavItem> {
                         !widget.plugin.reachable ||
                         widget.plugin.statusLabel.isNotEmpty)
                       const SizedBox(height: 3),
-                    if (widget.plugin.needsConfig)
-                      const _StatusBadge(
-                          label: 'config richiesta', color: Color(0xFFf59e0b))
-                    // reachable is the automatic "the backend actually
-                    // answered a liveness check recently" signal — separate
-                    // from statusLabel (self-reported by the plugin, e.g.
-                    // "syncing" during an import) and specifically meant to
-                    // catch the case statusLabel can't: a plugin that's
-                    // gone quiet (process died, gRPC channel stuck, repeated
-                    // background task failures) without ever
-                    // self-reporting an error, so statusLabel is still
-                    // whatever it last successfully reported. Takes
-                    // priority over statusLabel for exactly that reason.
-                    else if (!widget.plugin.reachable)
-                      _StatusBadge(
-                          label: 'non raggiungibile · ultimo contatto: '
-                              '${lastSeenLabel(widget.plugin.lastOkUnix.toInt())}',
-                          color: const Color(0xFFef4444))
-                    else if (widget.plugin.statusLabel == 'error')
-                      _StatusBadge(
-                          label: widget.plugin.statusDetail.isNotEmpty
-                              ? widget.plugin.statusDetail
-                              : 'errore',
-                          color: const Color(0xFFef4444))
-                    else if (widget.plugin.statusLabel == 'syncing')
-                      _StatusBadge(
-                          label: widget.plugin.statusDetail.isNotEmpty
-                              ? widget.plugin.statusDetail
-                              : 'sincronizzazione…',
-                          color: const Color(0xFF38bdf8)),
+                    PluginStatusIndicator(plugin: widget.plugin),
                   ],
                 ),
               ),
@@ -444,6 +415,55 @@ class _PluginNavItemState extends State<_PluginNavItem> {
 }
 
 // ── status badge ─────────────────────────────────────────────────────────
+
+/// Small colored status pill for a [PluginInfo] — "config richiesta",
+/// "non raggiungibile", or a self-reported error/syncing status. Renders
+/// nothing if the plugin has nothing to report.
+///
+/// Used here (the home side-nav) AND by plugin_settings_screen.dart — that
+/// screen used to show none of this despite already loading the same data,
+/// while a stale comment claimed it did. One shared widget instead of two
+/// copies of this cascade drifting apart.
+class PluginStatusIndicator extends StatelessWidget {
+  final PluginInfo plugin;
+  const PluginStatusIndicator({super.key, required this.plugin});
+
+  @override
+  Widget build(BuildContext context) {
+    if (plugin.needsConfig) {
+      return const _StatusBadge(
+          label: 'config richiesta', color: Color(0xFFf59e0b));
+    }
+    // reachable is the automatic "the backend actually answered a liveness
+    // check recently" signal — separate from statusLabel (self-reported by
+    // the plugin, e.g. "syncing" during an import) and specifically meant to
+    // catch the case statusLabel can't: a plugin that's gone quiet (process
+    // died, gRPC channel stuck, repeated background task failures) without
+    // ever self-reporting an error, so statusLabel is still whatever it last
+    // successfully reported. Takes priority over statusLabel for exactly
+    // that reason.
+    if (!plugin.reachable) {
+      return _StatusBadge(
+          label: 'non raggiungibile · ultimo contatto: '
+              '${lastSeenLabel(plugin.lastOkUnix.toInt())}',
+          color: const Color(0xFFef4444));
+    }
+    if (plugin.statusLabel == 'error') {
+      return _StatusBadge(
+          label:
+              plugin.statusDetail.isNotEmpty ? plugin.statusDetail : 'errore',
+          color: const Color(0xFFef4444));
+    }
+    if (plugin.statusLabel == 'syncing') {
+      return _StatusBadge(
+          label: plugin.statusDetail.isNotEmpty
+              ? plugin.statusDetail
+              : 'sincronizzazione…',
+          color: const Color(0xFF38bdf8));
+    }
+    return const SizedBox.shrink();
+  }
+}
 
 class _StatusBadge extends StatelessWidget {
   final String label;

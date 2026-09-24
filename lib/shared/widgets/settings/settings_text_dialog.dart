@@ -56,6 +56,11 @@ class _SettingsTextInputState extends State<_SettingsTextInput> {
   late final _controller = TextEditingController(text: widget.initialValue);
   final _fieldFn = FocusNode();
   final _keyboardKey = GlobalKey<OnScreenKeyboardState>();
+  // Was: "Salva" with an empty field just closed the dialog like "Annulla"
+  // (both ended up popping null) — the user got zero feedback that nothing
+  // was saved. Now an empty save is refused with an inline message instead
+  // of silently closing.
+  String? _error;
 
   @override
   void initState() {
@@ -65,16 +70,36 @@ class _SettingsTextInputState extends State<_SettingsTextInput> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) _keyboardKey.currentState?.firstFocusNode.requestFocus();
     });
+    // A controller listener rather than TextField.onChanged: the field is
+    // readOnly (input comes from OnScreenKeyboard mutating _controller
+    // directly, see below), and this reacts to that the same way.
+    _controller.addListener(_onTextChanged);
+  }
+
+  void _onTextChanged() {
+    if (_error != null && _controller.text.trim().isNotEmpty) {
+      setState(() => _error = null);
+    }
   }
 
   @override
   void dispose() {
+    _controller.removeListener(_onTextChanged);
     _fieldFn.dispose();
     _controller.dispose();
     super.dispose();
   }
 
   void _pop([String? value]) => Navigator.of(context).pop(value);
+
+  void _save() {
+    final v = _controller.text.trim();
+    if (v.isEmpty) {
+      setState(() => _error = 'Inserisci un testo.');
+      return;
+    }
+    _pop(v);
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -101,15 +126,18 @@ class _SettingsTextInputState extends State<_SettingsTextInput> {
                 // readOnly stops Android's own IME popping up on top of it.
                 readOnly: true,
                 style: const TextStyle(color: Colors.white),
-                decoration: InputDecoration(hintText: widget.hintText),
-                onSubmitted: (v) => _pop(v.trim()),
+                decoration: InputDecoration(
+                  hintText: widget.hintText,
+                  errorText: _error,
+                ),
+                onSubmitted: (_) => _save(),
               ),
             ),
             const SizedBox(height: 14),
             OnScreenKeyboard(
               key: _keyboardKey,
               controller: _controller,
-              onSubmit: () => _pop(_controller.text.trim()),
+              onSubmit: _save,
               onNavigateUp: () => _fieldFn.requestFocus(),
             ),
           ],
@@ -119,7 +147,7 @@ class _SettingsTextInputState extends State<_SettingsTextInput> {
           DialogActionButton(
             label: 'Salva',
             primary: true,
-            onPressed: () => _pop(_controller.text.trim()),
+            onPressed: _save,
           ),
         ],
       ),

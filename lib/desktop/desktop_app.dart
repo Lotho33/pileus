@@ -17,6 +17,12 @@ import 'desktop_router.dart';
 class PileusDesktopApp extends StatelessWidget {
   const PileusDesktopApp({super.key});
 
+  // Lets the top-level listener below show a SnackBar (e.g. "session
+  // expired") regardless of which route/page is currently on screen —
+  // Scaffold.of(context) isn't reachable from here since this sits above
+  // the whole MaterialApp.router / GoRouter Navigator.
+  static final _scaffoldMessengerKey = GlobalKey<ScaffoldMessengerState>();
+
   @override
   Widget build(BuildContext context) {
     return BlocProvider<AuthBloc>.value(
@@ -32,6 +38,10 @@ class PileusDesktopApp extends StatelessWidget {
 
           if (state is DevicePairingRequired) {
             desktopRouter.go('/pairing');
+            if (state.reason != null) {
+              _scaffoldMessengerKey.currentState
+                  ?.showSnackBar(SnackBar(content: Text(state.reason!)));
+            }
           } else if (state is ServerDiscoveryRequired) {
             desktopRouter.go('/discovery');
           } else if (state is ProfileSelectionRequired) {
@@ -43,6 +53,7 @@ class PileusDesktopApp extends StatelessWidget {
         child: MaterialApp.router(
           title: 'Pileus',
           debugShowCheckedModeBanner: false,
+          scaffoldMessengerKey: _scaffoldMessengerKey,
           theme: AppTheme.dark(),
           routerConfig: desktopRouter,
           // Desktop scrolls with the wheel and drags with a trackpad/mouse —

@@ -17,6 +17,9 @@ import 'mobile_router.dart';
 class PileusMobileApp extends StatelessWidget {
   const PileusMobileApp({super.key});
 
+  // See PileusDesktopApp's identical field for why this exists.
+  static final _scaffoldMessengerKey = GlobalKey<ScaffoldMessengerState>();
+
   @override
   Widget build(BuildContext context) {
     return BlocProvider<AuthBloc>.value(
@@ -32,6 +35,10 @@ class PileusMobileApp extends StatelessWidget {
 
           if (state is DevicePairingRequired) {
             mobileRouter.go('/pairing');
+            if (state.reason != null) {
+              _scaffoldMessengerKey.currentState
+                  ?.showSnackBar(SnackBar(content: Text(state.reason!)));
+            }
           } else if (state is ServerDiscoveryRequired) {
             mobileRouter.go('/discovery');
           } else if (state is ProfileSelectionRequired) {
@@ -45,6 +52,7 @@ class PileusMobileApp extends StatelessWidget {
         child: MaterialApp.router(
           title: 'Pileus',
           debugShowCheckedModeBanner: false,
+          scaffoldMessengerKey: _scaffoldMessengerKey,
           theme: AppTheme.dark(),
           routerConfig: mobileRouter,
           // Nudge every text size up ~13% (the base sizes read a touch small

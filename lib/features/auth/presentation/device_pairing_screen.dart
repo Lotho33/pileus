@@ -9,6 +9,7 @@ import '../../../shared/widgets/tv_focusable.dart';
 import '../bloc/auth_bloc.dart';
 import '../bloc/auth_event.dart';
 import '../bloc/auth_state.dart';
+import '../friendly_error.dart';
 
 class DevicePairingScreen extends StatefulWidget {
   const DevicePairingScreen({super.key});
@@ -52,7 +53,10 @@ class _DevicePairingScreenState extends State<DevicePairingScreen> {
         if (state is AuthenticatedState) context.go('/home');
         if (state is AuthError) {
           ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text(state.message), backgroundColor: Colors.red),
+            SnackBar(
+              content: Text(friendlyPairingErrorMessage(state.message)),
+              backgroundColor: Colors.red,
+            ),
           );
         }
       },

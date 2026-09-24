@@ -39,9 +39,9 @@
     <category>Player</category>
   </categories>
 
-  <url type="homepage">https://github.com/lotho33/pileus-player</url>
-  <url type="bugtracker">https://github.com/lotho33/pileus-player/issues</url>
-  <url type="vcs-browser">https://github.com/lotho33/pileus-player</url>
+  <url type="homepage">https://github.com/lotho33/pileus</url>
+  <url type="bugtracker">https://github.com/lotho33/pileus/issues</url>
+  <url type="vcs-browser">https://github.com/lotho33/pileus</url>
 
   <content_rating type="oars-1.1"/>
 
@@ -50,7 +50,7 @@
   <screenshots>
     <screenshot type="default">
       <caption>The desktop home screen</caption>
-      <image>https://raw.githubusercontent.com/lotho33/pileus-player/main/docs/screenshots/desktop-home.png</image>
+      <image>https://raw.githubusercontent.com/lotho33/pileus/main/docs/screenshots/desktop-home.png</image>
     </screenshot>
   </screenshots>
 

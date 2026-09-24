@@ -1,5 +1,56 @@
 import 'package:flutter/material.dart';
 
+/// Whether a catalog/details item's `extra['is_live']` flag says it's on air
+/// *right now* — as opposed to e.g. a scheduled sport event that hasn't
+/// started yet. Shared by the home hero, the details live-event layout, the
+/// live event popup and the mobile live sheet so all four agree on what
+/// counts as "IN DIRETTA".
+bool isLiveNow(Map<String, String> extra) => extra['is_live'] == '1';
+
+String _hhmm(DateTime d) =>
+    '${d.hour.toString().padLeft(2, '0')}:${d.minute.toString().padLeft(2, '0')}';
+
+/// Best-effort "HH:MM" start time for a live/scheduled event, read from
+/// whichever `extra` key the plugin populated. Mycelium's CatalogItem has no
+/// typed time field for this (the SDK's LiveDetails.stream_start is
+/// GetDetails-only), so this defensively checks several key names other
+/// plugins/paths might use. Returns null if none of them parse.
+String? liveStartTimeLabel(Map<String, String> extra) {
+  const keys = [
+    'stream_start',
+    'streamStart',
+    'start_time',
+    'start',
+    'start_at',
+    'starts_at',
+    'start_unix',
+    'event_time',
+    'kickoff',
+    'time',
+    'begin',
+    'scheduled',
+  ];
+  for (final k in keys) {
+    final raw = extra[k];
+    if (raw == null || raw.trim().isEmpty) continue;
+    final v = raw.trim();
+    // Unix epoch (seconds or milliseconds).
+    final n = int.tryParse(v);
+    if (n != null && n > 1000000000) {
+      final ms = n > 100000000000 ? n : n * 1000;
+      return _hhmm(
+          DateTime.fromMillisecondsSinceEpoch(ms, isUtc: true).toLocal());
+    }
+    // Already a HH:MM (possibly inside a longer string).
+    final m = RegExp(r'\b(\d{1,2}):(\d{2})\b').firstMatch(v);
+    if (m != null) return '${m.group(1)!.padLeft(2, '0')}:${m.group(2)}';
+    // ISO-8601 / RFC-3339.
+    final dt = DateTime.tryParse(v);
+    if (dt != null) return _hhmm(dt.toLocal());
+  }
+  return null;
+}
+
 /// Sport-category accent color and icon, shared by the home hero, the live
 /// carousel cards and the live event popup — one mapping so the accent
 /// strip / gradient / chip read as one consistent visual language.

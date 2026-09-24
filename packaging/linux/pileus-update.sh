@@ -6,7 +6,7 @@
 set -euo pipefail
 
 FORGEJO_URL="${FORGEJO_URL:-https://YOUR-FORGEJO}"
-REPO="${REPO:-OWNER/pileus-player}"
+REPO="${REPO:-OWNER/pileus}"
 INSTALL_DIR="${INSTALL_DIR:-/opt/pileus}"
 STATE_FILE="${STATE_FILE:-/var/lib/pileus/installed-tag}"
 # Set to 1 to also accept pre-release (beta) tags.

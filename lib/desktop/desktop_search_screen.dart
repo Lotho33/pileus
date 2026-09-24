@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
@@ -39,6 +41,10 @@ class _DesktopSearchScreenState extends State<DesktopSearchScreen> {
   List<SearchFilter> _filters = const [];
   int _filtersToken = 0;
   final Map<String, String> _active = {};
+  // Live-as-you-type search, matching TV's quick-search/search screens —
+  // same 350ms debounce as those and as the mobile search screen.
+  Timer? _debounce;
+  static const _debounceDelay = Duration(milliseconds: 350);
 
   @override
   void initState() {
@@ -52,6 +58,7 @@ class _DesktopSearchScreenState extends State<DesktopSearchScreen> {
 
   @override
   void dispose() {
+    _debounce?.cancel();
     _ctrl.dispose();
     _focus.dispose();
     _bloc.close();
@@ -104,7 +111,10 @@ class _DesktopSearchScreenState extends State<DesktopSearchScreen> {
     }
   }
 
-  void _run() {
+  /// [unfocus] dismisses the field's focus — right for an explicit submit/
+  /// clear/filter change, wrong for a live-as-you-type call.
+  void _run({bool unfocus = true}) {
+    _debounce?.cancel();
     final q = _ctrl.text.trim();
     final id = _pluginId;
     if (id == null) return;
@@ -115,10 +125,17 @@ class _DesktopSearchScreenState extends State<DesktopSearchScreen> {
       }
       return;
     }
-    _focus.unfocus();
+    if (unfocus) _focus.unfocus();
     setState(() => _submitted = q.isEmpty ? '·' : q);
     _bloc.add(
         SearchRequestEvent(pluginId: id, query: q, filters: Map.of(_active)));
+  }
+
+  void _onQueryChanged(String _) {
+    _debounce?.cancel();
+    _debounce = Timer(_debounceDelay, () {
+      if (mounted) _run(unfocus: false);
+    });
   }
 
   Future<void> _openFilters() async {
@@ -162,6 +179,7 @@ class _DesktopSearchScreenState extends State<DesktopSearchScreen> {
                             hint: active != null
                                 ? 'Cerca in ${pluginLabel(active)}'
                                 : 'Cerca…',
+                            onChanged: _onQueryChanged,
                             onSubmit: _run,
                           ),
                         ),
@@ -282,11 +300,13 @@ class _SearchField extends StatelessWidget {
   final TextEditingController controller;
   final FocusNode focusNode;
   final String hint;
+  final ValueChanged<String> onChanged;
   final VoidCallback onSubmit;
   const _SearchField({
     required this.controller,
     required this.focusNode,
     required this.hint,
+    required this.onChanged,
     required this.onSubmit,
   });
 
@@ -296,6 +316,7 @@ class _SearchField extends StatelessWidget {
       controller: controller,
       focusNode: focusNode,
       textInputAction: TextInputAction.search,
+      onChanged: onChanged,
       onSubmitted: (_) => onSubmit(),
       style: const TextStyle(color: AppTheme.textHigh, fontSize: 15),
       decoration: InputDecoration(

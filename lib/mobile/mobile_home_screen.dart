@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
@@ -64,6 +66,16 @@ class _MobileHomeViewState extends State<_MobileHomeView> {
   // `_activeId` field that only this screen ever saw.
   final _activePlugin = getIt<ActivePluginController>();
 
+  // Continue-watching auto-refresh on return from the player — mirrors
+  // _HomeViewState._onNav on TV (home_view.dart). Without this, the home
+  // (kept alive in mobile_shell's IndexedStack) never re-loads the CW row
+  // after watching something: it only reloads once, in build() above, and
+  // the only other trigger is the user's own pull-to-refresh.
+  bool _playerWasActive = false;
+  Timer? _cwReloadTimer;
+  Timer? _cwReloadTimer2;
+  GoRouter? _router;
+
   @override
   void initState() {
     super.initState();
@@ -75,7 +87,48 @@ class _MobileHomeViewState extends State<_MobileHomeView> {
   }
 
   @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final router = GoRouter.of(context);
+    if (_router != router) {
+      _router?.routerDelegate.removeListener(_onNav);
+      _router = router;
+      router.routerDelegate.addListener(_onNav);
+    }
+  }
+
+  void _onNav() {
+    if (!mounted || _router == null) return;
+    final path = _router!.routeInformationProvider.value.uri.path;
+    if (path.startsWith('/player')) {
+      _playerWasActive = true;
+    } else if (_playerWasActive) {
+      _playerWasActive = false;
+      final bloc = getIt<ContinueWatchingBloc>();
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) bloc.add(const LoadContinueWatchingEvent());
+      });
+      // Retry after the player's fire-and-forget dispose-time save has had
+      // time to reach mycelium and commit (same reasoning as TV's
+      // home_view.dart:_onNav).
+      _cwReloadTimer?.cancel();
+      _cwReloadTimer = Timer(const Duration(milliseconds: 1500), () {
+        if (mounted) bloc.add(const LoadContinueWatchingEvent());
+      });
+      // Safety net for a slow/loaded server where even the 1.5s retry above
+      // loses the race against the player's fire-and-forget save.
+      _cwReloadTimer2?.cancel();
+      _cwReloadTimer2 = Timer(const Duration(milliseconds: 4000), () {
+        if (mounted) bloc.add(const LoadContinueWatchingEvent());
+      });
+    }
+  }
+
+  @override
   void dispose() {
+    _cwReloadTimer?.cancel();
+    _cwReloadTimer2?.cancel();
+    _router?.routerDelegate.removeListener(_onNav);
     _activePlugin.removeListener(_onActiveChanged);
     super.dispose();
   }

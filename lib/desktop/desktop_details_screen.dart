@@ -18,6 +18,7 @@ import '../features/media/bloc/details_state.dart';
 import '../features/media/data/media_repository.dart';
 import '../features/player/resolve_and_play.dart';
 import '../shared/responsive.dart';
+import '../shared/widgets/error_retry_view.dart';
 import 'widgets/desktop_dialogs.dart';
 import 'package:cached_network_image_platform_interface/cached_network_image_platform_interface.dart'
     show ImageRenderMethodForWeb;
@@ -63,7 +64,14 @@ class DesktopDetailsScreen extends StatelessWidget {
             backgroundColor: AppTheme.bg,
             body: BlocBuilder<DetailsBloc, DetailsState>(
               builder: (context, s) {
-                if (s is DetailsError) return _Error(message: s.message);
+                if (s is DetailsError) {
+                  return _Error(
+                    message: s.message,
+                    onRetry: () => context.read<DetailsBloc>().add(
+                        LoadDetailsEvent(
+                            pluginId: pluginId, mediaId: mediaId)),
+                  );
+                }
                 final res = s is DetailsLoaded ? s.response : null;
                 final item = res?.item ?? preview;
                 if (item == null) {
@@ -951,27 +959,17 @@ class _RelatedCardState extends State<_RelatedCard> {
 
 class _Error extends StatelessWidget {
   final String message;
-  const _Error({required this.message});
+  final VoidCallback onRetry;
+  const _Error({required this.message, required this.onRetry});
 
   @override
   Widget build(BuildContext context) {
     return Stack(
       children: [
-        Center(
-          child: Padding(
-            padding: const EdgeInsets.all(24),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                const Icon(Icons.error_outline_rounded,
-                    color: AppTheme.textLow, size: 44),
-                const SizedBox(height: 12),
-                Text(message,
-                    textAlign: TextAlign.center,
-                    style: const TextStyle(color: AppTheme.textMid)),
-              ],
-            ),
-          ),
+        ErrorRetryView(
+          title: 'Impossibile caricare il contenuto',
+          detail: message,
+          onRetry: onRetry,
         ),
         Positioned(
           top: 16,

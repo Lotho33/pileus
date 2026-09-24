@@ -16,6 +16,9 @@ import 'web_router.dart';
 class PileusWebApp extends StatelessWidget {
   const PileusWebApp({super.key});
 
+  // See PileusDesktopApp's identical field for why this exists.
+  static final _scaffoldMessengerKey = GlobalKey<ScaffoldMessengerState>();
+
   @override
   Widget build(BuildContext context) {
     return BlocProvider<AuthBloc>.value(
@@ -31,6 +34,10 @@ class PileusWebApp extends StatelessWidget {
 
           if (state is DevicePairingRequired) {
             webRouter.go('/pairing');
+            if (state.reason != null) {
+              _scaffoldMessengerKey.currentState
+                  ?.showSnackBar(SnackBar(content: Text(state.reason!)));
+            }
           } else if (state is ServerDiscoveryRequired) {
             webRouter.go('/discovery');
           } else if (state is ProfileSelectionRequired) {
@@ -42,6 +49,7 @@ class PileusWebApp extends StatelessWidget {
         child: MaterialApp.router(
           title: 'Pileus',
           debugShowCheckedModeBanner: false,
+          scaffoldMessengerKey: _scaffoldMessengerKey,
           theme: AppTheme.dark(),
           routerConfig: webRouter,
           scrollBehavior: const _WebScrollBehavior(),

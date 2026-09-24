@@ -1,9 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
-import '../core/di/injection.dart';
-import '../core/grpc/auth_interceptor.dart';
 import '../core/grpc/clients/media_client.dart' hide ContinueWatchingItem;
+import '../core/router/auth_guard.dart';
 import '../core/theme/app_theme.dart';
 // The responsive UI is shared with the desktop build. These screens are
 // dart:io-free, so they link fine for web.
@@ -148,10 +147,5 @@ final GoRouter webRouter = GoRouter(
       ),
     ),
   ),
-  redirect: (context, state) {
-    const authFlow = {'/splash', '/discovery', '/pairing', '/profiles'};
-    if (authFlow.contains(state.uri.path)) return null;
-    if (!getIt<AuthInterceptor>().hasCredentials) return '/splash';
-    return null;
-  },
+  redirect: (context, state) => authGuardRedirect(state),
 );

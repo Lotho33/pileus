@@ -85,7 +85,8 @@ class _LiveEventLayoutState extends State<_LiveEventLayout> {
   Widget build(BuildContext context) {
     final sh = MediaQuery.sizeOf(context).height;
     final item = widget.response.item;
-    final isLive = item.extra['is_live'] == '1';
+    final isLive = isLiveNow(item.extra);
+    final startTime = liveStartTimeLabel(item.extra);
     final fanart = item.extra['fanart_url'] ?? '';
     final bgUrl = fanart.isNotEmpty ? fanart : item.posterUrl;
     final sportCat = item.extra['sport_cat'] ?? '';
@@ -207,6 +208,19 @@ class _LiveEventLayoutState extends State<_LiveEventLayout> {
                                     fontSize: sh * (13.0 / 1080.0),
                                     fontWeight: FontWeight.w700,
                                     letterSpacing: 1.5)),
+                          ])
+                        else if (startTime != null)
+                          Row(children: [
+                            Icon(Icons.schedule_rounded,
+                                size: sh * (15.0 / 1080.0),
+                                color: AppTheme.textHigh.withValues(alpha: 0.6)),
+                            SizedBox(width: sh * (6.0 / 1080.0)),
+                            Text('Inizio $startTime',
+                                style: TextStyle(
+                                    color: AppTheme.textHigh
+                                        .withValues(alpha: 0.6),
+                                    fontSize: sh * (13.0 / 1080.0),
+                                    fontWeight: FontWeight.w600)),
                           ])
                         else if (plot.isNotEmpty)
                           Text(plot,

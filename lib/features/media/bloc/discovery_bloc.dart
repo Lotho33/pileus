@@ -200,11 +200,19 @@ class DiscoveryBloc extends Bloc<DiscoveryEvent, DiscoveryState> {
 
   Future<void> _onLoadBrowse(
       LoadBrowseEvent event, Emitter<DiscoveryState> emit) async {
+    // For-symmetry generation guard, same reasoning as _onLoadCatalog: no
+    // caller dispatches a second overlapping LoadBrowseEvent on this bloc
+    // today, but if one ever does (retry/refresh on a folder view), this
+    // stops the two responses from interleaving instead of reintroducing the
+    // same class of bug that guard was added for.
+    final myGeneration = ++_catalogGeneration;
     emit(const DiscoveryLoading());
     try {
       final response = await _repo.browse(event.pluginId, event.parentId, '');
+      if (myGeneration != _catalogGeneration) return;
       emit(DiscoveryLoaded(response.items, hasMore: response.hasMore));
     } catch (e) {
+      if (myGeneration != _catalogGeneration) return;
       if (isUnauthenticated(e)) {
         onSessionExpired?.call();
         return;

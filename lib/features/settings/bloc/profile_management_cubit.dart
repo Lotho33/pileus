@@ -2,6 +2,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 
 import '../../../core/grpc/grpc_errors.dart';
 import '../../auth/data/auth_repository.dart';
+import '../../auth/friendly_error.dart';
 import 'profile_management_state.dart';
 
 class ProfileManagementCubit extends Cubit<ProfileMgmtState> {
@@ -50,7 +51,7 @@ class ProfileManagementCubit extends Cubit<ProfileMgmtState> {
         return;
       }
       if (isClosed) return;
-      emit(ProfileMgmtError(e.toString()));
+      emit(ProfileMgmtError(friendlyOperationErrorMessage(e.toString())));
     }
   }
 
@@ -68,7 +69,7 @@ class ProfileManagementCubit extends Cubit<ProfileMgmtState> {
         return;
       }
       if (isClosed) return;
-      emit(ProfileMgmtError(e.toString()));
+      emit(ProfileMgmtError(friendlyOperationErrorMessage(e.toString())));
       await _reload();
     }
   }
@@ -122,7 +123,7 @@ class ProfileManagementCubit extends Cubit<ProfileMgmtState> {
         return false;
       }
       if (isClosed) return false;
-      emit(ProfileMgmtError(e.toString()));
+      emit(ProfileMgmtError(friendlyOperationErrorMessage(e.toString())));
       await _reload();
       return false;
     }

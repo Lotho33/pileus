@@ -15,6 +15,7 @@ import '../../media/bloc/plugin_event.dart';
 import '../../media/bloc/plugin_state.dart';
 import '../../media/data/media_repository.dart';
 import '../data/auth_repository.dart';
+import '../friendly_error.dart';
 import 'auth_event.dart';
 import 'auth_state.dart';
 
@@ -369,7 +370,7 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
       }
       emit(ProfileSelectionRequired(profiles));
     } catch (e) {
-      emit(AuthError(e.toString()));
+      emit(AuthError(friendlyOperationErrorMessage(e.toString())));
     }
   }
 
@@ -377,6 +378,7 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
       SessionExpiredEvent event, Emitter<AuthState> emit) async {
     await _repo.logout();
     await _resetHomePrefetchBlocs();
-    emit(const DevicePairingRequired());
+    emit(const DevicePairingRequired(
+        reason: 'Sessione scaduta — ripeti l\'abbinamento del dispositivo.'));
   }
 }

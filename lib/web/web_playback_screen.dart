@@ -2,17 +2,28 @@ import 'dart:async';
 import 'dart:js_interop';
 import 'dart:ui_web' as ui_web;
 
+import 'package:flutter/foundation.dart' show kDebugMode;
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
 import 'package:web/web.dart' as web;
 
 import '../core/di/injection.dart';
+import '../core/utils/perf_log.dart' show kPerfDiagnostics;
 import '../features/media/data/media_repository.dart';
 import '../features/player/bloc/playback_bloc.dart';
 import '../features/player/bloc/playback_event.dart';
 import '../features/player/bloc/playback_state.dart';
 import '../features/player/models/playback_args.dart';
+
+/// Gated the same way as the rest of the app's diagnostics (perf_log.dart,
+/// playback_bloc.dart) — these 5 call sites used to be plain `debugPrint`,
+/// which (unlike an `assert`/`kDebugMode`-guarded block) ships in release
+/// builds too and, for the ones logging a resolved stream URL, leaks it to
+/// anyone with the browser's devtools open.
+void _dlog(String message) {
+  if (kDebugMode || kPerfDiagnostics) debugPrint(message);
+}
 
 // ── hls.js interop ─────────────────────────────────────────────────────────
 // hls.min.js is bundled in web/ and loaded from index.html (a <script> tag),
@@ -170,7 +181,7 @@ class _ViewState extends State<_View> {
       'error',
       ((web.Event _) {
         final err = _video.error;
-        debugPrint('[web player] <video> element error: '
+        _dlog('[web player] <video> element error: '
             'code=${err?.code} message=${err?.message}');
       }).toJS,
     );
@@ -236,7 +247,7 @@ class _ViewState extends State<_View> {
     // came up investigating vixseries/vixmovie not playing on web
     // (2026-09-14): PlaybackReady fired, nothing after it, no hls.js event
     // ever printed — this line is what would have settled it immediately.
-    debugPrint('[web player] attachSource: looksHls=$looksHls '
+    _dlog('[web player] attachSource: looksHls=$looksHls '
         'nativeHls=$nativeHls hlsUsable=$_hlsUsable url=$url');
     if (looksHls && !nativeHls && _hlsUsable) {
       try {
@@ -255,7 +266,7 @@ class _ViewState extends State<_View> {
             _hlsErrorEvent,
             ((JSAny? _, _HlsErrorData data) {
               final resp = data.response;
-              debugPrint('[web player] hls.js error: type=${data.type} '
+              _dlog('[web player] hls.js error: type=${data.type} '
                   'details=${data.details} fatal=${data.fatal ?? false}'
                   '${resp == null ? '' : ' httpStatus=${resp.code} body=${resp.text}'}'
                   ' url=$url');
@@ -266,7 +277,7 @@ class _ViewState extends State<_View> {
         h.on(
             _hlsManifestParsedEvent,
             ((JSAny? _, _HlsManifestParsedData data) {
-              debugPrint('[web player] hls.js manifest parsed: '
+              _dlog('[web player] hls.js manifest parsed: '
                   '${data.levels?.length ?? 0} level(s) url=$url');
             }).toJS);
         // If parsing found levels but none of these ever fire, hls.js
@@ -276,7 +287,7 @@ class _ViewState extends State<_View> {
           h.on(
               evt,
               ((JSAny? _, JSAny? __) {
-                debugPrint('[web player] hls.js event: $evt url=$url');
+                _dlog('[web player] hls.js event: $evt url=$url');
               }).toJS);
         }
         h.loadSource(url);

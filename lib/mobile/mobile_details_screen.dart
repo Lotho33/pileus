@@ -16,6 +16,7 @@ import '../features/media/bloc/details_event.dart';
 import '../features/media/bloc/details_state.dart';
 import '../features/media/data/media_repository.dart';
 import '../features/player/resolve_and_play.dart';
+import '../shared/widgets/error_retry_view.dart';
 import 'package:cached_network_image_platform_interface/cached_network_image_platform_interface.dart'
     show ImageRenderMethodForWeb;
 
@@ -39,15 +40,16 @@ class MobileDetailsScreen extends StatelessWidget {
         onSessionExpired: () =>
             getIt<AuthBloc>().add(const SessionExpiredEvent()),
       )..add(LoadDetailsEvent(pluginId: pluginId, mediaId: mediaId)),
-      child: _View(pluginId: pluginId, preview: preview),
+      child: _View(pluginId: pluginId, mediaId: mediaId, preview: preview),
     );
   }
 }
 
 class _View extends StatelessWidget {
   final String pluginId;
+  final String mediaId;
   final CatalogItem? preview;
-  const _View({required this.pluginId, this.preview});
+  const _View({required this.pluginId, required this.mediaId, this.preview});
 
   @override
   Widget build(BuildContext context) {
@@ -56,7 +58,11 @@ class _View extends StatelessWidget {
       body: BlocBuilder<DetailsBloc, DetailsState>(
         builder: (context, s) {
           if (s is DetailsError) {
-            return _Error(message: s.message);
+            return _Error(
+              message: s.message,
+              onRetry: () => context.read<DetailsBloc>().add(
+                  LoadDetailsEvent(pluginId: pluginId, mediaId: mediaId)),
+            );
           }
           final res = s is DetailsLoaded ? s.response : null;
           final item = res?.item ?? preview;
@@ -145,6 +151,13 @@ class _Body extends StatelessWidget {
               'episodeList': eps.map((e) => e.id).toList(),
               'episodeTitles': eps.map((e) => e.title).toList(),
               'episodeIndex': 0,
+              // Needed for cross-season auto-advance in the player (see
+              // mobile_playback_screen._resolveEpisodeAt) — without these the
+              // "next episode" logic silently stops at the last episode of
+              // this season instead of moving to the next one.
+              'allSeasonIds': seasons.map((s) => s.directoryId).toList(),
+              'allSeasonLabels': seasons.map((s) => s.label).toList(),
+              'seasonIndex': seasons.indexOf(season),
             },
           );
           return;
@@ -379,6 +392,13 @@ class _Body extends StatelessWidget {
                           'episodeList': eps.map((e) => e.id).toList(),
                           'episodeTitles': eps.map((e) => e.title).toList(),
                           'episodeIndex': i,
+                          // Same as _play() above: without these, auto-advance
+                          // across a season boundary silently no-ops.
+                          'allSeasonIds':
+                              seasons.map((s) => s.directoryId).toList(),
+                          'allSeasonLabels':
+                              seasons.map((s) => s.label).toList(),
+                          'seasonIndex': seasons.indexOf(season),
                         },
                       );
                     },
@@ -732,28 +752,18 @@ class _RelatedRow extends StatelessWidget {
 
 class _Error extends StatelessWidget {
   final String message;
-  const _Error({required this.message});
+  final VoidCallback onRetry;
+  const _Error({required this.message, required this.onRetry});
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: AppTheme.bg,
       appBar: AppBar(backgroundColor: AppTheme.bg),
-      body: Center(
-        child: Padding(
-          padding: const EdgeInsets.all(24),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const Icon(Icons.error_outline_rounded,
-                  color: AppTheme.textLow, size: 44),
-              const SizedBox(height: 12),
-              Text(message,
-                  textAlign: TextAlign.center,
-                  style: const TextStyle(color: AppTheme.textMid)),
-            ],
-          ),
-        ),
+      body: ErrorRetryView(
+        title: 'Impossibile caricare il contenuto',
+        detail: message,
+        onRetry: onRetry,
       ),
     );
   }

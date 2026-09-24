@@ -1,9 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
-import '../di/injection.dart';
-import '../grpc/auth_interceptor.dart';
 import '../perf_profile.dart';
+import 'auth_guard.dart';
 
 import '../../features/auth/presentation/device_pairing_screen.dart';
 import '../../features/auth/presentation/server_discovery_screen.dart';
@@ -174,22 +173,7 @@ final GoRouter appRouter = GoRouter(
     ),
   ],
   errorBuilder: (context, state) => _RouteNotFound(uri: state.uri),
-  redirect: (BuildContext context, GoRouterState state) {
-    // The auth flow (/splash bootstraps, the other three run pre-login by
-    // design) is always reachable; everything else requires a live device
-    // session. `AuthInterceptor` holds the JWT in memory only — it's empty
-    // on every cold start until the bootstrap re-authenticates — so a deep
-    // link / web refresh / process-death restore onto a protected route
-    // with no session lands on /splash, which re-runs the bootstrap and
-    // routes correctly, instead of building an unauthenticated screen that
-    // then fires empty RPCs. Screens still drive their own live navigation
-    // via BlocListener; this only closes the entry-point hole.
-    const authFlow = {'/splash', '/discovery', '/pairing', '/profiles'};
-    final path = state.uri.path;
-    if (authFlow.contains(path)) return null;
-    if (!getIt<AuthInterceptor>().hasCredentials) return '/splash';
-    return null;
-  },
+  redirect: (context, state) => authGuardRedirect(state),
 );
 
 class _RouteNotFound extends StatelessWidget {

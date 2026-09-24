@@ -11,7 +11,9 @@ import '../../../core/theme/app_scale.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/image_sizing.dart';
 import '../../../core/utils/media_type.dart';
-import '../../../shared/sdui/sport_theme.dart' show sportAccentColor;
+import '../../../shared/sdui/sport_theme.dart'
+    show sportAccentColor, isLiveNow, liveStartTimeLabel;
+import '../../../shared/widgets/error_retry_view.dart';
 import '../../../shared/widgets/pileus_spinner.dart';
 import '../../../shared/widgets/tv_focusable.dart';
 import '../bloc/details_bloc.dart';
@@ -55,14 +57,15 @@ class DetailsScreen extends StatelessWidget {
     return BlocProvider(
       create: (_) => getIt<DetailsBloc>()
         ..add(LoadDetailsEvent(pluginId: pluginId, mediaId: mediaId)),
-      child: _DetailsView(pluginId: pluginId),
+      child: _DetailsView(pluginId: pluginId, mediaId: mediaId),
     );
   }
 }
 
 class _DetailsView extends StatelessWidget {
   final String pluginId;
-  const _DetailsView({required this.pluginId});
+  final String mediaId;
+  const _DetailsView({required this.pluginId, required this.mediaId});
 
   @override
   Widget build(BuildContext context) {
@@ -107,9 +110,16 @@ class _DetailsView extends StatelessWidget {
       );
     }
     if (state is DetailsError) {
-      return Center(
+      return KeyedSubtree(
         key: const ValueKey('error'),
-        child: Text(state.message, style: const TextStyle(color: Colors.red)),
+        child: ErrorRetryView(
+          title: 'Impossibile caricare il contenuto',
+          detail: state.message,
+          onRetry: () => context.read<DetailsBloc>().add(
+              LoadDetailsEvent(pluginId: pluginId, mediaId: mediaId)),
+          onSecondary: () => context.pop(),
+          secondaryLabel: 'Indietro',
+        ),
       );
     }
     if (state is DetailsLoaded) {
@@ -175,6 +185,24 @@ class _DetailsContent extends StatelessWidget {
     }
 
     final seasons = series?.seasons ?? <SeasonInfo>[];
+
+    // Defensive: a plugin can mark an item as a directory without actually
+    // populating GetDetails().series.seasons (incomplete/buggy plugin) — the
+    // series/anime layouts below never load anything in that case and show
+    // a permanent "no episodes" dead end. Fall back to plain directory
+    // browsing instead — same route open_catalog_item.dart already uses for
+    // a generic non-series isDir item — rather than stranding the user.
+    if (item.isDir && seasons.isEmpty) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        context.pushReplacement(
+          '/browse/$pluginId/${Uri.encodeComponent(item.id)}',
+          extra: item.title,
+        );
+      });
+      return Center(
+          child: PileusSpinner(
+              size: AppScale.spinnerL(context), color: AppTheme.textHigh));
+    }
 
     // Anime serie: two-column with inline episode list
     if (_isAnime(item)) {

@@ -45,14 +45,39 @@ class _TextPromptDialog extends StatefulWidget {
 class _TextPromptDialogState extends State<_TextPromptDialog> {
   late final TextEditingController _ctrl =
       TextEditingController(text: widget.initial);
+  // Was: confirming with an empty field popped '' (not null), which every
+  // caller's `if (name != null && name.isNotEmpty)` then silently ignored —
+  // the dialog closed as if it had worked, with zero feedback. Now an empty
+  // confirm is refused in-dialog instead.
+  String? _error;
+
+  @override
+  void initState() {
+    super.initState();
+    _ctrl.addListener(_onChanged);
+  }
 
   @override
   void dispose() {
+    _ctrl.removeListener(_onChanged);
     _ctrl.dispose();
     super.dispose();
   }
 
-  void _submit() => Navigator.of(context).pop(_ctrl.text.trim());
+  void _onChanged() {
+    if (_error != null && _ctrl.text.trim().isNotEmpty) {
+      setState(() => _error = null);
+    }
+  }
+
+  void _submit() {
+    final v = _ctrl.text.trim();
+    if (v.isEmpty) {
+      setState(() => _error = 'Inserisci un testo.');
+      return;
+    }
+    Navigator.of(context).pop(v);
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -65,6 +90,7 @@ class _TextPromptDialogState extends State<_TextPromptDialog> {
         textCapitalization: TextCapitalization.words,
         decoration: InputDecoration(
           hintText: widget.hint.isEmpty ? null : widget.hint,
+          errorText: _error,
         ),
         onSubmitted: (_) => _submit(),
       ),

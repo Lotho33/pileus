@@ -1,9 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
-import '../core/di/injection.dart';
-import '../core/grpc/auth_interceptor.dart';
 import '../core/grpc/clients/media_client.dart' hide ContinueWatchingItem;
+import '../core/router/auth_guard.dart';
 import '../core/theme/app_theme.dart';
 import 'desktop_details_screen.dart';
 import 'desktop_discovery_screen.dart';
@@ -66,10 +65,5 @@ final GoRouter desktopRouter = GoRouter(
       ),
     ),
   ),
-  redirect: (context, state) {
-    const authFlow = {'/splash', '/discovery', '/pairing', '/profiles'};
-    if (authFlow.contains(state.uri.path)) return null;
-    if (!getIt<AuthInterceptor>().hasCredentials) return '/splash';
-    return null;
-  },
+  redirect: (context, state) => authGuardRedirect(state),
 );

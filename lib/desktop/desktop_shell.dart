@@ -1,5 +1,8 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:go_router/go_router.dart';
 
 import '../core/di/injection.dart';
 import '../core/grpc/clients/media_client.dart' hide ContinueWatchingItem;
@@ -33,6 +36,16 @@ class _DesktopShellState extends State<DesktopShell> {
   String? _activePluginId;
   bool _railExtended = true;
 
+  // Continue-watching auto-refresh on return from the player — mirrors
+  // _HomeViewState._onNav on TV (home_screen/home_view.dart). DesktopShell
+  // stays mounted under `/player` (pushed with context.push, see
+  // desktop_home_screen.dart:_resume), so without this the CW row here only
+  // ever loads once (below) and after an explicit pull-to-refresh.
+  bool _playerWasActive = false;
+  Timer? _cwReloadTimer;
+  Timer? _cwReloadTimer2;
+  GoRouter? _router;
+
   @override
   void initState() {
     super.initState();
@@ -42,6 +55,52 @@ class _DesktopShellState extends State<DesktopShell> {
     if (cw.state is ContinueWatchingInitial) {
       cw.add(const LoadContinueWatchingEvent());
     }
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final router = GoRouter.of(context);
+    if (_router != router) {
+      _router?.routerDelegate.removeListener(_onNav);
+      _router = router;
+      router.routerDelegate.addListener(_onNav);
+    }
+  }
+
+  void _onNav() {
+    if (!mounted || _router == null) return;
+    final path = _router!.routeInformationProvider.value.uri.path;
+    if (path.startsWith('/player')) {
+      _playerWasActive = true;
+    } else if (_playerWasActive) {
+      _playerWasActive = false;
+      final bloc = getIt<ContinueWatchingBloc>();
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) bloc.add(const LoadContinueWatchingEvent());
+      });
+      // Retry after the player's fire-and-forget dispose-time save has had
+      // time to reach mycelium and commit (same reasoning as TV's
+      // home_view.dart:_onNav).
+      _cwReloadTimer?.cancel();
+      _cwReloadTimer = Timer(const Duration(milliseconds: 1500), () {
+        if (mounted) bloc.add(const LoadContinueWatchingEvent());
+      });
+      // Safety net for a slow/loaded server where even the 1.5s retry above
+      // loses the race against the player's fire-and-forget save.
+      _cwReloadTimer2?.cancel();
+      _cwReloadTimer2 = Timer(const Duration(milliseconds: 4000), () {
+        if (mounted) bloc.add(const LoadContinueWatchingEvent());
+      });
+    }
+  }
+
+  @override
+  void dispose() {
+    _cwReloadTimer?.cancel();
+    _cwReloadTimer2?.cancel();
+    _router?.routerDelegate.removeListener(_onNav);
+    super.dispose();
   }
 
   List<PluginInfo> _pluginsOf(PluginState s) =>

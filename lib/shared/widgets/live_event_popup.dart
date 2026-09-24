@@ -7,7 +7,8 @@ import '../../core/grpc/clients/media_client.dart';
 import '../../core/theme/app_scale.dart';
 import '../../core/utils/image_sizing.dart';
 import '../../features/media/data/media_repository.dart';
-import '../sdui/sport_theme.dart' show sportIcon, sportAccentColor;
+import '../sdui/sport_theme.dart'
+    show sportIcon, sportAccentColor, isLiveNow, liveStartTimeLabel;
 import 'pileus_spinner.dart';
 import 'tv_focusable.dart';
 import 'package:cached_network_image_platform_interface/cached_network_image_platform_interface.dart'
@@ -115,7 +116,8 @@ class _LiveEventPopupState extends State<_LiveEventPopup> {
   @override
   Widget build(BuildContext context) {
     final item = widget.item;
-    final isLive = item.extra['is_live'] == '1';
+    final isLive = isLiveNow(item.extra);
+    final startTime = liveStartTimeLabel(item.extra);
     final sportCat = item.extra['sport_cat'] ?? '';
     final plot = item.extra['plot'] ?? '';
     final poster = item.posterUrl;
@@ -209,7 +211,10 @@ class _LiveEventPopupState extends State<_LiveEventPopup> {
                             ),
                             const SizedBox(width: 10),
                           ],
-                          if (isLive) const _LiveDot(),
+                          if (isLive)
+                            const _LiveDot()
+                          else if (startTime != null)
+                            _LiveStartChip(startTime),
                         ],
                       ),
                       const SizedBox(height: 8),
@@ -383,6 +388,25 @@ class _BadgesContent extends StatelessWidget {
 }
 
 // ── Live dot indicator ────────────────────────────────────────────────────────
+
+class _LiveStartChip extends StatelessWidget {
+  final String startTime;
+  const _LiveStartChip(this.startTime);
+  @override
+  Widget build(BuildContext context) => Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(Icons.schedule_rounded,
+              size: AppScale.space(context, 13), color: Colors.white54),
+          const SizedBox(width: 4),
+          Text('Inizio $startTime',
+              style: TextStyle(
+                  color: Colors.white54,
+                  fontSize: AppScale.space(context, 11),
+                  fontWeight: FontWeight.w600)),
+        ],
+      );
+}
 
 class _LiveDot extends StatelessWidget {
   const _LiveDot();

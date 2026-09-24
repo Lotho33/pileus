@@ -6,7 +6,8 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../core/di/injection.dart';
-import '../../../core/grpc/clients/media_client.dart' show CatalogDef;
+import '../../../core/grpc/clients/media_client.dart'
+    show CatalogDef, PluginInfo;
 import '../../../core/theme/app_scale.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../shared/utils/back_dispatch.dart';
@@ -16,6 +17,7 @@ import '../../../shared/widgets/settings/settings_header.dart';
 import '../../../shared/widgets/settings/settings_section_header.dart';
 import '../../../shared/widgets/settings/settings_toggle_row.dart';
 import '../../../shared/widgets/tv_focusable.dart';
+import 'widgets/plugin_nav.dart' show PluginStatusIndicator;
 import '../bloc/plugin_bloc.dart';
 import '../bloc/plugin_event.dart';
 import '../data/media_repository.dart';
@@ -67,6 +69,11 @@ class _PluginSettingsBodyState extends State<_PluginSettingsBody> {
   final _catListFn = FocusNode();
 
   bool _loading = true;
+  // Was fetched in _load() and immediately discarded — this screen already
+  // had reachable/statusLabel/statusDetail available and simply never
+  // rendered them, unlike the home side-nav (plugin_nav.dart). See
+  // PluginStatusIndicator in _content() below.
+  PluginInfo? _plugin;
   bool _pluginVisible = true;
   List<_CatRow> _rows = [];
   final List<GlobalKey> _rowKeys = [];
@@ -129,6 +136,7 @@ class _PluginSettingsBodyState extends State<_PluginSettingsBody> {
 
       if (!mounted) return;
       setState(() {
+        _plugin = info;
         _pluginVisible = !prefs.isPluginHidden(widget.pluginId);
         _rows = [
           for (final c in ordered)
@@ -317,6 +325,17 @@ class _PluginSettingsBodyState extends State<_PluginSettingsBody> {
         AppScale.space(context, 24),
       ),
       children: [
+        if (_plugin != null &&
+            (_plugin!.needsConfig ||
+                !_plugin!.reachable ||
+                _plugin!.statusLabel.isNotEmpty))
+          Padding(
+            padding: EdgeInsets.only(bottom: AppScale.space(context, 14)),
+            child: Align(
+              alignment: Alignment.centerLeft,
+              child: PluginStatusIndicator(plugin: _plugin!),
+            ),
+          ),
         const SettingsSectionHeader('Visibilità'),
         SettingsToggleRow(
           label: 'Mostra nella home',

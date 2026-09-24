@@ -35,12 +35,12 @@ class _PluginPage extends StatelessWidget {
 
     // NOTE: deliberately NOT gating on `!plugin.reachable` here — that
     // field is the automatic backend health check, and it's turned out to
-    // false-positive on plugins that are actually fine (see reachability
-    // badge in the side-nav / heartbeat status in plugin_settings_screen.dart,
-    // where it's shown as informational only). Blocking the whole plugin
-    // page on it locked out working plugins. A real failure still surfaces
-    // naturally: LoadCatalogEvent fails and DiscoveryError shows through
-    // the carousel, which is the actually-reliable signal.
+    // false-positive on plugins that are actually fine (see the reachability
+    // badge in the side-nav and in plugin_settings_screen.dart — both shown
+    // as informational only, via PluginStatusIndicator). Blocking the whole
+    // plugin page on it locked out working plugins. A real failure still
+    // surfaces naturally: LoadCatalogEvent fails and DiscoveryError shows
+    // through the carousel, which is the actually-reliable signal.
 
     // syncing — plugin is working in the background; show progress.
     if (plugin.statusLabel == 'syncing') {

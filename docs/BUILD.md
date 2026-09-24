@@ -12,11 +12,11 @@ Gate sempre verdi prima di un merge: `flutter analyze` (0 issue) e
 
 | Target | Run (dev) | Package | Workflow CI |
 |---|---|---|---|
-| **Android TV / Fire TV** | `flutter run --flavor tv` | `flutter build apk --release --flavor tv --split-per-abi --target-platform android-arm,android-arm64` | `release.yml` (su tag `vX.Y.Z`) · `store.yml` (AAB, manuale) |
-| **Mobile** | `flutter run --flavor mobile -t lib/main_mobile.dart` | `flutter build appbundle --release --flavor mobile -t lib/main_mobile.dart` | `store.yml` (accanto a `tv`) |
-| **Desktop — Linux** | `flutter run -d linux -t lib/main_desktop.dart` | `flutter build linux --release -t lib/main_desktop.dart` | `linux.yml` (manuale, allega tarball) |
-| **Desktop — Windows** | `flutter run -d windows -t lib/main_desktop.dart` | `flutter build windows --release -t lib/main_desktop.dart` | *(pianificato — Fase pipeline)* |
-| **Web / PWA** | `flutter run -d chrome -t lib/main_web.dart` | `flutter build web --release -t lib/main_web.dart --base-href /` | `web.yml` (manuale, allega tarball) |
+| **Android TV / Fire TV** | `flutter run --flavor tv` | `flutter build apk --release --flavor tv --split-per-abi --target-platform android-arm,android-arm64` | `release.yml` (su tag `vX.Y.Z`, verde da 14+ release consecutive) · `store.yml` (AAB, manuale, **mai eseguita con successo — nessun AAB firmato è mai stato prodotto**) |
+| **Mobile** | `flutter run --flavor mobile -t lib/main_mobile.dart` | `flutter build appbundle --release --flavor mobile -t lib/main_mobile.dart` | `store.yml` (accanto a `tv`, stesso stato: mai eseguita con successo) |
+| **Desktop — Linux** | `flutter run -d linux -t lib/main_desktop.dart` | `flutter build linux --release -t lib/main_desktop.dart` | `linux.yml` (manuale, allega tarball) — **esiste ma non ha mai completato una run in tutta la storia del repo (Forgejo o GitHub)** |
+| **Desktop — Windows** | `flutter run -d windows -t lib/main_desktop.dart` | `flutter build windows --release -t lib/main_desktop.dart` | `.github/workflows/windows.yml` (GitHub-hosted, manuale) + `.forgejo/workflows/windows.yml` (self-hosted, mai registrato) — **entrambi esistono nel repo ma non hanno mai completato una run**, trattare il primo lancio come uno smoke test |
+| **Web / PWA** | `flutter run -d chrome -t lib/main_web.dart` | `flutter build web --release -t lib/main_web.dart --base-href /` | `web.yml` su Forgejo (manuale, mai eseguita); **su GitHub `release.yml` builda e allega il tarball web ad ogni release da v1.2.6** — quello è il percorso che conta oggi |
 
 ## Flag Android (`tv` e `mobile`)
 

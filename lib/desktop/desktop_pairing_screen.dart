@@ -5,6 +5,7 @@ import '../core/di/injection.dart';
 import '../features/auth/bloc/auth_bloc.dart';
 import '../features/auth/bloc/auth_event.dart';
 import '../features/auth/bloc/auth_state.dart';
+import '../features/auth/friendly_error.dart';
 import 'desktop_splash_screen.dart' show DesktopAuthCard;
 
 /// Desktop device pairing: the short-lived code from the Mycelium admin
@@ -43,16 +44,9 @@ class _DesktopPairingScreenState extends State<DesktopPairingScreen> {
       bloc: getIt<AuthBloc>(),
       listener: (context, state) {
         if (state is AuthError) {
-          final m = state.message.toLowerCase();
-          final unreachable = m.contains('unavailable') ||
-              m.contains('deadline') ||
-              m.contains('socket') ||
-              m.contains('connection');
           setState(() {
             _busy = false;
-            _error = unreachable
-                ? 'Server non raggiungibile (gRPC :50051). Controlla IP e porta.'
-                : 'Codice non valido o scaduto.';
+            _error = friendlyPairingErrorMessage(state.message);
           });
         }
       },

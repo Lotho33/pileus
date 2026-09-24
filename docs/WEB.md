@@ -1,9 +1,15 @@
 # Pileus Web / PWA
 
-Status: **spike / proof of concept.** The web target compiles and runs the
-full responsive UI (shared with the desktop build), but it needs two
-server-side pieces before it's usable end to end, and playback is
-minimal. See "What's missing" below.
+Status: **client-side ready, one known server-dependent gap left.** The web
+target compiles and runs the full responsive UI (shared with the desktop
+build); the gRPC-Web transport that used to be the single biggest blocker
+here is implemented client-side (see "Done since the initial spike") and a
+web build has shipped successfully alongside every release since v1.2.6 —
+but that only proves the client compiles and serves, not that a given
+Mycelium deployment actually exposes gRPC-Web at `/grpc` (that's server
+config, verify it against your own instance). The one gap that's still
+open on **either** side is custom HTTP headers on the `<video>` stream — see
+"What's missing" below.
 
 ## Build & run
 
@@ -38,17 +44,22 @@ gRPC, no engine.
 
 ## What's missing (blocks "usable")
 
-1. **gRPC-Web endpoint on Mycelium at `/grpc`.**
-   Browsers can't speak HTTP/2 gRPC. Mycelium must expose gRPC-Web either
-   natively (`improbable-eng/grpc-web` / connect-go) or behind Envoy /
-   `grpcwebproxy` on the same origin. Until then every catalog/auth call
-   fails in the browser. This is the single biggest item and it's
-   **backend work**.
+1. **Custom HTTP headers on the stream.** `<video>`/hls.js can't send them,
+   so a header-authenticated stream URL won't load — `web_playback_screen.dart`
+   assigns the resolved URL straight to `_video.src`/`hls.loadSource(url)`
+   with no token-in-query-string or similar workaround yet. The
+   resolver/proxy needs to return a directly-playable URL instead. This is
+   **backend work** (possibly with a small client-side follow-up once the
+   URL shape is known).
 
-2. **Custom HTTP headers on the stream.** `<video>` can't send them, so a
-   header-authenticated stream URL won't load. The resolver/proxy is
-   expected to return a directly-playable URL (token in query string, or
-   proxied). This is **backend work**.
+Previously listed here as blocker #1 — **resolved client-side, verify your
+server**: a gRPC-Web endpoint on Mycelium at `/grpc`. Browsers can't speak
+HTTP/2 gRPC natively; `lib/core/grpc/grpc_channel_web.dart` builds a
+`GrpcWebClientChannel.xhr('<origin>/grpc/')` (with a documented workaround
+for a `grpc` package 5.1.0 quirk where the method path bypasses that
+prefix — Mycelium needs to route `/mycelium.*` at the origin root, or
+rewrite). The client is ready; whether *your* Mycelium deployment actually
+exposes that endpoint is a server-side question this doc can't answer.
 
 HLS playback for non-Safari browsers **is wired**: `web/hls.min.js` is
 bundled (no CDN, PWA-offline-safe) and attached when
@@ -58,10 +69,17 @@ playable URL uses `src` directly.
 ## Done since the initial spike
 
 - `web_playback_screen.dart` migrated off `dart:html` to `package:web` +
-  `dart:js_interop`; `flutter build web` and the `--wasm` dry-run both pass.
+  `dart:js_interop`; `flutter build web` and the `--wasm` dry-run both pass
+  (dry-run only — no CI pipeline actually builds with `--wasm` yet, so it's
+  wasm-*ready*, not wasm-*shipped*).
 - hls.js bundled and attached for non-native HLS (see above).
 - Branded PWA icons rasterised from `assets/branding/pileus_icon.svg`
   (`web/icons/`, `favicon.png`).
+- gRPC-Web client transport implemented (see above) — every release since
+  v1.2.6 has published a web build via CI.
+- Black poster/backdrop images on web (a CORS issue when a page skipped the
+  `/img` proxy) fixed in v1.3.5 — `posterSrc()`/`backdropSrc()` now always
+  route through the proxy on web regardless of what the caller asks for.
 
 ## Nice-to-have / follow-ups
 

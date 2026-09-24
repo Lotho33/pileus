@@ -8,18 +8,27 @@ uploads to an already-created release instead of racing it). Android TV /
 Fire TV is the shipping target; the web bundle exists for a browser-based
 install (notably iOS, see below).
 
-> Migration note: `release.yml` (this pipeline) and `ci.yml` are on GitHub
-> Actions, and there's a single `main` branch now (no more `dev` — the repo
-> is entirely public, the old private-dev/public-main split doesn't protect
-> anything anymore). `store.yml` / `linux.yml` / `windows.yml` are **still on
-> Forgejo** (`.forgejo/workflows/`), pending a follow-up port — the Forgejo
-> repo stays around for those until then.
+> Migration note: `release.yml` (this pipeline, Android + web) and `ci.yml`
+> are on GitHub Actions, and there's a single `main` branch now (no more
+> `dev` — the repo is entirely public, the old private-dev/public-main split
+> doesn't protect anything anymore).
+>
+> `store.yml` / `linux.yml` are **still Forgejo-only**
+> (`.forgejo/workflows/`), pending a follow-up port. `windows.yml` exists in
+> **both** places: the original Forgejo one needs a self-hosted Windows
+> runner that was never registered, and a newer GitHub-hosted copy
+> (`.github/workflows/windows.yml`, `windows-latest`, no infrastructure to
+> register) was added 2026-09-18. **None of `store.yml` / `linux.yml` /
+> either `windows.yml` has ever completed a run, on either remote** — treat
+> the first real dispatch of any of them as an unvalidated smoke test, not
+> a known-good pipeline.
 
 The **Linux x64** tarball (`linux.yml`, still Forgejo-only) is a separate
 **manual** convenience — `workflow_dispatch` only, run by hand with the tag
 as input, attaching one tarball to the existing release. It builds the
 responsive `-t lib/main_desktop.dart` UI (not the D-pad TV shell) and isn't
-part of the automatic tag pipeline, unlike web.
+part of the automatic tag pipeline, unlike web. It has never actually been
+dispatched — the first real run should be treated as a smoke test.
 
 ### Web / PWA build
 
@@ -122,10 +131,12 @@ Result: arm64 mobile release APK ≈ **23.5 MB** (vs ~36 MB unoptimised).
 
 ### CI runner
 
-`release.yml` and `ci.yml` run on GitHub-hosted `ubuntu-latest` — nothing to
-register, free on this public repo. (`store.yml` / `linux.yml` / `web.yml` /
-`windows.yml`, still on Forgejo, keep needing a self-hosted runner there
-until ported — see the migration note above.)
+`release.yml`, `ci.yml` and `.github/workflows/windows.yml` all run on
+GitHub-hosted runners (`ubuntu-latest` / `windows-latest`) — nothing to
+register, free on this public repo. `store.yml` / `linux.yml` /
+`.forgejo/workflows/windows.yml` still need the Forgejo `docker`/`windows`
+runner labels — see the migration note above for which of those have
+actually run.
 
 ### Repo secrets  (GitHub → Settings → Secrets and variables → Actions)
 

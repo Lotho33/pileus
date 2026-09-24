@@ -21,7 +21,19 @@ class ServerDiscoveryRequired extends AuthState {
 }
 
 class DevicePairingRequired extends AuthState {
-  const DevicePairingRequired();
+  // Set only when this is reached via SessionExpiredEvent (a session that
+  // was valid dying mid-use) rather than a cold start with no/expired stored
+  // session, or an explicit LogoutEvent — those don't need an explanation,
+  // this one does: without it, a token expiring while the user is deep in
+  // Settings/the player silently teleports them to /pairing with no context
+  // ("why am I here? what happened to my change?"). Each app root's
+  // top-level AuthBloc listener (main.dart, mobile_app.dart,
+  // desktop_app.dart, web_app.dart) shows it as a SnackBar right after
+  // navigating.
+  final String? reason;
+  const DevicePairingRequired({this.reason});
+  @override
+  List<Object?> get props => [reason];
 }
 
 class ProfileSelectionRequired extends AuthState {

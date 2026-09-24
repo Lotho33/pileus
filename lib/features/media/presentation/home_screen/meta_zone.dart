@@ -196,48 +196,10 @@ const _redundantLiveGenres = <String>{
   'streaming',
 };
 
-String _hhmm(DateTime d) =>
-    '${d.hour.toString().padLeft(2, '0')}:${d.minute.toString().padLeft(2, '0')}';
-
-String? _liveStartTime(CatalogItem item) {
-  const keys = [
-    // The SDK's LiveDetails message calls it stream_start (that message is
-    // GetDetails-only — the catalog CatalogItem has no typed time field, so
-    // mycelium flattens it into `extra` under some key; stream_start is the
-    // one to expect, the rest are defensive fallbacks for other plugins).
-    'stream_start',
-    'streamStart',
-    'start_time',
-    'start',
-    'start_at',
-    'starts_at',
-    'start_unix',
-    'event_time',
-    'kickoff',
-    'time',
-    'begin',
-    'scheduled'
-  ];
-  for (final k in keys) {
-    final raw = item.extra[k];
-    if (raw == null || raw.trim().isEmpty) continue;
-    final v = raw.trim();
-    // Unix epoch (seconds or milliseconds).
-    final n = int.tryParse(v);
-    if (n != null && n > 1000000000) {
-      final ms = n > 100000000000 ? n : n * 1000;
-      return _hhmm(
-          DateTime.fromMillisecondsSinceEpoch(ms, isUtc: true).toLocal());
-    }
-    // Already a HH:MM (possibly inside a longer string).
-    final m = RegExp(r'\b(\d{1,2}):(\d{2})\b').firstMatch(v);
-    if (m != null) return '${m.group(1)!.padLeft(2, '0')}:${m.group(2)}';
-    // ISO-8601 / RFC-3339.
-    final dt = DateTime.tryParse(v);
-    if (dt != null) return _hhmm(dt.toLocal());
-  }
-  return null;
-}
+// _liveStartTime/_hhmm now live in shared/sdui/sport_theme.dart as
+// liveStartTimeLabel()/isLiveNow() — reused by the details live-event
+// layout, the live event popup and the mobile live sheet so all agree on
+// what counts as "IN DIRETTA" and how a start time is formatted.
 
 class _LiveStatusLine extends StatelessWidget {
   final CatalogItem item;
@@ -247,8 +209,8 @@ class _LiveStatusLine extends StatelessWidget {
   Widget build(BuildContext context) {
     final sh = MediaQuery.sizeOf(context).height;
     final fs = (sh * 0.020).clamp(13.0, 34.0);
-    final isLive = item.extra['is_live'] == '1';
-    final start = _liveStartTime(item);
+    final isLive = isLiveNow(item.extra);
+    final start = liveStartTimeLabel(item.extra);
     final sportCat = (item.extra['sport_cat'] ?? '').trim();
 
     final parts = <Widget>[];

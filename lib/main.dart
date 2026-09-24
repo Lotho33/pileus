@@ -238,6 +238,11 @@ class PileusApp extends StatefulWidget {
 }
 
 class _PileusAppState extends State<PileusApp> with WidgetsBindingObserver {
+  // See PileusDesktopApp's identical field (mobile/desktop/web apps) for why
+  // this exists: lets the listener below show a SnackBar regardless of which
+  // route is on screen.
+  final _scaffoldMessengerKey = GlobalKey<ScaffoldMessengerState>();
+
   @override
   void initState() {
     super.initState();
@@ -290,6 +295,10 @@ class _PileusAppState extends State<PileusApp> with WidgetsBindingObserver {
           // ancestry yet.
           if (state is DevicePairingRequired) {
             appRouter.go('/pairing');
+            if (state.reason != null) {
+              _scaffoldMessengerKey.currentState
+                  ?.showSnackBar(SnackBar(content: Text(state.reason!)));
+            }
           } else if (state is ServerDiscoveryRequired) {
             appRouter.go('/discovery');
           } else if (state is ProfileSelectionRequired) {
@@ -304,6 +313,7 @@ class _PileusAppState extends State<PileusApp> with WidgetsBindingObserver {
         child: MaterialApp.router(
           title: 'Pileus',
           debugShowCheckedModeBanner: false,
+          scaffoldMessengerKey: _scaffoldMessengerKey,
           // No fixed design canvas / letterboxing here on purpose — Pileus
           // needs to look right on whatever aspect ratio a real TV or
           // monitor actually has (16:9 is the common case, not a

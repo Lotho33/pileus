@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
@@ -52,6 +54,12 @@ class _MobileSearchScreenState extends State<MobileSearchScreen> {
   List<SearchFilter> _filters = const [];
   int _filtersToken = 0; // guards against a stale getSearchFilters response
   final Map<String, String> _active = {};
+  // Live-as-you-type search, matching TV (quick_search_area/area_state.dart)
+  // and the desktop search screen — this used to only fire on submit/enter,
+  // the one platform where typing a query silently did nothing until the
+  // user pressed the keyboard's search action.
+  Timer? _debounce;
+  static const _debounceDelay = Duration(milliseconds: 350);
 
   @override
   void initState() {
@@ -69,6 +77,7 @@ class _MobileSearchScreenState extends State<MobileSearchScreen> {
 
   @override
   void dispose() {
+    _debounce?.cancel();
     _activePlugin.removeListener(_onActiveChanged);
     _ctrl.dispose();
     _focus.dispose();
@@ -132,7 +141,11 @@ class _MobileSearchScreenState extends State<MobileSearchScreen> {
     }
   }
 
-  void _run() {
+  /// [unfocus] dismisses the keyboard — right for an explicit submit/clear/
+  /// filter change, wrong for a live-as-you-type call (would drop focus
+  /// after every keystroke).
+  void _run({bool unfocus = true}) {
+    _debounce?.cancel();
     final q = _ctrl.text.trim();
     if (q.length < _kMinLen && _active.isEmpty) {
       if (_submitted.isNotEmpty) {
@@ -143,13 +156,23 @@ class _MobileSearchScreenState extends State<MobileSearchScreen> {
     }
     final id = _pluginId;
     if (id == null) return;
-    _focus.unfocus();
+    if (unfocus) _focus.unfocus();
     setState(() => _submitted = q.isEmpty ? '·' : q);
     _bloc.add(SearchRequestEvent(
       pluginId: id,
       query: q,
       filters: Map.of(_active),
     ));
+  }
+
+  /// Debounced live search as the user types — same 350ms window as the TV
+  /// quick-search and search screens (quick_search_area/area_state.dart,
+  /// features/media/presentation/search_screen/view.dart).
+  void _onQueryChanged(String _) {
+    _debounce?.cancel();
+    _debounce = Timer(_debounceDelay, () {
+      if (mounted) _run(unfocus: false);
+    });
   }
 
   void _clearQuery() {
@@ -246,6 +269,7 @@ class _MobileSearchScreenState extends State<MobileSearchScreen> {
                         hintText: active != null
                             ? 'Cerca in ${pluginLabel(active)}'
                             : 'Cerca film, serie, canali…',
+                        onChanged: _onQueryChanged,
                         onSubmitted: _run,
                         onClear: _clearQuery,
                       ),
@@ -372,6 +396,7 @@ class _SearchField extends StatelessWidget {
   final TextEditingController controller;
   final FocusNode focusNode;
   final String hintText;
+  final ValueChanged<String> onChanged;
   final VoidCallback onSubmitted;
   final VoidCallback onClear;
 
@@ -379,6 +404,7 @@ class _SearchField extends StatelessWidget {
     required this.controller,
     required this.focusNode,
     required this.hintText,
+    required this.onChanged,
     required this.onSubmitted,
     required this.onClear,
   });
@@ -391,6 +417,7 @@ class _SearchField extends StatelessWidget {
         controller: controller,
         focusNode: focusNode,
         textInputAction: TextInputAction.search,
+        onChanged: onChanged,
         onSubmitted: (_) => onSubmitted(),
         style: const TextStyle(color: AppTheme.textHigh, fontSize: 15),
         decoration: InputDecoration(

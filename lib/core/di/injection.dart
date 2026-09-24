@@ -108,6 +108,7 @@ Future<void> configureDependencies() async {
       dispose: (b) => b.close());
   getIt.registerLazySingleton<ContinueWatchingBloc>(
     () => ContinueWatchingBloc(getIt<MediaRepository>()),
+    dispose: (b) => b.close(),
   );
   getIt.registerFactory<DiscoveryBloc>(() => DiscoveryBloc(
         getIt<MediaRepository>(),
@@ -119,11 +120,19 @@ Future<void> configureDependencies() async {
         onSessionExpired: () =>
             getIt<AuthBloc>().add(const SessionExpiredEvent()),
       ));
-  getIt.registerLazySingleton<PluginBloc>(() => PluginBloc(
-        getIt<MediaRepository>(),
-        onSessionExpired: () =>
-            getIt<AuthBloc>().add(const SessionExpiredEvent()),
-      ));
+  getIt.registerLazySingleton<PluginBloc>(
+    () => PluginBloc(
+      getIt<MediaRepository>(),
+      onSessionExpired: () =>
+          getIt<AuthBloc>().add(const SessionExpiredEvent()),
+    ),
+    // PluginBloc._pollTimer (30s catalog poll) would otherwise keep firing
+    // against a closed repository if a bare getIt.reset() ever tore this
+    // down while it was already instantiated (today only
+    // _StartupErrorApp._retry in main.dart) — same reasoning as
+    // SettingsRepository/UpdateService above.
+    dispose: (b) => b.close(),
+  );
   // Mobile-only (Home/Cerca tab sync — see the class doc), registered here
   // like everything else so it's reset alongside the rest on logout; a
   // lazy singleton never instantiates at all on TV/desktop/web, which never
