@@ -124,6 +124,12 @@ class _PlaybackViewState extends State<_PlaybackView> {
   late String? _currentTitle;
   late List<String> _currentEpisodeList;
   late List<String> _currentEpisodeTitles;
+  // Parallel to _currentEpisodeList — see PlaybackArgs.episodeThumbs and
+  // episode_poster.dart's posterForEpisode(). Continue Watching used to keep
+  // showing whichever episode's thumbnail (`widget.args.poster`) the session
+  // started on, frozen for the whole binge/auto-advance run — this is what
+  // lets it track the *current* episode instead.
+  late List<String> _currentEpisodeThumbs;
   // Series name for the continue-watching card's overline. Prefer the value
   // the caller passed (args.showTitle); when it's missing — e.g. resuming
   // from a continue-watching entry that predates this, or the /episode/
@@ -183,6 +189,7 @@ class _PlaybackViewState extends State<_PlaybackView> {
     _currentTitle = args.title;
     _currentEpisodeList = args.episodeList;
     _currentEpisodeTitles = args.episodeTitles;
+    _currentEpisodeThumbs = args.episodeThumbs;
     _showTitle = args.showTitle;
     _parentId = args.parentId;
     _plot = args.plot;
@@ -504,13 +511,16 @@ class _PlaybackViewState extends State<_PlaybackView> {
       if (!mounted) return;
 
       // Flat list straight off the parent?
-      var eps = <({String id, String title})>[];
+      var eps = <({String id, String title, String thumb})>[];
       if (res.episodes.isNotEmpty) {
-        eps = [for (final e in res.episodes) (id: e.id, title: e.title)];
+        eps = [
+          for (final e in res.episodes)
+            (id: e.id, title: e.title, thumb: e.thumbnailUrl)
+        ];
       } else {
         eps = [
           for (final e in res.items)
-            if (!e.isDir) (id: e.id, title: e.title),
+            if (!e.isDir) (id: e.id, title: e.title, thumb: e.posterUrl),
         ];
       }
 
@@ -525,10 +535,14 @@ class _PlaybackViewState extends State<_PlaybackView> {
           if (!mounted) return;
           final sr = await repo.browse(widget.args.epPluginId, s.id, '');
           final se = sr.episodes.isNotEmpty
-              ? [for (final e in sr.episodes) (id: e.id, title: e.title)]
+              ? [
+                  for (final e in sr.episodes)
+                    (id: e.id, title: e.title, thumb: e.thumbnailUrl)
+                ]
               : [
                   for (final e in sr.items)
-                    if (!e.isDir) (id: e.id, title: e.title),
+                    if (!e.isDir)
+                      (id: e.id, title: e.title, thumb: e.posterUrl),
                 ];
           if (se.length > 1 &&
               (target.isEmpty ||
@@ -548,7 +562,7 @@ class _PlaybackViewState extends State<_PlaybackView> {
   }
 
   void _applyResolvedEpisodes(
-      List<({String id, String title})> eps, String target) {
+      List<({String id, String title, String thumb})> eps, String target) {
     if (!mounted) return;
     var idx = eps.indexWhere((e) => e.id == _currentMediaId);
     if (idx < 0 && target.isNotEmpty) {
@@ -566,6 +580,7 @@ class _PlaybackViewState extends State<_PlaybackView> {
     setState(() {
       _currentEpisodeList = [for (final e in eps) e.id];
       _currentEpisodeTitles = [for (final e in eps) e.title];
+      _currentEpisodeThumbs = [for (final e in eps) e.thumb];
       _currentEpisodeIndex = idx;
     });
   }
@@ -609,7 +624,7 @@ class _PlaybackViewState extends State<_PlaybackView> {
       // showTitle and the card shows it as a small overline above it.
       title: (_currentTitle?.isNotEmpty ?? false) ? _currentTitle! : _showTitle,
       showTitle: _showTitle,
-      poster: widget.args.poster,
+      poster: _currentEpisodePoster(),
       rating: _rating,
       genres: _genres,
       plot: _plot,
@@ -631,13 +646,25 @@ class _PlaybackViewState extends State<_PlaybackView> {
       totalDuration: _engine.duration,
       title: (_currentTitle?.isNotEmpty ?? false) ? _currentTitle! : _showTitle,
       showTitle: _showTitle,
-      poster: widget.args.poster,
+      poster: _currentEpisodePoster(),
       rating: _rating,
       genres: _genres,
       plot: _plot,
       year: _year,
     );
   }
+
+  /// This episode's Continue Watching cover — its own thumbnail if we have
+  /// one, the series poster otherwise, `widget.args.poster` (the entry
+  /// point's own cover) as a last resort. See episode_poster.dart's doc
+  /// comment for the bug this replaces (the cover used to stay stuck on
+  /// whichever episode the session started on, for the whole session).
+  String _currentEpisodePoster() => posterForEpisode(
+        episodeThumbs: _currentEpisodeThumbs,
+        index: _currentEpisodeIndex,
+        seriesPoster: widget.args.seriesPoster,
+        fallback: widget.args.poster,
+      );
 
   // ── Resume-from-timestamp ─────────────────────────────────────────────────
 
@@ -803,7 +830,14 @@ class _PlaybackViewState extends State<_PlaybackView> {
             position: const Duration(seconds: 31),
             title: nextTitle.isNotEmpty ? nextTitle : _showTitle,
             showTitle: _showTitle,
-            poster: widget.args.poster,
+            // The *next* episode's own thumbnail, not the one currently
+            // playing's — see _currentEpisodePoster()'s doc comment.
+            poster: posterForEpisode(
+              episodeThumbs: _currentEpisodeThumbs,
+              index: _currentEpisodeIndex + 1,
+              seriesPoster: widget.args.seriesPoster,
+              fallback: widget.args.poster,
+            ),
             rating: _rating,
             genres: _genres,
             plot: _plot,
@@ -968,7 +1002,29 @@ class _PlaybackViewState extends State<_PlaybackView> {
       }
       final browseRes = await repo.browse(
           widget.args.epPluginId, allSeasonIds[newSeasonIndex], '');
-      final newEpisodes = browseRes.items;
+      // Same episodes-first, items-as-fallback pattern as
+      // _resolveEpisodeListIfMissing above (lines ~508-515) — a plugin browse
+      // of a season directory returns real episode data in `episodes`
+      // (EpisodeInfo: real title, thumbnail, …), `items` only holds
+      // non-episode entries (mycelium only routes media tagged as an episode
+      // into `episodes`, see lua_pipeline.go:Browse). Reading `items` here
+      // directly (as this used to) got an empty-or-generic list for a
+      // properly-tagged season — the season-crossing "next/previous episode"
+      // then either silently did nothing or, for plugins that don't tag
+      // episodes at all, produced a Continue Watching entry with a generic
+      // title and no poster (both isDir-filtered CatalogItems, not
+      // EpisodeInfo). Bug: unreachable before allSeasonIds was actually
+      // populated for mobile launches, so it went unnoticed until a
+      // multi-season binge crossed a season boundary for the first time.
+      final newEpisodes = browseRes.episodes.isNotEmpty
+          ? [
+              for (final e in browseRes.episodes)
+                (id: e.id, title: e.title, thumb: e.thumbnailUrl)
+            ]
+          : [
+              for (final i in browseRes.items)
+                if (!i.isDir) (id: i.id, title: i.title, thumb: i.posterUrl),
+            ];
       if (newEpisodes.isEmpty) {
         if (mounted) setState(() => _resolvingEpisode = false);
         return;
@@ -976,10 +1032,12 @@ class _PlaybackViewState extends State<_PlaybackView> {
       final targetIndex = newIndex < 0 ? newEpisodes.length - 1 : 0;
       final newIds = newEpisodes.map((e) => e.id).toList();
       final newTitles = newEpisodes.map((e) => e.title).toList();
+      final newThumbs = newEpisodes.map((e) => e.thumb).toList();
       if (mounted) {
         setState(() {
           _currentEpisodeList = newIds;
           _currentEpisodeTitles = newTitles;
+          _currentEpisodeThumbs = newThumbs;
           _currentSeasonIndex = newSeasonIndex;
         });
       }
@@ -1037,6 +1095,7 @@ class _PlaybackViewState extends State<_PlaybackView> {
         extra: {
           'episodeList': episodeList,
           'episodeTitles': episodeTitles,
+          'episodeThumbs': _currentEpisodeThumbs,
           'episodeIndex': newIndex,
           'allSeasonIds': widget.args.allSeasonIds,
           'allSeasonLabels': widget.args.allSeasonLabels,

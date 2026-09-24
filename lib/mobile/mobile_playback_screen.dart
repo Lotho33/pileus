@@ -6,6 +6,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
 import 'package:wakelock_plus/wakelock_plus.dart';
 
+import '../core/app_lifecycle.dart';
 import '../core/di/injection.dart';
 import '../core/grpc/clients/media_client.dart'
     show DetailsResponse, ResolveResponse;
@@ -16,6 +17,7 @@ import '../features/player/bloc/playback_bloc.dart';
 import '../features/player/bloc/playback_event.dart';
 import '../features/player/bloc/playback_state.dart';
 import '../features/player/engine/player_engine.dart';
+import '../features/player/episode_poster.dart';
 import '../features/player/models/playback_args.dart';
 import '../features/player/playback_episode_cache.dart';
 import '../features/settings/data/settings_repository.dart';
@@ -107,14 +109,19 @@ class _MobilePlayerViewState extends State<_MobilePlayerView> {
   late String? _curTitle;
   late List<String> _curEpisodeList;
   late List<String> _curEpisodeTitles;
-  // Fresh per-episode metadata (poster/plot/rating/duration/year) once known
-  // — null means "nothing fresher than widget.args yet", so _currentArgs()
-  // falls back to the original launch value (see PlaybackArgs.copyWith).
-  // Without this, everything except title/episode index kept dragging the
-  // very first episode's values forward forever (the Continue Watching
-  // poster bug).
-  String? _curPoster;
-  String? _curPlot;
+  // Parallel to _curEpisodeList — see PlaybackArgs.episodeThumbs and
+  // episode_poster.dart's posterForEpisode(). This (not a per-episode
+  // getDetails().item.posterUrl fetch, which used to leave _curPoster stuck
+  // dragging the very first episode's poster forward forever whenever a
+  // later episode's own GetDetails had no posterUrl — the Continue Watching
+  // poster bug) is now the source of truth for "what's this episode's
+  // cover".
+  late List<String> _curEpisodeThumbs;
+  // Fresh per-episode rating/duration/year once known — null means "nothing
+  // fresher than widget.args yet", so _currentArgs() falls back to the
+  // original launch value (see PlaybackArgs.copyWith). Plot is deliberately
+  // NOT tracked here: Continue Watching always shows the series' synopsis,
+  // never an episode's — see PlaybackArgs.copyWith's doc comment.
   double? _curRating;
   int? _curDurationSeconds;
   int? _curYear;
@@ -141,8 +148,6 @@ class _MobilePlayerViewState extends State<_MobilePlayerView> {
   Map<String, String>? _prefetchedHeaders;
   String? _prefetchedSourceLabel;
   String? _prefetchedTitle;
-  String? _prefetchedPoster;
-  String? _prefetchedPlot;
   double? _prefetchedRating;
   int? _prefetchedDurationSeconds;
   int? _prefetchedYear;
@@ -162,6 +167,7 @@ class _MobilePlayerViewState extends State<_MobilePlayerView> {
     _curTitle = widget.args.title;
     _curEpisodeList = widget.args.episodeList;
     _curEpisodeTitles = widget.args.episodeTitles;
+    _curEpisodeThumbs = widget.args.episodeThumbs;
 
     SystemChrome.setPreferredOrientations(const [
       DeviceOrientation.landscapeLeft,
@@ -202,6 +208,28 @@ class _MobilePlayerViewState extends State<_MobilePlayerView> {
     _resolveEpisodeListIfMissing();
 
     _armAutoHide();
+    // On Android the ExoPlayer engine already pauses decoding natively when
+    // backgrounded — this only gates the 15s heartbeat above (a wasted gRPC
+    // round-trip while the app can't be seen), same as desktop/web.
+    AppLifecycleReactor.instance.state.addListener(_onLifecycle);
+  }
+
+  void _onLifecycle() {
+    if (!mounted) return;
+    if (AppLifecycleReactor.instance.isBackgrounded) {
+      if (_progressTimer != null) {
+        _progressTimer!.cancel();
+        _progressTimer = null;
+        if (!widget.args.isLive) {
+          try {
+            _progress.save(_engine);
+          } catch (_) {}
+        }
+      }
+    } else if (_progressTimer == null && !widget.args.isLive) {
+      _progressTimer = Timer.periodic(
+          const Duration(seconds: 15), (_) => _progress.save(_engine));
+    }
   }
 
   void _ensureEngineInitialized() {
@@ -235,6 +263,7 @@ class _MobilePlayerViewState extends State<_MobilePlayerView> {
       DeviceOrientation.portraitDown,
     ]);
     SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
+    AppLifecycleReactor.instance.state.removeListener(_onLifecycle);
     _hideTimer?.cancel();
     _errorGrace?.cancel();
     _progressTimer?.cancel();
@@ -385,13 +414,16 @@ class _MobilePlayerViewState extends State<_MobilePlayerView> {
           await repo.browse(widget.args.epPluginId, widget.args.parentId, '');
       if (!mounted) return;
 
-      var eps = <({String id, String title})>[];
+      var eps = <({String id, String title, String thumb})>[];
       if (res.episodes.isNotEmpty) {
-        eps = [for (final e in res.episodes) (id: e.id, title: e.title)];
+        eps = [
+          for (final e in res.episodes)
+            (id: e.id, title: e.title, thumb: e.thumbnailUrl)
+        ];
       } else {
         eps = [
           for (final e in res.items)
-            if (!e.isDir) (id: e.id, title: e.title),
+            if (!e.isDir) (id: e.id, title: e.title, thumb: e.posterUrl),
         ];
       }
 
@@ -403,10 +435,14 @@ class _MobilePlayerViewState extends State<_MobilePlayerView> {
           if (!mounted) return;
           final sr = await repo.browse(widget.args.epPluginId, s.id, '');
           final se = sr.episodes.isNotEmpty
-              ? [for (final e in sr.episodes) (id: e.id, title: e.title)]
+              ? [
+                  for (final e in sr.episodes)
+                    (id: e.id, title: e.title, thumb: e.thumbnailUrl)
+                ]
               : [
                   for (final e in sr.items)
-                    if (!e.isDir) (id: e.id, title: e.title),
+                    if (!e.isDir)
+                      (id: e.id, title: e.title, thumb: e.posterUrl),
                 ];
           if (se.length > 1 &&
               (target.isEmpty ||
@@ -426,7 +462,7 @@ class _MobilePlayerViewState extends State<_MobilePlayerView> {
   }
 
   void _applyResolvedEpisodes(
-      List<({String id, String title})> eps, String target) {
+      List<({String id, String title, String thumb})> eps, String target) {
     if (!mounted) return;
     var idx = eps.indexWhere((e) => e.id == _curMediaId);
     if (idx < 0 && target.isNotEmpty) {
@@ -440,6 +476,7 @@ class _MobilePlayerViewState extends State<_MobilePlayerView> {
     setState(() {
       _curEpisodeList = [for (final e in eps) e.id];
       _curEpisodeTitles = [for (final e in eps) e.title];
+      _curEpisodeThumbs = [for (final e in eps) e.thumb];
       _curEpisodeIndex = idx;
     });
   }
@@ -475,8 +512,8 @@ class _MobilePlayerViewState extends State<_MobilePlayerView> {
   }
 
   /// Best-effort: resolves the next episode's stream + fetches its own
-  /// metadata (poster/plot/rating/year) ahead of time and caches it, so
-  /// _resolveEpisodeAt can open it directly instead of cold-resolving
+  /// rating/duration/year ahead of time and caches it, so _resolveEpisodeAt
+  /// can open it directly instead of cold-resolving
   /// (getStreams + resolveStream, which on a slow plugin is several
   /// seconds spent staring at a spinner right when the episode you were
   /// watching just ended). Any failure here is silent — the actual switch
@@ -531,8 +568,8 @@ class _MobilePlayerViewState extends State<_MobilePlayerView> {
             .timeout(const Duration(seconds: 8));
       } catch (_) {
         // metadata is a bonus — a resolved stream with no fresh
-        // poster/plot is still a win over cold-resolving later. Already
-        // catches a timeout too, not just a thrown error.
+        // rating/duration/year is still a win over cold-resolving later.
+        // Already catches a timeout too, not just a thrown error.
       }
       if (!mounted) return;
 
@@ -545,10 +582,6 @@ class _MobilePlayerViewState extends State<_MobilePlayerView> {
       _prefetchedTitle = (details != null && details.item.title.isNotEmpty)
           ? details.item.title
           : nextTitle;
-      _prefetchedPoster = (details != null && details.item.posterUrl.isNotEmpty)
-          ? details.item.posterUrl
-          : null;
-      _prefetchedPlot = (ep != null && ep.plot.isNotEmpty) ? ep.plot : null;
       _prefetchedRating = (ep != null && ep.vote > 0) ? ep.vote : null;
       _prefetchedDurationSeconds =
           (ep != null && ep.duration > 0) ? ep.duration * 60 : null;
@@ -567,8 +600,6 @@ class _MobilePlayerViewState extends State<_MobilePlayerView> {
     _prefetchedHeaders = null;
     _prefetchedSourceLabel = null;
     _prefetchedTitle = null;
-    _prefetchedPoster = null;
-    _prefetchedPlot = null;
     _prefetchedRating = null;
     _prefetchedDurationSeconds = null;
     _prefetchedYear = null;
@@ -640,17 +671,39 @@ class _MobilePlayerViewState extends State<_MobilePlayerView> {
       final browseRes = await repo
           .browse(widget.args.epPluginId, allSeasonIds[newSeasonIndex], '')
           .timeout(const Duration(seconds: 20));
-      final newEpisodes = browseRes.items;
+      // Same episodes-first, items-as-fallback pattern the TV player uses
+      // (playback_screen/view.dart) — a season-directory browse returns real
+      // episode data (title, thumbnail, …) in `episodes`; mycelium only
+      // routes media tagged as an episode there (see mycelium-core's
+      // lua_pipeline.go:Browse), `items` holds everything else. Reading
+      // `items` directly (as this used to) got an empty-or-wrong list for a
+      // properly-tagged season, producing a Continue Watching entry with a
+      // generic title and no poster once the auto-advance/roll-forward write
+      // fired for it. This path only became reachable once
+      // mobile_details_screen.dart started actually populating
+      // allSeasonIds/allSeasonLabels, so it went unnoticed until a
+      // multi-season binge crossed a season boundary for the first time.
+      final newEpisodes = browseRes.episodes.isNotEmpty
+          ? [
+              for (final e in browseRes.episodes)
+                (id: e.id, title: e.title, thumb: e.thumbnailUrl)
+            ]
+          : [
+              for (final i in browseRes.items)
+                if (!i.isDir) (id: i.id, title: i.title, thumb: i.posterUrl),
+            ];
       if (newEpisodes.isEmpty) {
         if (mounted) setState(() => _resolvingEpisode = false);
         return;
       }
       final newIds = newEpisodes.map((e) => e.id).toList();
       final newTitles = newEpisodes.map((e) => e.title).toList();
+      final newThumbs = newEpisodes.map((e) => e.thumb).toList();
       if (mounted) {
         setState(() {
           _curEpisodeList = newIds;
           _curEpisodeTitles = newTitles;
+          _curEpisodeThumbs = newThumbs;
           _curSeasonIndex = newSeasonIndex;
         });
       }
@@ -673,8 +726,6 @@ class _MobilePlayerViewState extends State<_MobilePlayerView> {
       final headers = _prefetchedHeaders ?? const <String, String>{};
       final sourceLabel = _prefetchedSourceLabel;
       final title = _prefetchedTitle;
-      final poster = _prefetchedPoster;
-      final plot = _prefetchedPlot;
       final rating = _prefetchedRating;
       final durationSeconds = _prefetchedDurationSeconds;
       final year = _prefetchedYear;
@@ -685,8 +736,6 @@ class _MobilePlayerViewState extends State<_MobilePlayerView> {
         _curMediaId = newMediaId;
         _curSourceLabel = sourceLabel ?? _curSourceLabel;
         _curTitle = title ?? newTitle ?? _curTitle;
-        _curPoster = poster;
-        _curPlot = plot;
         _curRating = rating;
         _curDurationSeconds = durationSeconds;
         _curYear = year;
@@ -704,10 +753,10 @@ class _MobilePlayerViewState extends State<_MobilePlayerView> {
     }
     _clearPrefetch();
 
-    // Cold path: fetch the stream sources and this episode's own metadata
-    // (poster/plot/rating/year) in parallel — without the latter, every
-    // field kept dragging the very first episode's values forward forever
-    // (the stale Continue Watching poster bug).
+    // Cold path: fetch the stream sources and this episode's own rating/
+    // duration/year in parallel — those still come from GetDetails (poster
+    // is now episodeThumbs[index]/seriesPoster, see episode_poster.dart;
+    // plot is always the series' own, see PlaybackArgs.copyWith).
     //
     // Both timed: `.timeout()` on streamsFuture surfaces as a thrown
     // TimeoutException, caught by the try/catch around this whole call in
@@ -757,10 +806,6 @@ class _MobilePlayerViewState extends State<_MobilePlayerView> {
         _curTitle = (details != null && details.item.title.isNotEmpty)
             ? details.item.title
             : (newTitle ?? _curTitle);
-        _curPoster = (details != null && details.item.posterUrl.isNotEmpty)
-            ? details.item.posterUrl
-            : null;
-        _curPlot = (ep != null && ep.plot.isNotEmpty) ? ep.plot : null;
         _curRating = (ep != null && ep.vote > 0) ? ep.vote : null;
         _curDurationSeconds =
             (ep != null && ep.duration > 0) ? ep.duration * 60 : null;
@@ -786,6 +831,7 @@ class _MobilePlayerViewState extends State<_MobilePlayerView> {
         extra: {
           'episodeList': episodeList,
           'episodeTitles': episodeTitles,
+          'episodeThumbs': _curEpisodeThumbs,
           'episodeIndex': newIndex,
           'allSeasonIds': widget.args.allSeasonIds,
           'allSeasonLabels': widget.args.allSeasonLabels,
@@ -801,17 +847,24 @@ class _MobilePlayerViewState extends State<_MobilePlayerView> {
   /// [widget.args] rebuilt around the episode currently playing — so
   /// [_progress]'s continue-watching / remembered-audio-language logic
   /// (which reads `args.episodeIndex`/`episodeList`/`mediaId`) stays correct
-  /// after switching episodes in place.
+  /// after switching episodes in place. `plot` has no override here at all
+  /// (see PlaybackArgs.copyWith) — Continue Watching always shows the
+  /// series' own synopsis.
   PlaybackArgs _currentArgs() => widget.args.copyWith(
         title: _curTitle,
         episodeList: _curEpisodeList,
         episodeTitles: _curEpisodeTitles,
+        episodeThumbs: _curEpisodeThumbs,
         episodeIndex: _curEpisodeIndex,
         sourceLabel: _curSourceLabel,
         seasonIndex: _curSeasonIndex,
         seekTo: 0,
-        poster: _curPoster,
-        plot: _curPlot,
+        poster: posterForEpisode(
+          episodeThumbs: _curEpisodeThumbs,
+          index: _curEpisodeIndex,
+          seriesPoster: widget.args.seriesPoster,
+          fallback: widget.args.poster,
+        ),
         rating: _curRating,
         durationSeconds: _curDurationSeconds,
         year: _curYear,

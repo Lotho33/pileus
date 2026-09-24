@@ -14,6 +14,7 @@ import '../features/auth/bloc/auth_event.dart';
 import '../features/media/bloc/details_bloc.dart';
 import '../features/media/bloc/details_event.dart';
 import '../features/media/bloc/details_state.dart';
+import '../features/media/data/continue_watching_item.dart';
 import '../features/media/data/media_repository.dart';
 import '../features/player/resolve_and_play.dart';
 import '../shared/widgets/error_retry_view.dart';
@@ -126,55 +127,6 @@ class _Body extends StatelessWidget {
     return fromDetails.isNotEmpty ? fromDetails : item.bannerUrl;
   }
 
-  Future<void> _play(BuildContext context) async {
-    if (_isSeries) {
-      final List<SeasonInfo> seasons = details?.hasSeries() == true
-          ? details!.series.seasons
-          : const <SeasonInfo>[];
-      if (seasons.isNotEmpty) {
-        final season = seasons.firstWhere((s) => s.episodeCount > 0,
-            orElse: () => seasons.first);
-        final browse = await getIt<MediaRepository>()
-            .browse(pluginId, season.directoryId, '');
-        if (!context.mounted) return;
-        if (browse.episodes.isNotEmpty) {
-          final eps = browse.episodes;
-          await resolveAndPlay(
-            context,
-            pluginId,
-            eps.first.id,
-            extra: <String, dynamic>{
-              'title': eps.first.title,
-              'showTitle': item.title,
-              'poster': item.posterUrl,
-              'parentId': season.directoryId,
-              'episodeList': eps.map((e) => e.id).toList(),
-              'episodeTitles': eps.map((e) => e.title).toList(),
-              'episodeIndex': 0,
-              // Needed for cross-season auto-advance in the player (see
-              // mobile_playback_screen._resolveEpisodeAt) — without these the
-              // "next episode" logic silently stops at the last episode of
-              // this season instead of moving to the next one.
-              'allSeasonIds': seasons.map((s) => s.directoryId).toList(),
-              'allSeasonLabels': seasons.map((s) => s.label).toList(),
-              'seasonIndex': seasons.indexOf(season),
-            },
-          );
-          return;
-        }
-      }
-    }
-    await resolveAndPlay(
-      context,
-      pluginId,
-      item.id,
-      extra: <String, dynamic>{
-        'title': item.title,
-        'poster': item.posterUrl,
-        'mediaType': item.mediaType,
-      },
-    );
-  }
 
   @override
   Widget build(BuildContext context) {
@@ -354,13 +306,11 @@ class _Body extends StatelessWidget {
                       ],
                     ),
                   ),
-                FilledButton.icon(
-                  onPressed: () => _play(context),
-                  icon: const Icon(Icons.play_arrow_rounded),
-                  label: Text(_isSeries ? 'Riproduci 1ª puntata' : 'Riproduci'),
-                  style: FilledButton.styleFrom(
-                    minimumSize: const Size.fromHeight(46),
-                  ),
+                _PlayButton(
+                  pluginId: pluginId,
+                  item: item,
+                  details: details,
+                  isSeries: _isSeries,
                 ),
                 const SizedBox(height: 16),
                 if (loading && _plot.isEmpty)
@@ -387,10 +337,15 @@ class _Body extends StatelessWidget {
                         extra: <String, dynamic>{
                           'title': eps[i].title,
                           'showTitle': item.title,
-                          'poster': item.posterUrl,
+                          'poster': eps[i].thumbnailUrl.isNotEmpty
+                              ? eps[i].thumbnailUrl
+                              : item.posterUrl,
+                          'seriesPoster': item.posterUrl,
                           'parentId': season.directoryId,
                           'episodeList': eps.map((e) => e.id).toList(),
                           'episodeTitles': eps.map((e) => e.title).toList(),
+                          'episodeThumbs':
+                              eps.map((e) => e.thumbnailUrl).toList(),
                           'episodeIndex': i,
                           // Same as _play() above: without these, auto-advance
                           // across a season boundary silently no-ops.
@@ -399,6 +354,17 @@ class _Body extends StatelessWidget {
                           'allSeasonLabels':
                               seasons.map((s) => s.label).toList(),
                           'seasonIndex': seasons.indexOf(season),
+                          // Series-level metadata for the continue-watching
+                          // card + its hero — always the series' own plot,
+                          // never the episode's (see _plot getter above,
+                          // already series-preferring via hasSeries()).
+                          'plot': _plot,
+                          'rating': item.rating,
+                          'year': (details?.hasSeries() == true &&
+                                  details!.series.year > 0)
+                              ? details!.series.year
+                              : item.year,
+                          'genres': _genres,
                         },
                       );
                     },
@@ -409,6 +375,159 @@ class _Body extends StatelessWidget {
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+/// The main "play" CTA — checks for an existing Continue Watching entry for
+/// this series/movie and, if found, resumes it directly instead of always
+/// defaulting to season 1 episode 1 (series) or restarting from 0 (movie).
+/// Best-effort: any failure of the CW lookup silently falls back to the
+/// original "play from start" behaviour.
+class _PlayButton extends StatefulWidget {
+  final String pluginId;
+  final CatalogItem item;
+  final DetailsResponse? details;
+  final bool isSeries;
+
+  const _PlayButton({
+    required this.pluginId,
+    required this.item,
+    required this.details,
+    required this.isSeries,
+  });
+
+  @override
+  State<_PlayButton> createState() => _PlayButtonState();
+}
+
+class _PlayButtonState extends State<_PlayButton> {
+  ContinueWatchingItem? _resume;
+
+  @override
+  void initState() {
+    super.initState();
+    _checkResume();
+  }
+
+  Future<void> _checkResume() async {
+    try {
+      final repo = getIt<MediaRepository>();
+      final items = widget.isSeries
+          ? await repo.getContinueWatching(
+              pluginId: widget.pluginId, parentId: widget.item.id)
+          : await repo.getContinueWatching(pluginId: widget.pluginId);
+      if (!mounted) return;
+      final match = widget.isSeries
+          ? items.firstOrNull
+          : items
+              .where((i) =>
+                  i.parentID.isEmpty && i.playableID == widget.item.id)
+              .firstOrNull;
+      // A "next episode" row parked at ~31s just to clear mycelium's
+      // progress_time>=30 filter (see PlaybackProgress.maybeClear) isn't a
+      // real resume point — same guard the home Continue Watching card uses.
+      final isRealProgress = match != null &&
+          !(match.totalTime <= 0 && match.progressTime <= 35);
+      if (isRealProgress && mounted) setState(() => _resume = match);
+    } catch (_) {
+      // best-effort — falls back to the default "play from start" button
+    }
+  }
+
+  Future<void> _play(BuildContext context) async {
+    final resume = _resume;
+    if (resume != null) {
+      // Same minimal push as the home Continue Watching card's _resume() —
+      // playableID is an already-resolved stream id, passed as streamId so
+      // the player calls ResolveStream directly instead of re-running
+      // GetStreams on a stream id.
+      context.push(
+        '/player/${widget.pluginId}/${Uri.encodeComponent(resume.playableID)}',
+        extra: <String, dynamic>{
+          'streamId': resume.playableID,
+          'title': resume.title,
+          'showTitle': resume.showTitle,
+          'poster':
+              resume.poster.isNotEmpty ? resume.poster : widget.item.posterUrl,
+          'parentId': resume.parentID,
+          'seekTo': resume.progressTime.toInt(),
+        },
+      );
+      return;
+    }
+    if (widget.isSeries) {
+      final seasons = widget.details?.hasSeries() == true
+          ? widget.details!.series.seasons
+          : const <SeasonInfo>[];
+      if (seasons.isNotEmpty) {
+        final season = seasons.firstWhere((s) => s.episodeCount > 0,
+            orElse: () => seasons.first);
+        final browse = await getIt<MediaRepository>()
+            .browse(widget.pluginId, season.directoryId, '');
+        if (!context.mounted) return;
+        if (browse.episodes.isNotEmpty) {
+          final eps = browse.episodes;
+          final series =
+              widget.details?.hasSeries() == true ? widget.details!.series : null;
+          await resolveAndPlay(
+            context,
+            widget.pluginId,
+            eps.first.id,
+            extra: <String, dynamic>{
+              'title': eps.first.title,
+              'showTitle': widget.item.title,
+              'poster': eps.first.thumbnailUrl.isNotEmpty
+                  ? eps.first.thumbnailUrl
+                  : widget.item.posterUrl,
+              'seriesPoster': widget.item.posterUrl,
+              'parentId': season.directoryId,
+              'episodeList': eps.map((e) => e.id).toList(),
+              'episodeTitles': eps.map((e) => e.title).toList(),
+              'episodeThumbs': eps.map((e) => e.thumbnailUrl).toList(),
+              'episodeIndex': 0,
+              'allSeasonIds': seasons.map((s) => s.directoryId).toList(),
+              'allSeasonLabels': seasons.map((s) => s.label).toList(),
+              'seasonIndex': seasons.indexOf(season),
+              // Series-level metadata for the continue-watching card + its
+              // hero — always the series' own plot, never the episode's.
+              'plot': series?.plot ?? '',
+              'rating': widget.item.rating,
+              'year': (series?.year ?? 0) > 0 ? series!.year : widget.item.year,
+              'genres': series?.genres.toList() ?? const <String>[],
+            },
+          );
+          return;
+        }
+      }
+    }
+    await resolveAndPlay(
+      context,
+      widget.pluginId,
+      widget.item.id,
+      extra: <String, dynamic>{
+        'title': widget.item.title,
+        'poster': widget.item.posterUrl,
+        'mediaType': widget.item.mediaType,
+      },
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final resume = _resume;
+    return FilledButton.icon(
+      onPressed: () => _play(context),
+      icon: const Icon(Icons.play_arrow_rounded),
+      label: Text(
+        resume != null
+            ? 'Riprendi «${resume.title}»'
+            : (widget.isSeries ? 'Riproduci 1ª puntata' : 'Riproduci'),
+        overflow: TextOverflow.ellipsis,
+      ),
+      style: FilledButton.styleFrom(
+        minimumSize: const Size.fromHeight(46),
       ),
     );
   }

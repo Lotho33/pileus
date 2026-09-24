@@ -11,6 +11,7 @@ class _EpisodeTileRow extends StatefulWidget {
   final EpisodeInfo item;
   final List<String> allEpisodeIds;
   final List<String> allEpisodeTitles;
+  final List<String> allEpisodeThumbs;
   final int episodeIndex;
   final List<String> allSeasonIds;
   final List<String> allSeasonLabels;
@@ -51,6 +52,7 @@ class _EpisodeTileRow extends StatefulWidget {
     required this.item,
     this.allEpisodeIds = const [],
     this.allEpisodeTitles = const [],
+    this.allEpisodeThumbs = const [],
     this.episodeIndex = -1,
     this.allSeasonIds = const [],
     this.allSeasonLabels = const [],
@@ -121,6 +123,7 @@ class _EpisodeTileRowState extends State<_EpisodeTileRow> {
             item: widget.item,
             allEpisodeIds: widget.allEpisodeIds,
             allEpisodeTitles: widget.allEpisodeTitles,
+            allEpisodeThumbs: widget.allEpisodeThumbs,
             episodeIndex: widget.episodeIndex,
             allSeasonIds: widget.allSeasonIds,
             allSeasonLabels: widget.allSeasonLabels,

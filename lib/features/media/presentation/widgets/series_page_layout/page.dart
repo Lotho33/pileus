@@ -344,6 +344,7 @@ class _SeriesPageLayoutState extends State<_SeriesPageLayout> {
 
     final allEpisodeIds = allEpisodes.map((e) => e.id).toList();
     final allEpisodeTitles = allEpisodes.map((e) => e.title).toList();
+    final allEpisodeThumbs = allEpisodes.map((e) => e.thumbnailUrl).toList();
     final allSeasonIds = widget.seasons.map((s) => s.directoryId).toList();
     final allSeasonLabels = widget.seasons.map((s) => s.label).toList();
 
@@ -882,6 +883,8 @@ class _SeriesPageLayoutState extends State<_SeriesPageLayout> {
                                                               allEpisodeIds,
                                                           allEpisodeTitles:
                                                               allEpisodeTitles,
+                                                          allEpisodeThumbs:
+                                                              allEpisodeThumbs,
                                                           episodeIndex:
                                                               winStart + i,
                                                           allSeasonIds:

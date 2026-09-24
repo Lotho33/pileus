@@ -206,10 +206,21 @@ class _MobileHomeViewState extends State<_MobileHomeView> {
           PluginLoading() ||
           PluginInitial() =>
             const Center(child: CircularProgressIndicator()),
-          PluginError(:final message) => _ErrorBody(
-              message: message,
+          PluginError(:final message, :final certMismatch) => _ErrorBody(
+              // certMismatch: see grpc_errors.dart:looksLikeCertificateMismatch
+              // — the server IS reachable, the pinned TLS fingerprint just no
+              // longer matches (e.g. mycelium reinstalled/reset).
+              message: certMismatch
+                  ? 'Il certificato del server è cambiato — probabilmente è '
+                      'stato reinstallato o resettato. Ripeti la ricerca per '
+                      'abbinarlo di nuovo.'
+                  : message,
               onRetry: () =>
                   context.read<PluginBloc>().add(const LoadPluginsEvent()),
+              onSecondary: certMismatch
+                  ? () => getIt<AuthBloc>().add(const ChangeServerEvent())
+                  : null,
+              secondaryLabel: certMismatch ? 'Ripeti ricerca' : null,
             ),
           _ when plugins.isEmpty => const _ErrorBody(
               message: 'Nessun plugin configurato sul server.',
@@ -811,7 +822,14 @@ class _CwCard extends StatelessWidget {
 class _ErrorBody extends StatelessWidget {
   final String message;
   final VoidCallback? onRetry;
-  const _ErrorBody({required this.message, this.onRetry});
+  final VoidCallback? onSecondary;
+  final String? secondaryLabel;
+  const _ErrorBody({
+    required this.message,
+    this.onRetry,
+    this.onSecondary,
+    this.secondaryLabel,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -827,9 +845,20 @@ class _ErrorBody extends StatelessWidget {
             Text(message,
                 textAlign: TextAlign.center,
                 style: const TextStyle(color: AppTheme.textMid)),
-            if (onRetry != null) ...[
+            if (onRetry != null || onSecondary != null) ...[
               const SizedBox(height: 16),
-              FilledButton(onPressed: onRetry, child: const Text('Riprova')),
+              Wrap(
+                alignment: WrapAlignment.center,
+                spacing: 10,
+                children: [
+                  if (onRetry != null)
+                    FilledButton(
+                        onPressed: onRetry, child: const Text('Riprova')),
+                  if (onSecondary != null && secondaryLabel != null)
+                    OutlinedButton(
+                        onPressed: onSecondary, child: Text(secondaryLabel!)),
+                ],
+              ),
             ],
           ],
         ),

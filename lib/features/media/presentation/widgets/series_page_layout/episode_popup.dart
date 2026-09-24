@@ -11,6 +11,7 @@ class _EpisodePopup extends StatefulWidget {
   final EpisodeInfo item;
   final List<String> allEpisodeIds;
   final List<String> allEpisodeTitles;
+  final List<String> allEpisodeThumbs;
   final int episodeIndex;
   final List<String> allSeasonIds;
   final List<String> allSeasonLabels;
@@ -28,6 +29,7 @@ class _EpisodePopup extends StatefulWidget {
     required this.item,
     required this.allEpisodeIds,
     required this.allEpisodeTitles,
+    this.allEpisodeThumbs = const [],
     required this.episodeIndex,
     required this.allSeasonIds,
     required this.allSeasonLabels,
@@ -486,6 +488,8 @@ class _EpisodePopupState extends State<_EpisodePopup> {
                                                         widget.allEpisodeIds,
                                                     'episodeTitles':
                                                         widget.allEpisodeTitles,
+                                                    'episodeThumbs':
+                                                        widget.allEpisodeThumbs,
                                                     'episodeIndex':
                                                         widget.episodeIndex,
                                                     'allSeasonIds':
@@ -509,14 +513,13 @@ class _EpisodePopupState extends State<_EpisodePopup> {
                                                     'parentId': widget.parentId,
                                                     // Series-level metadata for
                                                     // the continue-watching card
-                                                    // + its hero (plot prefers
-                                                    // the episode synopsis when
-                                                    // we have it).
-                                                    'plot': (_details?.plot
-                                                                .isNotEmpty ??
-                                                            false)
-                                                        ? _details!.plot
-                                                        : widget.seriesPlot,
+                                                    // + its hero. Always the
+                                                    // series' own plot, never
+                                                    // the episode's synopsis —
+                                                    // the CW card must read the
+                                                    // same regardless of which
+                                                    // episode is playing.
+                                                    'plot': widget.seriesPlot,
                                                     'rating':
                                                         widget.seriesRating,
                                                     'year': widget.seriesYear,

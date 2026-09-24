@@ -3,6 +3,18 @@
 // entry point; private identifiers are shared across all parts.
 part of '../home_screen.dart';
 
+// The Continue Watching hero must always read like the series' own details
+// page — the show synopsis, never an episode's or a season's. A per-episode
+// or per-season plot made the hero's text drift depending on which episode
+// was playing, which is exactly the bug the CW card exists to avoid (see
+// [posterForEpisode] for the analogous cover-image fix). [savedPlot] is
+// whatever the CW row itself already had stored (the placeholder built from
+// GetContinueWatching, which is itself series-level once written — see
+// PlaybackArgs.plot), used only when the series' own details carry no plot
+// at all.
+String resolveCwHeroPlot({required String seriesPlot, required String savedPlot}) =>
+    seriesPlot.isNotEmpty ? seriesPlot : savedPlot;
+
 // ── standard home shell — fullscreen Stack: fanart + metadata + carousel overlay
 
 class _StandardHomeShell extends StatefulWidget {
@@ -323,20 +335,7 @@ class _StandardHomeShellState extends State<_StandardHomeShell> {
       CatalogItem? display;
       if (resp.hasSeries()) {
         final s = resp.series;
-        final episode = (episodeResp != null && episodeResp.hasEpisode())
-            ? episodeResp.episode
-            : null;
-        // The CW hero should read like the series' own details page — the
-        // show synopsis first. Only when the series carries no plot at all
-        // do we fall back to the episode synopsis, then the season overview.
-        var plot = s.plot;
-        if (plot.isEmpty) plot = episode?.plot ?? '';
-        if (plot.isEmpty && episode != null) {
-          final season = s.seasons
-              .where((se) => se.number == episode.seasonNumber)
-              .firstOrNull;
-          plot = season?.overview ?? '';
-        }
+        final plot = resolveCwHeroPlot(seriesPlot: s.plot, savedPlot: item.plot);
         display = CatalogItem(
           id: lookupId,
           title: title,

@@ -15,6 +15,7 @@ import '../features/auth/bloc/auth_event.dart';
 import '../features/media/bloc/details_bloc.dart';
 import '../features/media/bloc/details_event.dart';
 import '../features/media/bloc/details_state.dart';
+import '../features/media/data/continue_watching_item.dart';
 import '../features/media/data/media_repository.dart';
 import '../features/player/resolve_and_play.dart';
 import '../shared/responsive.dart';
@@ -185,11 +186,29 @@ class _Body extends StatelessWidget {
       extra: {
         'title': eps[i].title,
         'showTitle': item.title,
-        'poster': item.posterUrl,
+        'poster': eps[i].thumbnailUrl.isNotEmpty
+            ? eps[i].thumbnailUrl
+            : item.posterUrl,
+        'seriesPoster': item.posterUrl,
         'parentId': season.directoryId,
         'episodeList': eps.map((e) => e.id).toList(),
         'episodeTitles': eps.map((e) => e.title).toList(),
+        'episodeThumbs': eps.map((e) => e.thumbnailUrl).toList(),
         'episodeIndex': i,
+        // Without these, auto-advance/next-episode across a season boundary
+        // silently no-ops — same fields mobile's equivalent call sites send.
+        'allSeasonIds': _seasons.map((s) => s.directoryId).toList(),
+        'allSeasonLabels': _seasons.map((s) => s.label).toList(),
+        'seasonIndex': _seasons.indexOf(season),
+        // Series-level metadata for the continue-watching card + its hero —
+        // always the series' own plot, never the episode's (_plot already
+        // prefers hasSeries() over hasEpisode()/hasMovie() above).
+        'plot': _plot,
+        'rating': item.rating,
+        'year': (details?.hasSeries() == true && details!.series.year > 0)
+            ? details!.series.year
+            : item.year,
+        'genres': _genres,
       },
       sourcePicker: showDesktopSourcePicker,
     );
@@ -208,6 +227,7 @@ class _Body extends StatelessWidget {
           slivers: [
             SliverToBoxAdapter(
               child: _Header(
+                pluginId: pluginId,
                 fanart: _fanart,
                 logo: _logo,
                 item: item,
@@ -254,6 +274,7 @@ class _Body extends StatelessWidget {
 }
 
 class _Header extends StatelessWidget {
+  final String pluginId;
   final String fanart;
   final String logo;
   final CatalogItem item;
@@ -268,6 +289,7 @@ class _Header extends StatelessWidget {
   final VoidCallback onPlay;
 
   const _Header({
+    required this.pluginId,
     required this.fanart,
     required this.logo,
     required this.item,
@@ -376,18 +398,12 @@ class _Header extends StatelessWidget {
             const SizedBox(width: 160, child: LinearProgressIndicator()),
           ],
           SizedBox(height: big ? 22 : 16),
-          FilledButton.icon(
-            onPressed: onPlay,
-            icon: const Icon(Icons.play_arrow_rounded),
-            label: Text(isSeries ? 'Riproduci 1ª puntata' : 'Riproduci'),
-            style: FilledButton.styleFrom(
-              backgroundColor: AppTheme.textHigh,
-              foregroundColor: AppTheme.bg,
-              padding: EdgeInsets.symmetric(
-                  horizontal: big ? 28 : 22, vertical: big ? 18 : 14),
-              textStyle: TextStyle(
-                  fontSize: big ? 15 : 14, fontWeight: FontWeight.w700),
-            ),
+          _PlayButton(
+            pluginId: pluginId,
+            item: item,
+            isSeries: isSeries,
+            big: big,
+            onPlayDefault: onPlay,
           ),
         ],
       ),
@@ -485,6 +501,110 @@ class _Header extends StatelessWidget {
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+/// The main "play" CTA — checks for an existing Continue Watching entry for
+/// this series/movie and, if found, resumes it directly instead of
+/// delegating to [onPlayDefault] (which always starts from season 1 episode
+/// 1, or from 0 for a movie). Best-effort: any failure of the CW lookup
+/// silently falls back to [onPlayDefault].
+class _PlayButton extends StatefulWidget {
+  final String pluginId;
+  final CatalogItem item;
+  final bool isSeries;
+  final bool big;
+  final VoidCallback onPlayDefault;
+
+  const _PlayButton({
+    required this.pluginId,
+    required this.item,
+    required this.isSeries,
+    required this.big,
+    required this.onPlayDefault,
+  });
+
+  @override
+  State<_PlayButton> createState() => _PlayButtonState();
+}
+
+class _PlayButtonState extends State<_PlayButton> {
+  ContinueWatchingItem? _resume;
+
+  @override
+  void initState() {
+    super.initState();
+    _checkResume();
+  }
+
+  Future<void> _checkResume() async {
+    try {
+      final repo = getIt<MediaRepository>();
+      final items = widget.isSeries
+          ? await repo.getContinueWatching(
+              pluginId: widget.pluginId, parentId: widget.item.id)
+          : await repo.getContinueWatching(pluginId: widget.pluginId);
+      if (!mounted) return;
+      final match = widget.isSeries
+          ? items.firstOrNull
+          : items
+              .where((i) =>
+                  i.parentID.isEmpty && i.playableID == widget.item.id)
+              .firstOrNull;
+      // A "next episode" row parked at ~31s just to clear mycelium's
+      // progress_time>=30 filter (see PlaybackProgress.maybeClear) isn't a
+      // real resume point — same guard the home Continue Watching card uses.
+      final isRealProgress = match != null &&
+          !(match.totalTime <= 0 && match.progressTime <= 35);
+      if (isRealProgress && mounted) setState(() => _resume = match);
+    } catch (_) {
+      // best-effort — falls back to onPlayDefault
+    }
+  }
+
+  void _play(BuildContext context) {
+    final resume = _resume;
+    if (resume == null) {
+      widget.onPlayDefault();
+      return;
+    }
+    // Same minimal push as the home Continue Watching card's resume — see
+    // mobile_home_screen.dart's _CwCard._resume() for the identical pattern.
+    context.push(
+      '/player/${widget.pluginId}/${Uri.encodeComponent(resume.playableID)}',
+      extra: <String, dynamic>{
+        'streamId': resume.playableID,
+        'title': resume.title,
+        'showTitle': resume.showTitle,
+        'poster':
+            resume.poster.isNotEmpty ? resume.poster : widget.item.posterUrl,
+        'parentId': resume.parentID,
+        'seekTo': resume.progressTime.toInt(),
+      },
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final resume = _resume;
+    return FilledButton.icon(
+      onPressed: () => _play(context),
+      icon: const Icon(Icons.play_arrow_rounded),
+      label: Text(
+        resume != null
+            ? 'Riprendi «${resume.title}»'
+            : (widget.isSeries ? 'Riproduci 1ª puntata' : 'Riproduci'),
+        overflow: TextOverflow.ellipsis,
+      ),
+      style: FilledButton.styleFrom(
+        backgroundColor: AppTheme.textHigh,
+        foregroundColor: AppTheme.bg,
+        padding: EdgeInsets.symmetric(
+            horizontal: widget.big ? 28 : 22, vertical: widget.big ? 18 : 14),
+        textStyle: TextStyle(
+            fontSize: widget.big ? 15 : 14, fontWeight: FontWeight.w700),
       ),
     );
   }

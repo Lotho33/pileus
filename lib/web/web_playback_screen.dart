@@ -8,13 +8,20 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
 import 'package:web/web.dart' as web;
 
+import '../core/app_lifecycle.dart';
 import '../core/di/injection.dart';
 import '../core/utils/perf_log.dart' show kPerfDiagnostics;
 import '../features/media/data/media_repository.dart';
 import '../features/player/bloc/playback_bloc.dart';
 import '../features/player/bloc/playback_event.dart';
 import '../features/player/bloc/playback_state.dart';
+import '../features/player/episode_nav.dart';
+import '../features/player/episode_poster.dart';
+import '../features/player/live_stall_watchdog.dart';
 import '../features/player/models/playback_args.dart';
+import '../features/player/models/skip_interval.dart';
+import '../features/player/presentation/widgets/pointer_next_episode_banner.dart';
+import '../features/player/presentation/widgets/pointer_skip_button.dart';
 
 /// Gated the same way as the rest of the app's diagnostics (perf_log.dart,
 /// playback_bloc.dart) — these 5 call sites used to be plain `debugPrint`,
@@ -159,6 +166,43 @@ class _ViewState extends State<_View> {
   _Hls? _hls;
   Timer? _progressTimer;
   bool _opened = false;
+  bool _firstOpen = true;
+
+  // ── episode navigation / AniSkip / CW closing / live watchdog ────────────
+  // Ported from the mobile (episode-nav) and TV (AniSkip + live-stall
+  // watchdog) players — see episode_nav.dart/skip_interval.dart/
+  // live_stall_watchdog.dart. Web had none of this before; it also has no
+  // prefetch (unlike desktop/mobile) — every episode change here resolves
+  // cold through PlaybackBloc, same as the very first one.
+  late String _curMediaId = widget.mediaId;
+  // Never reassigned on web (unlike desktop): there's no client-side
+  // getStreams/source-matching here, InitializeVideoEvent's preferredLabel
+  // just keeps asking the bloc for the same source label on every episode.
+  late final String _curSourceLabel = widget.args.sourceLabel;
+  late String _curTitle = widget.args.title ?? '';
+  late final EpisodeNavState _nav = EpisodeNavState.fromArgs(widget.args);
+  bool _resolvingEpisode = false;
+  bool _autoAdvanced = false;
+  bool _nextEpisodeDismissed = false;
+  int? _nextEpisodeSecs;
+  // Mirrors PlaybackProgress._progressCleared (shared/player/playback_progress.dart)
+  // — that helper takes a PlayerEngine, which this screen doesn't have, so
+  // the same 90%/95% continue-watching close/roll-forward logic is
+  // reimplemented here against _video.currentTime/duration instead (audit
+  // finding A4: the web player never closed/advanced a CW entry at all).
+  bool _progressCleared = false;
+
+  List<SkipInterval> _skipIntervals = const [];
+  SkipInterval? _activeSkip;
+  bool _skipDismissed = false;
+
+  // Audit finding A3: a fatal error after the stream had already opened
+  // (token expiry, a decode error, a blocked mid-stream request) used to
+  // only _dlog and leave the user on a frozen/black frame with no way to
+  // retry short of leaving the player entirely.
+  String? _fatalError;
+
+  LiveStallWatchdog? _liveWatchdog;
 
   @override
   void initState() {
@@ -183,9 +227,58 @@ class _ViewState extends State<_View> {
         final err = _video.error;
         _dlog('[web player] <video> element error: '
             'code=${err?.code} message=${err?.message}');
+        // Only a failure *after* the stream had already opened is "fatal" in
+        // the sense of needing a retry affordance — an error racing the very
+        // first open is already handled by PlaybackFailed/the loading path.
+        if (_opened && mounted && _fatalError == null) {
+          setState(() => _fatalError =
+              'Riproduzione interrotta (errore ${err?.code ?? '?'}).');
+        }
       }).toJS,
     );
+    _video.addEventListener(
+      'timeupdate',
+      ((web.Event _) => _onTimeUpdate()).toJS,
+    );
     if (!widget.args.isLive) {
+      _progressTimer =
+          Timer.periodic(const Duration(seconds: 15), (_) => _saveProgress());
+    }
+    // The <video> element keeps playing regardless (browsers don't pause
+    // media on a backgrounded tab) — this only gates the 15s heartbeat, same
+    // reasoning as desktop/mobile.
+    AppLifecycleReactor.instance.state.addListener(_onLifecycle);
+    if (widget.args.isLive) {
+      _liveWatchdog = LiveStallWatchdog(
+        isHealthy: () => mounted && _fatalError == null && !_video.paused,
+        onStallTier1: () {
+          _video.pause();
+          _video.play().toDart.catchError((_) => null);
+        },
+        onStallTier2: () {
+          if (!mounted) return;
+          _hls?.destroy();
+          _hls = null;
+          setState(() => _opened = false);
+          context.read<PlaybackBloc>().add(InitializeVideoEvent(
+                pluginId: widget.pluginId,
+                mediaId: _curMediaId,
+                preferredLabel: _curSourceLabel,
+              ));
+        },
+      )..arm();
+    }
+  }
+
+  void _onLifecycle() {
+    if (!mounted) return;
+    if (AppLifecycleReactor.instance.isBackgrounded) {
+      if (_progressTimer != null) {
+        _progressTimer!.cancel();
+        _progressTimer = null;
+        if (!widget.args.isLive) _saveProgress();
+      }
+    } else if (_progressTimer == null && !widget.args.isLive) {
       _progressTimer =
           Timer.periodic(const Duration(seconds: 15), (_) => _saveProgress());
     }
@@ -193,7 +286,9 @@ class _ViewState extends State<_View> {
 
   @override
   void dispose() {
+    AppLifecycleReactor.instance.state.removeListener(_onLifecycle);
     _progressTimer?.cancel();
+    _liveWatchdog?.disarm();
     if (!widget.args.isLive) _saveProgress();
     _hls?.destroy();
     _hls = null;
@@ -207,20 +302,199 @@ class _ViewState extends State<_View> {
   void _onReady(PlaybackReady s) {
     if (_opened) return;
     _opened = true;
+    // Fires for both the very first stream and every subsequent episode
+    // (see _openEpisode, which dispatches InitializeVideoEvent and resets
+    // _opened) — so AniSkip markers refresh per-episode for free.
+    setState(() {
+      _skipIntervals = parseSkipTimes(s.extra['skip_times']);
+      _activeSkip = null;
+      _skipDismissed = false;
+    });
     _attachSource(s.resolvedUrl);
     if (!widget.args.isLive) _markOpened();
-    final seek = widget.args.seekTo;
-    if (seek > 2) {
-      _video.addEventListener(
-        'loadedmetadata',
-        (web.Event _) {
-          try {
-            _video.currentTime = seek.toDouble();
-          } catch (_) {}
-        }.toJS,
-      );
+    // The launch-time resume position only ever applies to the very first
+    // episode opened — a later episode/season should start at 0, not
+    // whatever position the original deep-link/continue-watching tap asked
+    // for.
+    if (_firstOpen) {
+      _firstOpen = false;
+      final seek = widget.args.seekTo;
+      if (seek > 2) {
+        _video.addEventListener(
+          'loadedmetadata',
+          (web.Event _) {
+            try {
+              _video.currentTime = seek.toDouble();
+            } catch (_) {}
+          }.toJS,
+        );
+      }
     }
     _video.play().toDart.catchError((_) => null);
+  }
+
+  void _retryFatal() {
+    setState(() {
+      _fatalError = null;
+      _opened = false;
+    });
+    context.read<PlaybackBloc>().add(InitializeVideoEvent(
+          pluginId: widget.pluginId,
+          mediaId: _curMediaId,
+          preferredLabel: _curSourceLabel,
+        ));
+  }
+
+  void _onTimeUpdate() {
+    if (!mounted) return;
+    _liveWatchdog?.recordProgress();
+    if (widget.args.isLive) return;
+
+    final pos = _video.currentTime;
+    final dur = _video.duration;
+    if (pos.isNaN || !dur.isFinite || dur <= 0) return;
+
+    final active = activeSkipInterval(
+        _skipIntervals, Duration(milliseconds: (pos * 1000).round()));
+    if (active != _activeSkip) {
+      setState(() {
+        _activeSkip = active;
+        if (active != null) _skipDismissed = false;
+      });
+    }
+
+    _maybeClearProgress(pos, dur);
+
+    if (dur <= 60 || !_nav.hasNext) return;
+    final remaining = dur - pos;
+    if (remaining > 0 && remaining <= 30 && !_nextEpisodeDismissed) {
+      final r = remaining.round();
+      if (_nextEpisodeSecs != r) setState(() => _nextEpisodeSecs = r);
+    } else if (_nextEpisodeSecs != null) {
+      setState(() => _nextEpisodeSecs = null);
+    }
+    if (remaining <= 0 && !_autoAdvanced && !_resolvingEpisode) {
+      _autoAdvanced = true;
+      _goToNextEpisode();
+    }
+  }
+
+  /// Same 90%/95% thresholds as PlaybackProgress.maybeClear (shared/player/
+  /// playback_progress.dart) — a same-season next episode rolls the CW entry
+  /// forward to it at ≥90%; otherwise (movie or last episode of a season) it
+  /// is dropped at ≥95% instead of lingering at ~100% forever.
+  void _maybeClearProgress(double pos, double dur) {
+    if (_progressCleared) return;
+    final frac = pos / dur;
+    final a = widget.args;
+    final repo = getIt<MediaRepository>();
+    final hasSameSeasonNext =
+        _nav.episodeIndex >= 0 && _nav.episodeIndex + 1 < _nav.episodeList.length;
+    if (hasSameSeasonNext && frac >= 0.90) {
+      _progressCleared = true;
+      final nextId = _nav.episodeList[_nav.episodeIndex + 1];
+      final nextTitle = _nav.episodeIndex + 1 < _nav.episodeTitles.length
+          ? _nav.episodeTitles[_nav.episodeIndex + 1]
+          : '';
+      repo.updateProgress(
+        pluginId: a.epPluginId,
+        mediaId: nextId,
+        parentId: _nav.parentId,
+        position: const Duration(seconds: 31),
+        title: nextTitle.isNotEmpty ? nextTitle : a.showTitle,
+        showTitle: a.showTitle,
+        // The *next* episode's own thumbnail, not the one currently
+        // playing's — see episode_poster.dart's doc comment.
+        poster: posterForEpisode(
+          episodeThumbs: _nav.episodeThumbs,
+          index: _nav.episodeIndex + 1,
+          seriesPoster: _nav.seriesPoster,
+          fallback: a.poster,
+        ),
+        rating: a.rating,
+        genres: a.genres,
+        // Always the series' own synopsis, never an episode's — see
+        // PlaybackArgs.copyWith's doc comment.
+        plot: a.plot,
+        year: a.year,
+      );
+      repo.deleteProgress(providerID: a.epPluginId, playableID: _curMediaId);
+    } else if (!hasSameSeasonNext && frac >= 0.95) {
+      _progressCleared = true;
+      repo.deleteProgress(providerID: a.epPluginId, playableID: _curMediaId);
+    }
+  }
+
+  // ── episode navigation ────────────────────────────────────────────────
+
+  Future<void> _goToNextEpisode() async {
+    if (_resolvingEpisode || !_nav.hasNext) return;
+    setState(() {
+      _resolvingEpisode = true;
+      _nextEpisodeSecs = null;
+    });
+    try {
+      final target = await _nav.resolveNext(getIt<MediaRepository>());
+      if (target == null) {
+        if (mounted) setState(() => _resolvingEpisode = false);
+        return;
+      }
+      _openEpisode(target);
+    } catch (_) {
+      if (mounted) {
+        setState(() {
+          _resolvingEpisode = false;
+          _fatalError = 'Impossibile cambiare episodio.';
+        });
+      }
+    }
+  }
+
+  Future<void> _goToPreviousEpisode() async {
+    if (_resolvingEpisode || !_nav.hasPrevious) return;
+    setState(() {
+      _resolvingEpisode = true;
+      _nextEpisodeSecs = null;
+    });
+    try {
+      final target = await _nav.resolvePrevious(getIt<MediaRepository>());
+      if (target == null) {
+        if (mounted) setState(() => _resolvingEpisode = false);
+        return;
+      }
+      _openEpisode(target);
+    } catch (_) {
+      if (mounted) {
+        setState(() {
+          _resolvingEpisode = false;
+          _fatalError = 'Impossibile cambiare episodio.';
+        });
+      }
+    }
+  }
+
+  /// No prefetch on web (unlike desktop/mobile) — always resolves cold via
+  /// PlaybackBloc, same as the initial load. [_onReady] handles the actual
+  /// `_attachSource` once PlaybackReady arrives.
+  void _openEpisode(EpisodeNavTarget target) {
+    if (!mounted) return;
+    _hls?.destroy();
+    _hls = null;
+    setState(() {
+      _curMediaId = target.mediaId;
+      _curTitle = target.title.isNotEmpty ? target.title : _curTitle;
+      _opened = false;
+      _resolvingEpisode = false;
+      _autoAdvanced = false;
+      _nextEpisodeDismissed = false;
+      _progressCleared = false;
+      _fatalError = null;
+    });
+    context.read<PlaybackBloc>().add(InitializeVideoEvent(
+          pluginId: widget.pluginId,
+          mediaId: target.mediaId,
+          preferredLabel: _curSourceLabel,
+        ));
   }
 
   /// Picks how to feed the URL to the element:
@@ -270,6 +544,14 @@ class _ViewState extends State<_View> {
                   'details=${data.details} fatal=${data.fatal ?? false}'
                   '${resp == null ? '' : ' httpStatus=${resp.code} body=${resp.text}'}'
                   ' url=$url');
+              // Same "only after the stream had already opened" reasoning as
+              // the <video> 'error' listener above — a fatal error hls.js
+              // itself gave up recovering from, at a point where the user
+              // was already watching, needs a retry affordance (audit A3).
+              if ((data.fatal ?? false) && _opened && mounted && _fatalError == null) {
+                setState(() => _fatalError =
+                    'Riproduzione interrotta (${data.details ?? data.type ?? 'errore hls.js'}).');
+              }
             }).toJS);
         // How many renditions hls.js actually extracted from the master —
         // if this never fires, or fires with 0 levels, the manifest parse
@@ -302,21 +584,24 @@ class _ViewState extends State<_View> {
   }
 
   void _saveProgress() {
-    if (widget.args.isLive) return;
+    // _progressCleared: once _maybeClearProgress has closed/rolled the entry
+    // forward (≥95%/≥90%), the 15s heartbeat must not silently recreate it —
+    // same guard PlaybackProgress.save uses on desktop/mobile.
+    if (widget.args.isLive || _progressCleared) return;
     final pos = _video.currentTime;
     final dur = _video.duration;
     if (pos.isNaN || pos <= 0) return;
     final a = widget.args;
     getIt<MediaRepository>().updateProgress(
       pluginId: a.epPluginId,
-      mediaId: widget.mediaId,
-      parentId: a.parentId,
+      mediaId: _curMediaId,
+      parentId: _nav.parentId,
       position: Duration(seconds: pos.toInt()),
       totalDuration:
           dur.isFinite ? Duration(seconds: dur.toInt()) : Duration.zero,
-      title: (a.title?.isNotEmpty ?? false) ? a.title! : a.showTitle,
+      title: _curTitle.isNotEmpty ? _curTitle : a.showTitle,
       showTitle: a.showTitle,
-      poster: a.poster,
+      poster: _currentEpisodePoster(),
       rating: a.rating,
       genres: a.genres,
       plot: a.plot,
@@ -327,24 +612,35 @@ class _ViewState extends State<_View> {
   /// Writes a continue-watching row the instant the stream opens, even at
   /// position 0 — mycelium no longer gates Continue Watching on a minimum
   /// position, so a title should appear there as soon as it's opened rather
-  /// than waiting for the first 15s heartbeat.
+  /// than waiting for the first 15s heartbeat. Runs again for every episode
+  /// change (see _onReady), each time with the now-current _curMediaId.
   void _markOpened() {
     final a = widget.args;
     getIt<MediaRepository>().updateProgress(
       pluginId: a.epPluginId,
-      mediaId: widget.mediaId,
-      parentId: a.parentId,
+      mediaId: _curMediaId,
+      parentId: _nav.parentId,
       position: Duration.zero,
       totalDuration: Duration.zero,
-      title: (a.title?.isNotEmpty ?? false) ? a.title! : a.showTitle,
+      title: _curTitle.isNotEmpty ? _curTitle : a.showTitle,
       showTitle: a.showTitle,
-      poster: a.poster,
+      poster: _currentEpisodePoster(),
       rating: a.rating,
       genres: a.genres,
       plot: a.plot,
       year: a.year,
     );
   }
+
+  /// This episode's Continue Watching cover — see episode_poster.dart's doc
+  /// comment for the bug this replaces (the cover used to stay stuck on
+  /// whichever episode the session started on).
+  String _currentEpisodePoster() => posterForEpisode(
+        episodeThumbs: _nav.episodeThumbs,
+        index: _nav.episodeIndex,
+        seriesPoster: _nav.seriesPoster,
+        fallback: widget.args.poster,
+      );
 
   void _exit() {
     if (context.canPop()) {
@@ -357,8 +653,8 @@ class _ViewState extends State<_View> {
   @override
   Widget build(BuildContext context) {
     final title = widget.args.showTitle.isNotEmpty
-        ? '${widget.args.showTitle}  ·  ${widget.args.title ?? ''}'
-        : (widget.args.title ?? '');
+        ? '${widget.args.showTitle}  ·  $_curTitle'
+        : _curTitle;
     return Scaffold(
       backgroundColor: Colors.black,
       body: BlocListener<PlaybackBloc, PlaybackState>(
@@ -371,6 +667,14 @@ class _ViewState extends State<_View> {
             HtmlElementView(viewType: _viewType),
             BlocBuilder<PlaybackBloc, PlaybackState>(
               builder: (context, s) {
+                if (_fatalError != null) {
+                  return _Overlay(
+                    icon: Icons.error_outline_rounded,
+                    text: _fatalError!,
+                    onBack: _exit,
+                    onRetry: _retryFatal,
+                  );
+                }
                 if (s is PlaybackFailed) {
                   return _Overlay(
                     icon: Icons.error_outline_rounded,
@@ -406,6 +710,26 @@ class _ViewState extends State<_View> {
                           Text(title,
                               style: const TextStyle(
                                   color: Colors.white70, fontSize: 13)),
+                          if (!widget.args.isLive && _nav.hasPrevious) ...[
+                            const SizedBox(width: 4),
+                            IconButton(
+                              icon: const Icon(Icons.skip_previous_rounded,
+                                  color: Colors.white70),
+                              tooltip: 'Episodio precedente',
+                              onPressed: _resolvingEpisode
+                                  ? null
+                                  : _goToPreviousEpisode,
+                            ),
+                          ],
+                          if (!widget.args.isLive && _nav.hasNext) ...[
+                            IconButton(
+                              icon: const Icon(Icons.skip_next_rounded,
+                                  color: Colors.white70),
+                              tooltip: 'Episodio successivo',
+                              onPressed:
+                                  _resolvingEpisode ? null : _goToNextEpisode,
+                            ),
+                          ],
                         ],
                       ),
                     ),
@@ -413,6 +737,53 @@ class _ViewState extends State<_View> {
                 );
               },
             ),
+            if (_activeSkip != null && !_skipDismissed)
+              Positioned(
+                right: 28,
+                bottom: 28,
+                child: Builder(builder: (_) {
+                  final outroToNext = _activeSkip!.type == SkipType.ed &&
+                      _nav.hasNext &&
+                      !_resolvingEpisode;
+                  return PointerSkipButton(
+                    label:
+                        outroToNext ? 'Prossimo episodio' : _activeSkip!.label,
+                    icon: outroToNext
+                        ? Icons.skip_next_rounded
+                        : Icons.fast_forward_rounded,
+                    onSkip: () {
+                      if (outroToNext) {
+                        setState(() => _skipDismissed = true);
+                        _goToNextEpisode();
+                      } else {
+                        _video.currentTime = _activeSkip!.end;
+                        setState(() => _skipDismissed = true);
+                      }
+                    },
+                    onDismiss: () => setState(() => _skipDismissed = true),
+                  );
+                }),
+              ),
+            if (_nextEpisodeSecs != null)
+              Positioned(
+                right: 28,
+                bottom: 92,
+                child: PointerNextEpisodeBanner(
+                  secsRemaining: _nextEpisodeSecs!,
+                  nextTitle:
+                      _nav.episodeIndex + 1 < _nav.episodeTitles.length
+                          ? _nav.episodeTitles[_nav.episodeIndex + 1]
+                          : null,
+                  onPlay: () {
+                    setState(() => _nextEpisodeSecs = null);
+                    _goToNextEpisode();
+                  },
+                  onDismiss: () => setState(() {
+                    _nextEpisodeSecs = null;
+                    _nextEpisodeDismissed = true;
+                  }),
+                ),
+              ),
           ],
         ),
       ),
@@ -425,11 +796,13 @@ class _Overlay extends StatelessWidget {
   final IconData? icon;
   final bool spinner;
   final VoidCallback onBack;
+  final VoidCallback? onRetry;
   const _Overlay({
     required this.text,
     required this.onBack,
     this.icon,
     this.spinner = false,
+    this.onRetry,
   });
 
   @override
@@ -450,6 +823,14 @@ class _Overlay extends StatelessWidget {
                 Text(text,
                     textAlign: TextAlign.center,
                     style: const TextStyle(color: Colors.white70)),
+                if (onRetry != null) ...[
+                  const SizedBox(height: 18),
+                  FilledButton.icon(
+                    onPressed: onRetry,
+                    icon: const Icon(Icons.refresh_rounded),
+                    label: const Text('Riprova'),
+                  ),
+                ],
               ],
             ),
           ),

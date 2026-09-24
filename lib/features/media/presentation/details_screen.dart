@@ -6,7 +6,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../core/di/injection.dart';
-import '../../../core/grpc/clients/media_client.dart';
+import '../../../core/grpc/clients/media_client.dart' hide ContinueWatchingItem;
 import '../../../core/theme/app_scale.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/image_sizing.dart';
@@ -19,6 +19,7 @@ import '../../../shared/widgets/tv_focusable.dart';
 import '../bloc/details_bloc.dart';
 import '../bloc/details_event.dart';
 import '../bloc/details_state.dart';
+import '../data/continue_watching_item.dart';
 import '../data/media_repository.dart';
 import 'widgets/details_common.dart';
 import 'widgets/series_page_layout.dart';

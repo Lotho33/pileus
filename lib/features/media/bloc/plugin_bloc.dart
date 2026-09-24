@@ -54,7 +54,7 @@ class PluginBloc extends Bloc<PluginEvent, PluginState> {
         onSessionExpired?.call();
         return;
       }
-      emit(PluginError(e.toString()));
+      emit(PluginError(e.toString(), certMismatch: looksLikeCertificateMismatch(e)));
     }
   }
 

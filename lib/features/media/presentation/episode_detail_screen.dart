@@ -26,6 +26,12 @@ class EpisodeDetailScreen extends StatefulWidget {
   // BrowseScreen (the season screen, which already knows it) so it can ride
   // along into continue-watching metadata. See MediaRepository.postProgress.
   final String showTitle;
+  // Per-episode thumbnails parallel to episodeList, threaded through from
+  // whichever screen already resolved them (currently only the season
+  // crossover detour, view.dart/mobile_playback_screen.dart) so the
+  // continue-watching cover keeps rotating across a manual source pick
+  // instead of getting stuck. See posterForEpisode().
+  final List<String> episodeThumbs;
 
   const EpisodeDetailScreen({
     super.key,
@@ -38,6 +44,7 @@ class EpisodeDetailScreen extends StatefulWidget {
     this.allSeasonLabels = const [],
     this.seasonIndex = 0,
     this.showTitle = '',
+    this.episodeThumbs = const [],
   });
 
   @override
@@ -51,6 +58,12 @@ class _EpisodeDetailScreenState extends State<EpisodeDetailScreen> {
   double _rating = 0.0;
   int _durationSeconds = 0;
   List<String> _genres = const [];
+  // Series-level plot/poster — continue-watching must always store the
+  // series' own plot/poster, never the episode's (a CW card must read the
+  // same regardless of which episode is playing). Fetched alongside genres
+  // via the same getDetails(showId) call below.
+  String _seriesPlot = '';
+  String _seriesPosterUrl = '';
   List<StreamSource> _sources = [];
   bool _loading = true;
   String? _error;
@@ -80,10 +93,11 @@ class _EpisodeDetailScreenState extends State<EpisodeDetailScreen> {
           _loading = false;
         });
       }
-      // Episode's own details never carry genres — those live on the parent
-      // show. Non-blocking: continue-watching metadata doesn't need to hold
-      // up the loading spinner, so this fills in after the fact.
-      _fetchShowGenres(detailsRes.item.showId);
+      // Episode's own details never carry genres/series-level plot/poster —
+      // those live on the parent show. Non-blocking: continue-watching
+      // metadata doesn't need to hold up the loading spinner, so this fills
+      // in after the fact.
+      _fetchShowMeta(detailsRes.item.showId);
     } catch (e) {
       if (mounted) {
         setState(() {
@@ -94,12 +108,16 @@ class _EpisodeDetailScreenState extends State<EpisodeDetailScreen> {
     }
   }
 
-  Future<void> _fetchShowGenres(String showId) async {
+  Future<void> _fetchShowMeta(String showId) async {
     if (showId.isEmpty) return;
     try {
       final res = await _repo.getDetails(widget.pluginId, showId);
       if (mounted && res.hasSeries()) {
-        setState(() => _genres = res.series.genres);
+        setState(() {
+          _genres = res.series.genres;
+          _seriesPlot = res.series.plot;
+          _seriesPosterUrl = res.item.posterUrl;
+        });
       }
     } catch (_) {}
   }
@@ -141,10 +159,13 @@ class _EpisodeDetailScreenState extends State<EpisodeDetailScreen> {
                         sources: _sources,
                         episodeList: widget.episodeList,
                         episodeTitles: widget.episodeTitles,
+                        episodeThumbs: widget.episodeThumbs,
                         episodeIndex: widget.episodeIndex,
                         allSeasonIds: widget.allSeasonIds,
                         allSeasonLabels: widget.allSeasonLabels,
                         seasonIndex: widget.seasonIndex,
+                        seriesPlot: _seriesPlot,
+                        seriesPosterUrl: _seriesPosterUrl,
                       ),
               ),
       ),
@@ -165,10 +186,15 @@ class _EpisodeBody extends StatefulWidget {
   final List<StreamSource> sources;
   final List<String> episodeList;
   final List<String> episodeTitles;
+  final List<String> episodeThumbs;
   final int episodeIndex;
   final List<String> allSeasonIds;
   final List<String> allSeasonLabels;
   final int seasonIndex;
+  // Series-level plot/poster for the continue-watching entry this play
+  // creates — see the doc comment on _EpisodeDetailScreenState._seriesPlot.
+  final String seriesPlot;
+  final String seriesPosterUrl;
 
   const _EpisodeBody({
     required this.pluginId,
@@ -181,10 +207,13 @@ class _EpisodeBody extends StatefulWidget {
     this.showTitle = '',
     this.episodeList = const [],
     this.episodeTitles = const [],
+    this.episodeThumbs = const [],
     this.episodeIndex = -1,
     this.allSeasonIds = const [],
     this.allSeasonLabels = const [],
     this.seasonIndex = 0,
+    this.seriesPlot = '',
+    this.seriesPosterUrl = '',
   });
 
   @override
@@ -251,8 +280,10 @@ class _EpisodeBodyState extends State<_EpisodeBody> {
         // episode was actually playing (title/episode kept updating fine,
         // only the cover never did).
         'poster': widget.item.posterUrl,
+        'seriesPoster': widget.seriesPosterUrl,
         'episodeList': widget.episodeList,
         'episodeTitles': widget.episodeTitles,
+        'episodeThumbs': widget.episodeThumbs,
         'episodeIndex': widget.episodeIndex,
         'allSeasonIds': widget.allSeasonIds,
         'allSeasonLabels': widget.allSeasonLabels,
@@ -263,7 +294,10 @@ class _EpisodeBodyState extends State<_EpisodeBody> {
         // resolve the series' own logo/plot for the CW hero.
         'parentId': widget.item.showId,
         'showTitle': widget.showTitle,
-        'plot': widget.plot,
+        // Always the series' own plot, never the episode's synopsis (shown
+        // in this screen's own body via widget.plot, unrelated) — the CW
+        // card must read the same regardless of which episode is playing.
+        'plot': widget.seriesPlot,
         'rating': widget.rating,
         'durationSeconds': widget.durationSeconds,
         'genres': widget.genres,

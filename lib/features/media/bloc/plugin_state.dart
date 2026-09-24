@@ -25,9 +25,15 @@ class PluginsLoaded extends PluginState {
 
 class PluginError extends PluginState {
   final String message;
-  const PluginError(this.message);
+  // Best-effort — see grpc_errors.dart:looksLikeCertificateMismatch. Lets the
+  // UI show "the server's certificate changed" instead of the generic
+  // "server unreachable" message, which was misleading for this specific
+  // case (the server IS reachable, the pinned TLS fingerprint just no longer
+  // matches after e.g. a mycelium reinstall/reset).
+  final bool certMismatch;
+  const PluginError(this.message, {this.certMismatch = false});
   @override
-  List<Object?> get props => [message];
+  List<Object?> get props => [message, certMismatch];
 }
 
 // Settings states — these are emitted alongside PluginsLoaded (per-plugin flow).

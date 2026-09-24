@@ -571,11 +571,20 @@ class MediaRepository {
   }
 
   /// Fetches items the user has not yet finished watching, most recent first.
+  /// [parentId]/[pluginId] are optional server-side filters — the proto and
+  /// generated gRPC client already supported them
+  /// (`ContinueWatchingRequest.parent_id`/`plugin_id`), this method just
+  /// hadn't exposed them yet. Used by the details screens' watch buttons to
+  /// ask "is there progress for this specific series/movie?" instead of
+  /// fetching the whole list and filtering client-side.
   Future<List<ContinueWatchingItem>> getContinueWatching(
-      {int limit = 20}) async {
+      {int limit = 20, String? parentId, String? pluginId}) async {
     try {
-      final resp = await _client
-          .getContinueWatching(ContinueWatchingRequest(limit: limit));
+      final resp = await _client.getContinueWatching(ContinueWatchingRequest(
+        limit: limit,
+        parentId: parentId,
+        pluginId: pluginId,
+      ));
       return resp.items
           .map((i) => ContinueWatchingItem(
                 providerID: i.pluginId,

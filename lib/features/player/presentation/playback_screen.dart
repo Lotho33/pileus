@@ -24,6 +24,7 @@ import '../bloc/playback_state.dart';
 import '../bloc/player_ui_cubit.dart';
 import '../bloc/player_ui_state.dart';
 import '../engine/player_engine.dart';
+import '../episode_poster.dart';
 import '../models/playback_args.dart';
 import '../models/skip_interval.dart';
 import '../playback_episode_cache.dart';

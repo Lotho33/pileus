@@ -5,6 +5,13 @@ class PlaybackArgs {
   final String? title;
   final List<String> episodeList;
   final List<String> episodeTitles;
+  // Parallel to episodeList/episodeTitles, one entry per episode (empty
+  // string where the plugin doesn't have one) — the per-episode thumbnail,
+  // read from Browse's EpisodeInfo.thumbnailUrl. Lets the player show the
+  // *current* episode's own cover in Continue Watching instead of whichever
+  // episode's thumbnail the session happened to launch with (see `poster`
+  // below and episode_poster.dart's posterForEpisode()).
+  final List<String> episodeThumbs;
   final int episodeIndex;
   final String epPluginId;
   final String sourceLabel;
@@ -16,6 +23,11 @@ class PlaybackArgs {
   final String livePluginId;
   final String liveMediaId;
   final String poster;
+  // The series' own poster (not a specific episode's thumbnail) — the last
+  // resort in posterForEpisode() when neither a fresh per-episode thumbnail
+  // nor the entry-point `poster` above is available. Immutable for the whole
+  // session, same as showTitle/plot below.
+  final String seriesPoster;
   final String parentId;
   final int seekTo;
   // Threaded through to MediaRepository.postProgress so continue-watching
@@ -38,6 +50,7 @@ class PlaybackArgs {
     this.title,
     this.episodeList = const [],
     this.episodeTitles = const [],
+    this.episodeThumbs = const [],
     this.episodeIndex = -1,
     this.sourceLabel = '',
     this.allSeasonIds = const [],
@@ -46,6 +59,7 @@ class PlaybackArgs {
     this.liveSources = const [],
     this.liveSourceLabels = const [],
     this.poster = '',
+    this.seriesPoster = '',
     this.parentId = '',
     this.seekTo = 0,
     this.showTitle = '',
@@ -69,6 +83,8 @@ class PlaybackArgs {
       episodeList: (extra?['episodeList'] as List?)?.cast<String>() ?? const [],
       episodeTitles:
           (extra?['episodeTitles'] as List?)?.cast<String>() ?? const [],
+      episodeThumbs:
+          (extra?['episodeThumbs'] as List?)?.cast<String>() ?? const [],
       episodeIndex: extra?['episodeIndex'] as int? ?? -1,
       epPluginId: extra?['pluginId'] as String? ?? pluginId,
       sourceLabel: extra?['sourceLabel'] as String? ?? '',
@@ -83,6 +99,7 @@ class PlaybackArgs {
       livePluginId: extra?['livePluginId'] as String? ?? pluginId,
       liveMediaId: extra?['liveMediaId'] as String? ?? mediaId,
       poster: extra?['poster'] as String? ?? '',
+      seriesPoster: extra?['seriesPoster'] as String? ?? '',
       parentId: extra?['parentId'] as String? ?? '',
       seekTo: (extra?['seekTo'] as num?)?.toInt() ?? 0,
       showTitle: extra?['showTitle'] as String? ?? '',
@@ -94,19 +111,27 @@ class PlaybackArgs {
     );
   }
 
-  /// Used by in-player "next episode" navigation (mobile) to rebuild the
-  /// args around a new current episode without losing the series-level
-  /// metadata (poster, parentId, showTitle, …) the launch route carried.
+  /// Used by in-player "next episode" navigation (mobile/desktop/web) to
+  /// rebuild the args around a new current episode without losing the
+  /// series-level metadata (seriesPoster, parentId, showTitle, plot, …) the
+  /// launch route carried.
+  ///
+  /// [plot] is deliberately NOT a parameter here: Continue Watching always
+  /// shows the *series'* synopsis, never a specific episode's — see
+  /// episode_poster.dart's doc comment for the poster equivalent
+  /// (posterForEpisode) of the same "one clear source, no fallback chain"
+  /// call. A caller that used to pass a per-episode plot through here was
+  /// the bug, not a feature to preserve.
   PlaybackArgs copyWith({
     String? title,
     List<String>? episodeList,
     List<String>? episodeTitles,
+    List<String>? episodeThumbs,
     int? episodeIndex,
     String? sourceLabel,
     int? seasonIndex,
     int? seekTo,
     String? poster,
-    String? plot,
     double? rating,
     int? durationSeconds,
     int? year,
@@ -121,6 +146,7 @@ class PlaybackArgs {
       title: title ?? this.title,
       episodeList: episodeList ?? this.episodeList,
       episodeTitles: episodeTitles ?? this.episodeTitles,
+      episodeThumbs: episodeThumbs ?? this.episodeThumbs,
       episodeIndex: episodeIndex ?? this.episodeIndex,
       sourceLabel: sourceLabel ?? this.sourceLabel,
       allSeasonIds: allSeasonIds,
@@ -129,10 +155,11 @@ class PlaybackArgs {
       liveSources: liveSources,
       liveSourceLabels: liveSourceLabels,
       poster: (poster != null && poster.isNotEmpty) ? poster : this.poster,
+      seriesPoster: seriesPoster,
       parentId: parentId,
       seekTo: seekTo ?? this.seekTo,
       showTitle: showTitle,
-      plot: (plot != null && plot.isNotEmpty) ? plot : this.plot,
+      plot: plot,
       rating: rating ?? this.rating,
       durationSeconds: durationSeconds ?? this.durationSeconds,
       genres: genres,

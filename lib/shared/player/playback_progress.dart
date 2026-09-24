@@ -3,6 +3,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../../core/di/injection.dart';
 import '../../features/media/data/media_repository.dart';
 import '../../features/player/engine/player_engine.dart';
+import '../../features/player/episode_poster.dart';
 import '../../features/player/models/playback_args.dart';
 
 /// Watch-progress bookkeeping shared by the touch (mobile) and desktop
@@ -132,9 +133,21 @@ class PlaybackProgress {
         position: const Duration(seconds: 31),
         title: nextTitle.isNotEmpty ? nextTitle : a.showTitle,
         showTitle: a.showTitle,
-        poster: a.poster,
+        // The *next* episode's own thumbnail, not the one currently
+        // playing's — see episode_poster.dart's doc comment for the bug
+        // this replaces (the cover used to stay stuck on whichever episode
+        // the session started on).
+        poster: posterForEpisode(
+          episodeThumbs: a.episodeThumbs,
+          index: a.episodeIndex + 1,
+          seriesPoster: a.seriesPoster,
+          fallback: a.poster,
+        ),
         rating: a.rating,
         genres: a.genres,
+        // Always the series' own synopsis, never an episode's — see
+        // PlaybackArgs.copyWith's doc comment on why `plot` has no
+        // per-episode override at all.
         plot: a.plot,
         year: a.year,
       );

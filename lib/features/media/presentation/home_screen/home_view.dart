@@ -270,16 +270,31 @@ class _HomeViewState extends State<_HomeView> {
                       color: AppTheme.primary));
             }
             if (state is PluginError) {
+              // certMismatch: the server IS reachable, it's the pinned TLS
+              // fingerprint that no longer matches (e.g. mycelium was
+              // reinstalled/reset) — the generic "check the server is on"
+              // message was actively misleading for this case. "Ripeti
+              // ricerca" reuses the same safe recovery path the manual
+              // "Cambia server" settings row already uses (ChangeServerEvent
+              // → AuthBloc resets the prefetch blocs and routes to
+              // /discovery), rather than trying to rebuild the gRPC channel
+              // in place from here.
               return ErrorRetryView(
                 icon: Icons.cloud_off_rounded,
-                title: 'Impossibile raggiungere il server',
-                message:
-                    'Controlla che il server Mycelium sia acceso e sulla stessa rete, poi riprova.',
+                title: state.certMismatch
+                    ? 'Il certificato del server è cambiato'
+                    : 'Impossibile raggiungere il server',
+                message: state.certMismatch
+                    ? 'Il dispositivo era abbinato a un server con un certificato diverso — probabilmente è stato reinstallato o resettato. Ripeti la scoperta per abbinarlo di nuovo.'
+                    : 'Controlla che il server Mycelium sia acceso e sulla stessa rete, poi riprova.',
                 detail: state.message,
                 onRetry: () =>
                     context.read<PluginBloc>().add(const LoadPluginsEvent()),
-                onSecondary: () => context.push('/settings'),
-                secondaryLabel: 'Impostazioni',
+                onSecondary: state.certMismatch
+                    ? () => getIt<AuthBloc>().add(const ChangeServerEvent())
+                    : () => context.push('/settings'),
+                secondaryLabel:
+                    state.certMismatch ? 'Ripeti ricerca' : 'Impostazioni',
               );
             }
             if (state is PluginsLoaded && state.plugins.isNotEmpty) {

@@ -44,10 +44,65 @@ class _WatchButtonState extends State<_WatchButton> {
   bool _sourcesLoaded = false;
   bool _sourcesError = false;
 
+  // Resume-awareness: checked in parallel with _loadSources (below) so
+  // there's no flicker between "Guarda" and "Riprendi «title»" once both
+  // settle — see _resumeChecked in the loading gate in build().
+  ContinueWatchingItem? _resume;
+  bool _resumeChecked = false;
+
   @override
   void initState() {
     super.initState();
-    if (!widget.isAudio) _loadSources();
+    if (!widget.isAudio) {
+      _checkResume();
+      _loadSources();
+    }
+  }
+
+  Future<void> _checkResume() async {
+    try {
+      final repo = getIt<MediaRepository>();
+      final items = await repo.getContinueWatching(pluginId: widget.pluginId);
+      if (!mounted) return;
+      final match = items
+          .where((i) =>
+              i.parentID.isEmpty && i.playableID == widget.mediaId)
+          .firstOrNull;
+      // A "next episode" row parked at ~31s just to clear mycelium's
+      // progress_time>=30 filter (see PlaybackProgress.maybeClear) isn't a
+      // real resume point — same guard the home Continue Watching card uses.
+      final isRealProgress = match != null &&
+          !(match.totalTime <= 0 && match.progressTime <= 35);
+      if (isRealProgress) setState(() => _resume = match);
+    } catch (_) {
+      // best-effort — falls back to "Guarda"
+    } finally {
+      if (mounted) setState(() => _resumeChecked = true);
+    }
+  }
+
+  void _playResume(BuildContext context, ContinueWatchingItem resume) {
+    // Same minimal push as the home Continue Watching card's resume — see
+    // mobile_home_screen.dart's _CwCard._resume() for the identical pattern.
+    context.push(
+      '/player/${widget.pluginId}/${Uri.encodeComponent(resume.playableID)}',
+      extra: {
+        'streamId': resume.playableID,
+        'title': resume.title,
+        'showTitle': resume.showTitle,
+        'poster': resume.poster.isNotEmpty
+            ? resume.poster
+            : (widget.fanartUrl.isNotEmpty
+                ? widget.fanartUrl
+                : widget.posterUrl),
+        'parentId': resume.parentID,
+        'seekTo': resume.progressTime.toInt(),
+        'plot': widget.plot,
+        'genres': widget.genres,
+        'rating': widget.rating,
+        'year': widget.year,
+      },
+    );
   }
 
   Future<void> _loadSources() async {
@@ -121,13 +176,25 @@ class _WatchButtonState extends State<_WatchButton> {
       );
     }
 
-    // Streams non ancora caricati
-    if (!_sourcesLoaded) {
+    // Streams (e resume-check) non ancora caricati
+    if (!_sourcesLoaded || !_resumeChecked) {
       return SizedBox(
         height: 56,
         child: Center(
             child: PileusSpinner(
                 size: AppScale.spinnerS(context), color: AppTheme.textLow)),
+      );
+    }
+
+    // Continue Watching ha un progresso reale per questo contenuto →
+    // riprendi direttamente invece di proporre sempre "Guarda" da zero.
+    final resume = _resume;
+    if (resume != null) {
+      return TvFocusable(
+        autofocus: true,
+        onActivate: () => _playResume(context, resume),
+        builder: (context, focused) => _buildSingleButton(
+            focused, 'Riprendi «${resume.title}»', Icons.play_arrow_rounded),
       );
     }
 

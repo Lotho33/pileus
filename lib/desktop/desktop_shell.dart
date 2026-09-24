@@ -218,9 +218,20 @@ class _DesktopShellState extends State<DesktopShell> {
       return const Center(child: CircularProgressIndicator());
     }
     if (ps is PluginError) {
+      // certMismatch: see grpc_errors.dart:looksLikeCertificateMismatch — the
+      // server IS reachable, the pinned TLS fingerprint just no longer
+      // matches (e.g. mycelium reinstalled/reset).
       return _ErrorPane(
-        message: ps.message,
+        message: ps.certMismatch
+            ? 'Il certificato del server è cambiato — probabilmente è stato '
+                'reinstallato o resettato. Ripeti la ricerca per abbinarlo '
+                'di nuovo.'
+            : ps.message,
         onRetry: () => context.read<PluginBloc>().add(const LoadPluginsEvent()),
+        onSecondary: ps.certMismatch
+            ? () => getIt<AuthBloc>().add(const ChangeServerEvent())
+            : null,
+        secondaryLabel: ps.certMismatch ? 'Ripeti ricerca' : null,
       );
     }
     if (active == null) {
@@ -233,7 +244,14 @@ class _DesktopShellState extends State<DesktopShell> {
 class _ErrorPane extends StatelessWidget {
   final String message;
   final VoidCallback? onRetry;
-  const _ErrorPane({required this.message, this.onRetry});
+  final VoidCallback? onSecondary;
+  final String? secondaryLabel;
+  const _ErrorPane({
+    required this.message,
+    this.onRetry,
+    this.onSecondary,
+    this.secondaryLabel,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -245,9 +263,20 @@ class _ErrorPane extends StatelessWidget {
               color: AppTheme.textLow, size: 48),
           const SizedBox(height: 14),
           Text(message, style: const TextStyle(color: AppTheme.textMid)),
-          if (onRetry != null) ...[
+          if (onRetry != null || onSecondary != null) ...[
             const SizedBox(height: 16),
-            FilledButton(onPressed: onRetry, child: const Text('Riprova')),
+            Wrap(
+              alignment: WrapAlignment.center,
+              spacing: 10,
+              children: [
+                if (onRetry != null)
+                  FilledButton(
+                      onPressed: onRetry, child: const Text('Riprova')),
+                if (onSecondary != null && secondaryLabel != null)
+                  OutlinedButton(
+                      onPressed: onSecondary, child: Text(secondaryLabel!)),
+              ],
+            ),
           ],
         ],
       ),
