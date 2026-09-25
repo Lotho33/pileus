@@ -1,6 +1,5 @@
 import 'dart:async';
 import 'dart:js_interop';
-import 'dart:ui_web' as ui_web;
 
 import 'package:flutter/foundation.dart' show kDebugMode;
 import 'package:flutter/material.dart';
@@ -159,9 +158,10 @@ class _View extends StatefulWidget {
 }
 
 class _ViewState extends State<_View> {
-  late final String _viewType =
-      'pileus-video-${DateTime.now().microsecondsSinceEpoch}';
-  final web.HTMLVideoElement _video = web.HTMLVideoElement()..autoplay = true;
+  // Set once by _onVideoElementCreated, before anything else in this State
+  // can possibly run (see that method's doc comment) — `late` throws loudly
+  // rather than misbehaving silently if that guarantee is ever wrong.
+  late web.HTMLVideoElement _video;
 
   _Hls? _hls;
   Timer? _progressTimer;
@@ -207,39 +207,6 @@ class _ViewState extends State<_View> {
   @override
   void initState() {
     super.initState();
-    _video
-      ..controls = true
-      ..setAttribute('playsinline', 'true')
-      ..style.setProperty('width', '100%')
-      ..style.setProperty('height', '100%')
-      ..style.setProperty('background', 'black');
-    ui_web.platformViewRegistry
-        .registerViewFactory(_viewType, (int _) => _video);
-    // Catches a failure on *either* path _attachSource can take: the plain
-    // `_video.src = url` assignment (no listener anywhere before this), and
-    // — since hls.js ultimately still feeds this same element via MSE — a
-    // fatal decode/format error hls.js's own error event (see _attachSource)
-    // didn't already report as fatal. MediaError.code: 1 ABORTED, 2 NETWORK,
-    // 3 DECODE, 4 SRC_NOT_SUPPORTED (spec numbering).
-    _video.addEventListener(
-      'error',
-      ((web.Event _) {
-        final err = _video.error;
-        _dlog('[web player] <video> element error: '
-            'code=${err?.code} message=${err?.message}');
-        // Only a failure *after* the stream had already opened is "fatal" in
-        // the sense of needing a retry affordance — an error racing the very
-        // first open is already handled by PlaybackFailed/the loading path.
-        if (_opened && mounted && _fatalError == null) {
-          setState(() => _fatalError =
-              'Riproduzione interrotta (errore ${err?.code ?? '?'}).');
-        }
-      }).toJS,
-    );
-    _video.addEventListener(
-      'timeupdate',
-      ((web.Event _) => _onTimeUpdate()).toJS,
-    );
     if (!widget.args.isLive) {
       _progressTimer =
           Timer.periodic(const Duration(seconds: 15), (_) => _saveProgress());
@@ -268,6 +235,62 @@ class _ViewState extends State<_View> {
         },
       )..arm();
     }
+  }
+
+  /// `HtmlElementView.fromTagName`'s creation callback — fires once, with the
+  /// freshly created `<video>`, before it's attached to the DOM. Replaces the
+  /// previous `dart:ui_web` `registerViewFactory(_viewType, (int _) =>
+  /// _video)` with a `viewType` unique per screen instance (a fresh
+  /// timestamp every time this screen opened): `registerViewFactory` has no
+  /// unregister API at all, so that pattern permanently pinned one `<video>`
+  /// element + hls.js instance + every listener below in memory, once per
+  /// player open, for the entire lifetime of the browser tab — the more
+  /// titles you played in one session, the more piled up, never released
+  /// (2026-09-25 finding). `fromTagName` creates the element the normal way
+  /// per `HtmlElementView` instance instead, so it can actually be collected
+  /// once this screen is gone.
+  ///
+  /// Nothing in this State can run before this — the bloc event that
+  /// eventually produces PlaybackReady is dispatched by `WebPlaybackScreen`'s
+  /// own `BlocProvider.create`, which needs this widget's subtree (this
+  /// `HtmlElementView`, in particular) to finish its first build first, and
+  /// its actual network round-trip takes far longer than that regardless —
+  /// so `_video` is always set before `_onReady`/anything downstream of it
+  /// can reference it.
+  void _onVideoElementCreated(Object element) {
+    _video = element as web.HTMLVideoElement;
+    _video
+      ..autoplay = true
+      ..controls = true
+      ..setAttribute('playsinline', 'true')
+      ..style.setProperty('width', '100%')
+      ..style.setProperty('height', '100%')
+      ..style.setProperty('background', 'black');
+    // Catches a failure on *either* path _attachSource can take: the plain
+    // `_video.src = url` assignment (no listener anywhere before this), and
+    // — since hls.js ultimately still feeds this same element via MSE — a
+    // fatal decode/format error hls.js's own error event (see _attachSource)
+    // didn't already report as fatal. MediaError.code: 1 ABORTED, 2 NETWORK,
+    // 3 DECODE, 4 SRC_NOT_SUPPORTED (spec numbering).
+    _video.addEventListener(
+      'error',
+      ((web.Event _) {
+        final err = _video.error;
+        _dlog('[web player] <video> element error: '
+            'code=${err?.code} message=${err?.message}');
+        // Only a failure *after* the stream had already opened is "fatal" in
+        // the sense of needing a retry affordance — an error racing the very
+        // first open is already handled by PlaybackFailed/the loading path.
+        if (_opened && mounted && _fatalError == null) {
+          setState(() => _fatalError =
+              'Riproduzione interrotta (errore ${err?.code ?? '?'}).');
+        }
+      }).toJS,
+    );
+    _video.addEventListener(
+      'timeupdate',
+      ((web.Event _) => _onTimeUpdate()).toJS,
+    );
   }
 
   void _onLifecycle() {
@@ -388,8 +411,8 @@ class _ViewState extends State<_View> {
     final frac = pos / dur;
     final a = widget.args;
     final repo = getIt<MediaRepository>();
-    final hasSameSeasonNext =
-        _nav.episodeIndex >= 0 && _nav.episodeIndex + 1 < _nav.episodeList.length;
+    final hasSameSeasonNext = _nav.episodeIndex >= 0 &&
+        _nav.episodeIndex + 1 < _nav.episodeList.length;
     if (hasSameSeasonNext && frac >= 0.90) {
       _progressCleared = true;
       final nextId = _nav.episodeList[_nav.episodeIndex + 1];
@@ -548,7 +571,10 @@ class _ViewState extends State<_View> {
               // the <video> 'error' listener above — a fatal error hls.js
               // itself gave up recovering from, at a point where the user
               // was already watching, needs a retry affordance (audit A3).
-              if ((data.fatal ?? false) && _opened && mounted && _fatalError == null) {
+              if ((data.fatal ?? false) &&
+                  _opened &&
+                  mounted &&
+                  _fatalError == null) {
                 setState(() => _fatalError =
                     'Riproduzione interrotta (${data.details ?? data.type ?? 'errore hls.js'}).');
               }
@@ -664,7 +690,10 @@ class _ViewState extends State<_View> {
         child: Stack(
           fit: StackFit.expand,
           children: [
-            HtmlElementView(viewType: _viewType),
+            HtmlElementView.fromTagName(
+              tagName: 'video',
+              onElementCreated: _onVideoElementCreated,
+            ),
             BlocBuilder<PlaybackBloc, PlaybackState>(
               builder: (context, s) {
                 if (_fatalError != null) {
@@ -770,10 +799,9 @@ class _ViewState extends State<_View> {
                 bottom: 92,
                 child: PointerNextEpisodeBanner(
                   secsRemaining: _nextEpisodeSecs!,
-                  nextTitle:
-                      _nav.episodeIndex + 1 < _nav.episodeTitles.length
-                          ? _nav.episodeTitles[_nav.episodeIndex + 1]
-                          : null,
+                  nextTitle: _nav.episodeIndex + 1 < _nav.episodeTitles.length
+                      ? _nav.episodeTitles[_nav.episodeIndex + 1]
+                      : null,
                   onPlay: () {
                     setState(() => _nextEpisodeSecs = null);
                     _goToNextEpisode();

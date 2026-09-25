@@ -19,7 +19,9 @@ import '../features/player/bloc/playback_state.dart';
 import '../features/player/engine/player_engine.dart';
 import '../features/player/episode_poster.dart';
 import '../features/player/models/playback_args.dart';
+import '../features/player/models/skip_interval.dart';
 import '../features/player/playback_episode_cache.dart';
+import '../features/player/presentation/widgets/pointer_skip_button.dart';
 import '../features/settings/data/settings_repository.dart';
 import '../shared/player/playback_progress.dart';
 
@@ -130,6 +132,16 @@ class _MobilePlayerViewState extends State<_MobilePlayerView> {
   // Countdown shown in the closing seconds of an episode; null = hidden.
   int? _nextEpisodeSecs;
   bool _nextEpisodeDismissed = false;
+
+  // ── AniSkip (intro/outro/recap skip) ────────────────────────────────────
+  // TV has had this since the beginning; mobile never did (2026-09-25
+  // finding — the same `extra['skip_times']` blob PlaybackReady already
+  // carries here, just never read). Ported using the same shared helpers
+  // Lotto B put desktop/web on (parseSkipTimes/activeSkipInterval,
+  // PointerSkipButton) rather than a 4th hand-rolled copy.
+  List<SkipInterval> _skipIntervals = const [];
+  SkipInterval? _activeSkip;
+  bool _skipDismissed = false;
   StreamSubscription<Duration>? _posSub;
   bool _engineInitialized = false;
   late final int _bufMiB;
@@ -151,6 +163,11 @@ class _MobilePlayerViewState extends State<_MobilePlayerView> {
   double? _prefetchedRating;
   int? _prefetchedDurationSeconds;
   int? _prefetchedYear;
+  // Raw `extra['skip_times']` from the prefetch's own resolveStream call —
+  // the prefetch-bypass path in _resolveEpisodeAt below opens the cached URL
+  // directly without ever going through PlaybackReady, so this is the only
+  // way that episode's AniSkip markers reach _skipIntervals at all.
+  String? _prefetchedSkipTimes;
 
   @override
   void initState() {
@@ -339,6 +356,9 @@ class _MobilePlayerViewState extends State<_MobilePlayerView> {
     if (_opened) return;
     _opened = true;
     _ensureEngineInitialized();
+    _skipIntervals = parseSkipTimes(s.extra['skip_times']);
+    _activeSkip = null;
+    _skipDismissed = false;
     _progress.onStreamOpened();
     await _engine.open(s.resolvedUrl, headers: s.httpHeaders);
     _progress.markStarted(_engine);
@@ -483,6 +503,15 @@ class _MobilePlayerViewState extends State<_MobilePlayerView> {
 
   void _onPosition(Duration pos) {
     if (!mounted || widget.args.isLive) return;
+
+    final active = activeSkipInterval(_skipIntervals, pos);
+    if (active != _activeSkip) {
+      setState(() {
+        _activeSkip = active;
+        if (active != null) _skipDismissed = false;
+      });
+    }
+
     final dur = _engine.duration;
     if (dur.inSeconds <= 60) return;
 
@@ -587,6 +616,7 @@ class _MobilePlayerViewState extends State<_MobilePlayerView> {
           (ep != null && ep.duration > 0) ? ep.duration * 60 : null;
       _prefetchedYear =
           (details != null && details.item.year > 0) ? details.item.year : null;
+      _prefetchedSkipTimes = resolved.extra['skip_times'];
     } catch (_) {
       // ignore — falls back to a cold resolve when actually switching
     } finally {
@@ -603,6 +633,7 @@ class _MobilePlayerViewState extends State<_MobilePlayerView> {
     _prefetchedRating = null;
     _prefetchedDurationSeconds = null;
     _prefetchedYear = null;
+    _prefetchedSkipTimes = null;
   }
 
   Future<void> _goToNextEpisode() async {
@@ -729,6 +760,7 @@ class _MobilePlayerViewState extends State<_MobilePlayerView> {
       final rating = _prefetchedRating;
       final durationSeconds = _prefetchedDurationSeconds;
       final year = _prefetchedYear;
+      final skipTimes = _prefetchedSkipTimes;
       _clearPrefetch();
       _engine.stop();
       setState(() {
@@ -739,6 +771,13 @@ class _MobilePlayerViewState extends State<_MobilePlayerView> {
         _curRating = rating;
         _curDurationSeconds = durationSeconds;
         _curYear = year;
+        // This path bypasses PlaybackReady entirely (see the comment above),
+        // which is the only other place these get set — without this,
+        // AniSkip would either keep showing the previous episode's markers
+        // or (worse) silently do nothing for every prefetched transition.
+        _skipIntervals = parseSkipTimes(skipTimes);
+        _activeSkip = null;
+        _skipDismissed = false;
         _opened = true;
         _resolvingEpisode = false;
         _autoAdvanced = false;
@@ -812,6 +851,12 @@ class _MobilePlayerViewState extends State<_MobilePlayerView> {
         _curYear = (details != null && details.item.year > 0)
             ? details.item.year
             : null;
+        // The upcoming PlaybackReady's own _onReady handler repopulates
+        // these from that episode's own extra['skip_times'] — reset now so
+        // the previous episode's markers can't briefly linger/mismatch.
+        _skipIntervals = const [];
+        _activeSkip = null;
+        _skipDismissed = false;
         _opened = false;
         _resolvingEpisode = false;
         _autoAdvanced = false;
@@ -942,6 +987,39 @@ class _MobilePlayerViewState extends State<_MobilePlayerView> {
                       : const SizedBox.shrink();
                 },
               ),
+              if (_activeSkip != null && !_skipDismissed)
+                Positioned(
+                  right: 16,
+                  bottom: 84,
+                  child: SafeArea(
+                    child: Builder(builder: (_) {
+                      final outroToNext = _activeSkip!.type == SkipType.ed &&
+                          _hasNextEpisode &&
+                          !_resolvingEpisode;
+                      return PointerSkipButton(
+                        label: outroToNext
+                            ? 'Prossimo episodio'
+                            : _activeSkip!.label,
+                        icon: outroToNext
+                            ? Icons.skip_next_rounded
+                            : Icons.fast_forward_rounded,
+                        onSkip: () {
+                          if (outroToNext) {
+                            setState(() => _skipDismissed = true);
+                            _autoAdvanced = true;
+                            _goToNextEpisode();
+                          } else {
+                            _engine.seek(Duration(
+                                milliseconds:
+                                    (_activeSkip!.end * 1000).toInt()));
+                            setState(() => _skipDismissed = true);
+                          }
+                        },
+                        onDismiss: () => setState(() => _skipDismissed = true),
+                      );
+                    }),
+                  ),
+                ),
               if (_nextEpisodeSecs != null)
                 Positioned(
                   right: 16,

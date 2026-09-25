@@ -72,6 +72,15 @@ class _MobileSearchScreenState extends State<MobileSearchScreen> {
     final pb = getIt<PluginBloc>();
     if (pb.state is PluginInitial) pb.add(const LoadPluginsEvent());
     _pluginId = _activePlugin.value;
+    // Bug (2026-09-25): this seeds _pluginId directly from the shared
+    // controller's current value instead of going through _onActiveChanged
+    // (which only fires on an actual change notification) — so whenever
+    // Search opened with a plugin already active from Home (the common
+    // case), its filters were never fetched at all: the filter button
+    // stayed permanently disabled for that plugin, even when it genuinely
+    // has filters, until the user happened to switch plugins from Home.
+    final id = _pluginId;
+    if (id != null) _loadFilters(id);
     _activePlugin.addListener(_onActiveChanged);
   }
 
