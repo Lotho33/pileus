@@ -189,7 +189,39 @@ class _MobileSearchScreenState extends State<MobileSearchScreen> {
     _run();
   }
 
+  static const _supportedFilterTypes = {
+    'select',
+    'multiselect',
+    'bool',
+    'number',
+    'range',
+  };
+
+  /// Always re-fetches right before opening, rather than trusting whatever
+  /// `_filters` snapshot happens to be sitting around. `MobileSearchScreen`
+  /// is a persistent tab in `MobileShell`'s `IndexedStack` — unlike TV/
+  /// desktop's routed search screens, which get a brand new `_loadFilters`
+  /// call every single time the user navigates in, this screen's `initState`
+  /// only ever runs once, at cold app start (2026-09-25: reported as
+  /// "filters aren't selectable right after launch, only start working
+  /// after a search" — one proactive load attempt racing the app's own
+  /// startup, e.g. the gRPC connection still warming up, left `_filters`
+  /// empty for the rest of the session with nothing to ever retry it). A
+  /// plugin that genuinely implements filters must always be able to show
+  /// them, not just if that one early attempt happened to land after
+  /// everything else was ready.
   Future<void> _openFilters() async {
+    final id = _pluginId;
+    if (id == null) return;
+    await _loadFilters(id);
+    if (!mounted) return;
+    if (!_filters.any((f) => _supportedFilterTypes.contains(f.type))) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+            content: Text('Questo plugin non ha filtri di ricerca.')),
+      );
+      return;
+    }
     final result = await showFilterSheet(
       context,
       filters: _filters,
@@ -254,13 +286,8 @@ class _MobileSearchScreenState extends State<MobileSearchScreen> {
       builder: (context, ps) {
         final plugins = _pluginsOf(ps);
         final active = _resolve(plugins);
-        final hasFilters = _filters.any((f) => const {
-              'select',
-              'multiselect',
-              'bool',
-              'number',
-              'range'
-            }.contains(f.type));
+        final hasFilters =
+            _filters.any((f) => _supportedFilterTypes.contains(f.type));
 
         return SafeArea(
           bottom: false,
@@ -284,8 +311,14 @@ class _MobileSearchScreenState extends State<MobileSearchScreen> {
                       ),
                     ),
                     // Always rendered so the search bar doesn't reflow when
-                    // switching between plugins — disabled when the plugin
-                    // exposes no filters.
+                    // switching between plugins. Enabled whenever a plugin is
+                    // selected, not gated on `hasFilters` — that reflects
+                    // only whatever `_filters` snapshot happened to load
+                    // (see _openFilters' doc comment for why that's not
+                    // reliable enough to gate on); tapping it always
+                    // re-fetches and tells the user plainly if this plugin
+                    // genuinely has none, rather than leaving a
+                    // never-explained disabled button.
                     Padding(
                       padding: const EdgeInsets.only(left: 4),
                       child: Badge(
@@ -293,7 +326,7 @@ class _MobileSearchScreenState extends State<MobileSearchScreen> {
                         label: Text('${_active.length}'),
                         child: IconButton(
                           tooltip: 'Filtri',
-                          onPressed: hasFilters ? _openFilters : null,
+                          onPressed: active != null ? _openFilters : null,
                           icon: const Icon(Icons.tune_rounded),
                         ),
                       ),

@@ -21,6 +21,7 @@ import '../bloc/details_event.dart';
 import '../bloc/details_state.dart';
 import '../data/continue_watching_item.dart';
 import '../data/media_repository.dart';
+import '../../player/episode_poster.dart';
 import 'widgets/details_common.dart';
 import 'widgets/series_page_layout.dart';
 import 'package:cached_network_image_platform_interface/cached_network_image_platform_interface.dart'
@@ -116,8 +117,9 @@ class _DetailsView extends StatelessWidget {
         child: ErrorRetryView(
           title: 'Impossibile caricare il contenuto',
           detail: state.message,
-          onRetry: () => context.read<DetailsBloc>().add(
-              LoadDetailsEvent(pluginId: pluginId, mediaId: mediaId)),
+          onRetry: () => context
+              .read<DetailsBloc>()
+              .add(LoadDetailsEvent(pluginId: pluginId, mediaId: mediaId)),
           onSecondary: () => context.pop(),
           secondaryLabel: 'Indietro',
         ),

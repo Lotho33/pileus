@@ -32,6 +32,10 @@ class EpisodeDetailScreen extends StatefulWidget {
   // continue-watching cover keeps rotating across a manual source pick
   // instead of getting stuck. See posterForEpisode().
   final List<String> episodeThumbs;
+  // Parallel to episodeList — the real "S{x} · E{y}" numbers, not list
+  // position. Same threading as episodeThumbs above.
+  final List<int> episodeNumbers;
+  final List<int> seasonNumbers;
 
   const EpisodeDetailScreen({
     super.key,
@@ -45,6 +49,8 @@ class EpisodeDetailScreen extends StatefulWidget {
     this.seasonIndex = 0,
     this.showTitle = '',
     this.episodeThumbs = const [],
+    this.episodeNumbers = const [],
+    this.seasonNumbers = const [],
   });
 
   @override
@@ -64,6 +70,9 @@ class _EpisodeDetailScreenState extends State<EpisodeDetailScreen> {
   // via the same getDetails(showId) call below.
   String _seriesPlot = '';
   String _seriesPosterUrl = '';
+  // Series' own horizontal extra['cover_url'] — see episode_poster.dart's
+  // posterForEpisode() (tried before _seriesPosterUrl above).
+  String _seriesCoverUrl = '';
   List<StreamSource> _sources = [];
   bool _loading = true;
   String? _error;
@@ -117,6 +126,7 @@ class _EpisodeDetailScreenState extends State<EpisodeDetailScreen> {
           _genres = res.series.genres;
           _seriesPlot = res.series.plot;
           _seriesPosterUrl = res.item.posterUrl;
+          _seriesCoverUrl = res.item.extra['cover_url'] ?? '';
         });
       }
     } catch (_) {}
@@ -160,12 +170,15 @@ class _EpisodeDetailScreenState extends State<EpisodeDetailScreen> {
                         episodeList: widget.episodeList,
                         episodeTitles: widget.episodeTitles,
                         episodeThumbs: widget.episodeThumbs,
+                        episodeNumbers: widget.episodeNumbers,
+                        seasonNumbers: widget.seasonNumbers,
                         episodeIndex: widget.episodeIndex,
                         allSeasonIds: widget.allSeasonIds,
                         allSeasonLabels: widget.allSeasonLabels,
                         seasonIndex: widget.seasonIndex,
                         seriesPlot: _seriesPlot,
                         seriesPosterUrl: _seriesPosterUrl,
+                        seriesCoverUrl: _seriesCoverUrl,
                       ),
               ),
       ),
@@ -187,6 +200,8 @@ class _EpisodeBody extends StatefulWidget {
   final List<String> episodeList;
   final List<String> episodeTitles;
   final List<String> episodeThumbs;
+  final List<int> episodeNumbers;
+  final List<int> seasonNumbers;
   final int episodeIndex;
   final List<String> allSeasonIds;
   final List<String> allSeasonLabels;
@@ -195,6 +210,7 @@ class _EpisodeBody extends StatefulWidget {
   // creates — see the doc comment on _EpisodeDetailScreenState._seriesPlot.
   final String seriesPlot;
   final String seriesPosterUrl;
+  final String seriesCoverUrl;
 
   const _EpisodeBody({
     required this.pluginId,
@@ -208,12 +224,15 @@ class _EpisodeBody extends StatefulWidget {
     this.episodeList = const [],
     this.episodeTitles = const [],
     this.episodeThumbs = const [],
+    this.episodeNumbers = const [],
+    this.seasonNumbers = const [],
     this.episodeIndex = -1,
     this.allSeasonIds = const [],
     this.allSeasonLabels = const [],
     this.seasonIndex = 0,
     this.seriesPlot = '',
     this.seriesPosterUrl = '',
+    this.seriesCoverUrl = '',
   });
 
   @override
@@ -279,11 +298,18 @@ class _EpisodeBodyState extends State<_EpisodeBody> {
         // had stuck in Continue Watching forever, regardless of which
         // episode was actually playing (title/episode kept updating fine,
         // only the cover never did).
-        'poster': widget.item.posterUrl,
+        'poster': widget.item.posterUrl.isNotEmpty
+            ? widget.item.posterUrl
+            : (widget.seriesCoverUrl.isNotEmpty
+                ? widget.seriesCoverUrl
+                : widget.seriesPosterUrl),
         'seriesPoster': widget.seriesPosterUrl,
+        'seriesCoverUrl': widget.seriesCoverUrl,
         'episodeList': widget.episodeList,
         'episodeTitles': widget.episodeTitles,
         'episodeThumbs': widget.episodeThumbs,
+        'episodeNumbers': widget.episodeNumbers,
+        'seasonNumbers': widget.seasonNumbers,
         'episodeIndex': widget.episodeIndex,
         'allSeasonIds': widget.allSeasonIds,
         'allSeasonLabels': widget.allSeasonLabels,

@@ -619,6 +619,8 @@ class _ViewState extends State<_View> with WindowListener {
         episodeList: _nav.episodeList,
         episodeTitles: _nav.episodeTitles,
         episodeThumbs: _nav.episodeThumbs,
+        episodeNumbers: _nav.episodeNumbers,
+        seasonNumbers: _nav.seasonNumbers,
         episodeIndex: _nav.episodeIndex,
         sourceLabel: _curSourceLabel,
         seasonIndex: _nav.seasonIndex,
@@ -626,6 +628,7 @@ class _ViewState extends State<_View> with WindowListener {
         poster: posterForEpisode(
           episodeThumbs: _nav.episodeThumbs,
           index: _nav.episodeIndex,
+          seriesCoverUrl: _nav.seriesCoverUrl,
           seriesPoster: _nav.seriesPoster,
           fallback: widget.args.poster,
         ),
@@ -838,10 +841,10 @@ class _ViewState extends State<_View> with WindowListener {
                             right: 28,
                             bottom: 110,
                             child: Builder(builder: (_) {
-                              final outroToNext = _activeSkip!.type ==
-                                      SkipType.ed &&
-                                  _nav.hasNext &&
-                                  !_resolvingEpisode;
+                              final outroToNext =
+                                  _activeSkip!.type == SkipType.ed &&
+                                      _nav.hasNext &&
+                                      !_resolvingEpisode;
                               return PointerSkipButton(
                                 label: outroToNext
                                     ? 'Prossimo episodio'

@@ -13,6 +13,10 @@ class _WatchButton extends StatefulWidget {
   final bool isAudio;
   final String posterUrl;
   final String fanartUrl;
+  // Horizontal `extra['cover_url']` (vix.movie 1.0.3+) — see posterForMovie()
+  // and episode_poster.dart's doc comment: the CW poster for a movie must
+  // prefer this over fanartUrl/posterUrl, not the plain backdrop.
+  final String coverUrl;
   final String itemTitle;
   // Continue-watching metadata — see MediaRepository.updateProgress. Only
   // ever populated by _MovieLayout/_AnimeMovieLayout (already have a
@@ -28,6 +32,7 @@ class _WatchButton extends StatefulWidget {
     this.isAudio = false,
     this.posterUrl = '',
     this.fanartUrl = '',
+    this.coverUrl = '',
     this.itemTitle = '',
     this.plot = '',
     this.genres = const [],
@@ -65,14 +70,13 @@ class _WatchButtonState extends State<_WatchButton> {
       final items = await repo.getContinueWatching(pluginId: widget.pluginId);
       if (!mounted) return;
       final match = items
-          .where((i) =>
-              i.parentID.isEmpty && i.playableID == widget.mediaId)
+          .where((i) => i.parentID.isEmpty && i.playableID == widget.mediaId)
           .firstOrNull;
       // A "next episode" row parked at ~31s just to clear mycelium's
       // progress_time>=30 filter (see PlaybackProgress.maybeClear) isn't a
       // real resume point — same guard the home Continue Watching card uses.
-      final isRealProgress = match != null &&
-          !(match.totalTime <= 0 && match.progressTime <= 35);
+      final isRealProgress =
+          match != null && !(match.totalTime <= 0 && match.progressTime <= 35);
       if (isRealProgress) setState(() => _resume = match);
     } catch (_) {
       // best-effort — falls back to "Guarda"
@@ -92,9 +96,11 @@ class _WatchButtonState extends State<_WatchButton> {
         'showTitle': resume.showTitle,
         'poster': resume.poster.isNotEmpty
             ? resume.poster
-            : (widget.fanartUrl.isNotEmpty
-                ? widget.fanartUrl
-                : widget.posterUrl),
+            : posterForMovie(
+                coverUrl: widget.coverUrl,
+                fanartUrl: widget.fanartUrl,
+                posterUrl: widget.posterUrl,
+              ),
         'parentId': resume.parentID,
         'seekTo': resume.progressTime.toInt(),
         'plot': widget.plot,
@@ -132,8 +138,11 @@ class _WatchButtonState extends State<_WatchButton> {
   }
 
   void _play(BuildContext context, StreamSource src) {
-    final cwPoster =
-        widget.fanartUrl.isNotEmpty ? widget.fanartUrl : widget.posterUrl;
+    final cwPoster = posterForMovie(
+      coverUrl: widget.coverUrl,
+      fanartUrl: widget.fanartUrl,
+      posterUrl: widget.posterUrl,
+    );
     context.push(
       '/player/${widget.pluginId}/${Uri.encodeComponent(src.id)}',
       extra: {
@@ -156,6 +165,11 @@ class _WatchButtonState extends State<_WatchButton> {
       extra: widget.isAudio
           ? {'mediaType': 'music'}
           : {
+              'poster': posterForMovie(
+                coverUrl: widget.coverUrl,
+                fanartUrl: widget.fanartUrl,
+                posterUrl: widget.posterUrl,
+              ),
               'plot': widget.plot,
               'genres': widget.genres,
               'rating': widget.rating,

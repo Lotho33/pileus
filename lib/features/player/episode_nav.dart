@@ -10,17 +10,38 @@ import 'models/playback_args.dart';
 /// mobile_playback_screen.dart's own season-crossing code) got an empty-or-
 /// wrong list for a properly-tagged season, silently failing or producing a
 /// Continue Watching entry with a generic title and no poster.
-Future<List<({String id, String title, String thumb})>> _browseEpisodes(
+Future<
+    List<
+        ({
+          String id,
+          String title,
+          String thumb,
+          int episodeNumber,
+          int seasonNumber
+        })>> _browseEpisodes(
     MediaRepository repo, String pluginId, String parentId) async {
   final res = await repo.browse(pluginId, parentId, '');
   return res.episodes.isNotEmpty
       ? [
           for (final e in res.episodes)
-            (id: e.id, title: e.title, thumb: e.thumbnailUrl)
+            (
+              id: e.id,
+              title: e.title,
+              thumb: e.thumbnailUrl,
+              episodeNumber: e.episodeNumber,
+              seasonNumber: e.seasonNumber,
+            )
         ]
       : [
           for (final i in res.items)
-            if (!i.isDir) (id: i.id, title: i.title, thumb: i.posterUrl)
+            if (!i.isDir)
+              (
+                id: i.id,
+                title: i.title,
+                thumb: i.posterUrl,
+                episodeNumber: i.episodeNumber,
+                seasonNumber: i.seasonNumber,
+              )
         ];
 }
 
@@ -48,10 +69,19 @@ class EpisodeNavState {
   // Continue Watching cover must track the *current* episode, not whichever
   // one the session launched with).
   List<String> episodeThumbs;
+  // Parallel to episodeList — the real "S{x} · E{y}" numbers (not the list
+  // *index*, which is just position and can differ from the plugin's own
+  // numbering, e.g. specials). 0 means "unknown". See
+  // PlaybackArgs.episodeNumbers/seasonNumbers.
+  List<int> episodeNumbers;
+  List<int> seasonNumbers;
   final List<String> allSeasonIds;
   final List<String> allSeasonLabels;
   String parentId;
   final String seriesPoster;
+  // Series' own horizontal extra['cover_url'] — see PlaybackArgs.seriesCoverUrl
+  // and episode_poster.dart's posterForEpisode() (tried before seriesPoster).
+  final String seriesCoverUrl;
 
   EpisodeNavState({
     required this.pluginId,
@@ -64,6 +94,9 @@ class EpisodeNavState {
     required this.allSeasonLabels,
     required this.parentId,
     required this.seriesPoster,
+    this.seriesCoverUrl = '',
+    this.episodeNumbers = const [],
+    this.seasonNumbers = const [],
   });
 
   factory EpisodeNavState.fromArgs(PlaybackArgs args) => EpisodeNavState(
@@ -73,12 +106,26 @@ class EpisodeNavState {
         episodeList: List<String>.of(args.episodeList),
         episodeTitles: List<String>.of(args.episodeTitles),
         episodeThumbs: List<String>.of(args.episodeThumbs),
+        episodeNumbers: List<int>.of(args.episodeNumbers),
+        seasonNumbers: List<int>.of(args.seasonNumbers),
         allSeasonIds: List<String>.of(args.allSeasonIds),
         allSeasonLabels: List<String>.of(args.allSeasonLabels),
         parentId: args.parentId,
         seriesPoster:
             args.seriesPoster.isNotEmpty ? args.seriesPoster : args.poster,
+        seriesCoverUrl: args.seriesCoverUrl,
       );
+
+  /// This episode's real number, or 0 if unknown/out of range — never the
+  /// list *index* (see the field doc comment).
+  int get currentEpisodeNumber =>
+      episodeIndex >= 0 && episodeIndex < episodeNumbers.length
+          ? episodeNumbers[episodeIndex]
+          : 0;
+  int get currentSeasonNumber =>
+      episodeIndex >= 0 && episodeIndex < seasonNumbers.length
+          ? seasonNumbers[episodeIndex]
+          : 0;
 
   /// Whether there's any episode list to navigate at all — false for a
   /// movie/single item (`episodeIndex == -1`, the `PlaybackArgs` default).
@@ -89,8 +136,7 @@ class EpisodeNavState {
       (episodeIndex + 1 < episodeList.length ||
           seasonIndex + 1 < allSeasonIds.length);
 
-  bool get hasPrevious =>
-      isEpisodic && (episodeIndex > 0 || seasonIndex > 0);
+  bool get hasPrevious => isEpisodic && (episodeIndex > 0 || seasonIndex > 0);
 
   Future<EpisodeNavTarget?> resolveNext(MediaRepository repo) =>
       _resolveAt(repo, episodeIndex + 1);
@@ -104,6 +150,8 @@ class EpisodeNavState {
     var list = episodeList;
     var titles = episodeTitles;
     var thumbs = episodeThumbs;
+    var epNums = episodeNumbers;
+    var seasonNums = seasonNumbers;
     var newSeasonIndex = seasonIndex;
     var newParentId = parentId;
     var newIndex = wantedIndex;
@@ -117,6 +165,8 @@ class EpisodeNavState {
       list = [for (final e in eps) e.id];
       titles = [for (final e in eps) e.title];
       thumbs = [for (final e in eps) e.thumb];
+      epNums = [for (final e in eps) e.episodeNumber];
+      seasonNums = [for (final e in eps) e.seasonNumber];
       newIndex = list.length - 1;
     } else if (newIndex >= list.length) {
       if (allSeasonIds.isEmpty || seasonIndex + 1 >= allSeasonIds.length) {
@@ -129,6 +179,8 @@ class EpisodeNavState {
       list = [for (final e in eps) e.id];
       titles = [for (final e in eps) e.title];
       thumbs = [for (final e in eps) e.thumb];
+      epNums = [for (final e in eps) e.episodeNumber];
+      seasonNums = [for (final e in eps) e.seasonNumber];
       newIndex = 0;
     }
     if (newIndex < 0 || newIndex >= list.length) return null;
@@ -139,6 +191,8 @@ class EpisodeNavState {
     episodeList = list;
     episodeTitles = titles;
     episodeThumbs = thumbs;
+    episodeNumbers = epNums;
+    seasonNumbers = seasonNums;
     parentId = newParentId;
 
     return EpisodeNavTarget(
@@ -149,6 +203,8 @@ class EpisodeNavState {
       episodeList: list,
       episodeTitles: titles,
       episodeThumbs: thumbs,
+      episodeNumbers: epNums,
+      seasonNumbers: seasonNums,
       seriesPoster: seriesPoster,
       allSeasonIds: allSeasonIds,
       allSeasonLabels: allSeasonLabels,
@@ -168,6 +224,8 @@ class EpisodeNavTarget {
   final List<String> episodeList;
   final List<String> episodeTitles;
   final List<String> episodeThumbs;
+  final List<int> episodeNumbers;
+  final List<int> seasonNumbers;
   final String seriesPoster;
   final List<String> allSeasonIds;
   final List<String> allSeasonLabels;
@@ -185,5 +243,7 @@ class EpisodeNavTarget {
     required this.allSeasonIds,
     required this.allSeasonLabels,
     required this.parentId,
+    this.episodeNumbers = const [],
+    this.seasonNumbers = const [],
   });
 }

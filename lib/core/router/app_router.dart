@@ -111,6 +111,10 @@ final GoRouter appRouter = GoRouter(
               episodeThumbs:
                   (extra?['episodeThumbs'] as List?)?.cast<String>() ??
                       const [],
+              episodeNumbers:
+                  (extra?['episodeNumbers'] as List?)?.cast<int>() ?? const [],
+              seasonNumbers:
+                  (extra?['seasonNumbers'] as List?)?.cast<int>() ?? const [],
               episodeIndex: extra?['episodeIndex'] as int? ?? -1,
               allSeasonIds:
                   (extra?['allSeasonIds'] as List?)?.cast<String>() ?? const [],

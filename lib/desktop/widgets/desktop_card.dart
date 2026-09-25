@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import '../../core/grpc/clients/media_client.dart' hide ContinueWatchingItem;
 import '../../core/theme/app_theme.dart';
 import '../../core/utils/image_sizing.dart';
+import '../../features/player/episode_poster.dart';
 import '../../features/player/resolve_and_play.dart';
 import '../../shared/widgets/open_catalog_item.dart';
 import 'desktop_dialogs.dart';
@@ -59,7 +60,19 @@ class _DesktopCardState extends State<DesktopCard> {
         widget.item.id,
         extra: {
           'title': widget.item.title,
-          'poster': widget.item.posterUrl,
+          // See posterForMovie() — for a movie, the CW poster must be the
+          // horizontal extra['cover_url'] when the plugin has one, never
+          // the plain backdrop/vertical poster. No _enrich() call here to
+          // get the movie's own fanartUrl, so extra['fanart_url'] (the raw
+          // catalog-listing value, synchronously available) stands in for
+          // it — a card play must not block on a network round-trip.
+          'poster': mt == 'movie'
+              ? posterForMovie(
+                  coverUrl: widget.item.extra['cover_url'] ?? '',
+                  fanartUrl: widget.item.extra['fanart_url'] ?? '',
+                  posterUrl: widget.item.posterUrl,
+                )
+              : widget.item.posterUrl,
           'mediaType': mt,
         },
         sourcePicker: showDesktopSourcePicker,

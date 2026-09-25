@@ -17,6 +17,7 @@ import '../features/media/bloc/discovery_event.dart';
 import '../features/media/bloc/discovery_state.dart';
 import '../features/media/data/continue_watching_item.dart';
 import '../features/media/data/media_repository.dart';
+import '../features/player/episode_poster.dart' show episodeBadge;
 import '../shared/responsive.dart';
 import 'widgets/desktop_card.dart';
 import 'widgets/desktop_dialogs.dart';
@@ -309,9 +310,15 @@ class _CwRow extends StatelessWidget {
             itemCount: items.length,
             itemBuilder: (ctx, i) {
               final it = items[i];
+              // "S{x} · E{y}" rides on the same single-line caption this
+              // tile has room for, rather than adding a new row — see
+              // episode_poster.dart's episodeBadge().
+              final badge = episodeBadge(it.seasonNumber, it.episodeNumber);
+              final baseTitle =
+                  it.showTitle.isNotEmpty ? it.showTitle : it.title;
               return _CwTile(
                 width: cardW,
-                title: it.showTitle.isNotEmpty ? it.showTitle : it.title,
+                title: badge.isEmpty ? baseTitle : '$baseTitle · $badge',
                 poster: it.poster,
                 fraction: it.progressFraction,
                 onResume: () => _resume(ctx, it),

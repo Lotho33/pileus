@@ -12,6 +12,10 @@ class _EpisodeTileRow extends StatefulWidget {
   final List<String> allEpisodeIds;
   final List<String> allEpisodeTitles;
   final List<String> allEpisodeThumbs;
+  // Parallel to allEpisodeIds — the real "S{x} · E{y}" numbers, not list
+  // position. See PlaybackArgs.episodeNumbers/seasonNumbers.
+  final List<int> allEpisodeNumbers;
+  final List<int> allSeasonNumbers;
   final int episodeIndex;
   final List<String> allSeasonIds;
   final List<String> allSeasonLabels;
@@ -22,6 +26,9 @@ class _EpisodeTileRow extends StatefulWidget {
   final VoidCallback? onDown;
   final VoidCallback? onUp;
   final String seriesPosterUrl;
+  // Series' own horizontal extra['cover_url'] — see page.dart and
+  // episode_poster.dart's posterForEpisode().
+  final String seriesCoverUrl;
   final String parentId;
   // Series title — sent to the player as showTitle so the continue-watching
   // card shows the series, not "Episodio 5".
@@ -53,6 +60,8 @@ class _EpisodeTileRow extends StatefulWidget {
     this.allEpisodeIds = const [],
     this.allEpisodeTitles = const [],
     this.allEpisodeThumbs = const [],
+    this.allEpisodeNumbers = const [],
+    this.allSeasonNumbers = const [],
     this.episodeIndex = -1,
     this.allSeasonIds = const [],
     this.allSeasonLabels = const [],
@@ -66,6 +75,7 @@ class _EpisodeTileRow extends StatefulWidget {
     this.isDirectionHeld,
     this.onHeldMove,
     this.seriesPosterUrl = '',
+    this.seriesCoverUrl = '',
     this.parentId = '',
     this.seriesTitle = '',
     this.seriesPlot = '',
@@ -124,11 +134,14 @@ class _EpisodeTileRowState extends State<_EpisodeTileRow> {
             allEpisodeIds: widget.allEpisodeIds,
             allEpisodeTitles: widget.allEpisodeTitles,
             allEpisodeThumbs: widget.allEpisodeThumbs,
+            allEpisodeNumbers: widget.allEpisodeNumbers,
+            allSeasonNumbers: widget.allSeasonNumbers,
             episodeIndex: widget.episodeIndex,
             allSeasonIds: widget.allSeasonIds,
             allSeasonLabels: widget.allSeasonLabels,
             seasonIndex: widget.seasonIndex,
             seriesPosterUrl: widget.seriesPosterUrl,
+            seriesCoverUrl: widget.seriesCoverUrl,
             parentId: widget.parentId,
             seriesTitle: widget.seriesTitle,
             seriesPlot: widget.seriesPlot,

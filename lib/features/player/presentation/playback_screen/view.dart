@@ -130,6 +130,11 @@ class _PlaybackViewState extends State<_PlaybackView> {
   // started on, frozen for the whole binge/auto-advance run — this is what
   // lets it track the *current* episode instead.
   late List<String> _currentEpisodeThumbs;
+  // Parallel to _currentEpisodeList — the real "S{x} · E{y}" numbers, not
+  // the list index. See PlaybackArgs.episodeNumbers/seasonNumbers and
+  // episode_poster.dart's numberForEpisode().
+  late List<int> _currentEpisodeNumbers;
+  late List<int> _currentSeasonNumbers;
   // Series name for the continue-watching card's overline. Prefer the value
   // the caller passed (args.showTitle); when it's missing — e.g. resuming
   // from a continue-watching entry that predates this, or the /episode/
@@ -190,6 +195,8 @@ class _PlaybackViewState extends State<_PlaybackView> {
     _currentEpisodeList = args.episodeList;
     _currentEpisodeTitles = args.episodeTitles;
     _currentEpisodeThumbs = args.episodeThumbs;
+    _currentEpisodeNumbers = args.episodeNumbers;
+    _currentSeasonNumbers = args.seasonNumbers;
     _showTitle = args.showTitle;
     _parentId = args.parentId;
     _plot = args.plot;
@@ -511,16 +518,35 @@ class _PlaybackViewState extends State<_PlaybackView> {
       if (!mounted) return;
 
       // Flat list straight off the parent?
-      var eps = <({String id, String title, String thumb})>[];
+      var eps = <({
+        String id,
+        String title,
+        String thumb,
+        int episodeNumber,
+        int seasonNumber
+      })>[];
       if (res.episodes.isNotEmpty) {
         eps = [
           for (final e in res.episodes)
-            (id: e.id, title: e.title, thumb: e.thumbnailUrl)
+            (
+              id: e.id,
+              title: e.title,
+              thumb: e.thumbnailUrl,
+              episodeNumber: e.episodeNumber,
+              seasonNumber: e.seasonNumber,
+            )
         ];
       } else {
         eps = [
           for (final e in res.items)
-            if (!e.isDir) (id: e.id, title: e.title, thumb: e.posterUrl),
+            if (!e.isDir)
+              (
+                id: e.id,
+                title: e.title,
+                thumb: e.posterUrl,
+                episodeNumber: e.episodeNumber,
+                seasonNumber: e.seasonNumber,
+              ),
         ];
       }
 
@@ -537,12 +563,24 @@ class _PlaybackViewState extends State<_PlaybackView> {
           final se = sr.episodes.isNotEmpty
               ? [
                   for (final e in sr.episodes)
-                    (id: e.id, title: e.title, thumb: e.thumbnailUrl)
+                    (
+                      id: e.id,
+                      title: e.title,
+                      thumb: e.thumbnailUrl,
+                      episodeNumber: e.episodeNumber,
+                      seasonNumber: e.seasonNumber,
+                    )
                 ]
               : [
                   for (final e in sr.items)
                     if (!e.isDir)
-                      (id: e.id, title: e.title, thumb: e.posterUrl),
+                      (
+                        id: e.id,
+                        title: e.title,
+                        thumb: e.posterUrl,
+                        episodeNumber: e.episodeNumber,
+                        seasonNumber: e.seasonNumber,
+                      ),
                 ];
           if (se.length > 1 &&
               (target.isEmpty ||
@@ -562,7 +600,16 @@ class _PlaybackViewState extends State<_PlaybackView> {
   }
 
   void _applyResolvedEpisodes(
-      List<({String id, String title, String thumb})> eps, String target) {
+      List<
+              ({
+                String id,
+                String title,
+                String thumb,
+                int episodeNumber,
+                int seasonNumber
+              })>
+          eps,
+      String target) {
     if (!mounted) return;
     var idx = eps.indexWhere((e) => e.id == _currentMediaId);
     if (idx < 0 && target.isNotEmpty) {
@@ -581,6 +628,8 @@ class _PlaybackViewState extends State<_PlaybackView> {
       _currentEpisodeList = [for (final e in eps) e.id];
       _currentEpisodeTitles = [for (final e in eps) e.title];
       _currentEpisodeThumbs = [for (final e in eps) e.thumb];
+      _currentEpisodeNumbers = [for (final e in eps) e.episodeNumber];
+      _currentSeasonNumbers = [for (final e in eps) e.seasonNumber];
       _currentEpisodeIndex = idx;
     });
   }
@@ -629,6 +678,8 @@ class _PlaybackViewState extends State<_PlaybackView> {
       genres: _genres,
       plot: _plot,
       year: _year,
+      seasonNumber: _currentSeasonNumber(),
+      episodeNumber: _currentEpisodeNumber(),
     );
   }
 
@@ -651,6 +702,8 @@ class _PlaybackViewState extends State<_PlaybackView> {
       genres: _genres,
       plot: _plot,
       year: _year,
+      seasonNumber: _currentSeasonNumber(),
+      episodeNumber: _currentEpisodeNumber(),
     );
   }
 
@@ -662,9 +715,18 @@ class _PlaybackViewState extends State<_PlaybackView> {
   String _currentEpisodePoster() => posterForEpisode(
         episodeThumbs: _currentEpisodeThumbs,
         index: _currentEpisodeIndex,
+        seriesCoverUrl: widget.args.seriesCoverUrl,
         seriesPoster: widget.args.seriesPoster,
         fallback: widget.args.poster,
       );
+
+  // This episode's real "S{x}"/"E{y}" number — 0 when unknown (a movie, or a
+  // plugin that doesn't tag episodes), which the CW card hides rather than
+  // showing "S0 · E0". See episode_poster.dart's numberForEpisode().
+  int _currentEpisodeNumber() =>
+      numberForEpisode(_currentEpisodeNumbers, _currentEpisodeIndex);
+  int _currentSeasonNumber() =>
+      numberForEpisode(_currentSeasonNumbers, _currentEpisodeIndex);
 
   // ── Resume-from-timestamp ─────────────────────────────────────────────────
 
@@ -835,6 +897,7 @@ class _PlaybackViewState extends State<_PlaybackView> {
             poster: posterForEpisode(
               episodeThumbs: _currentEpisodeThumbs,
               index: _currentEpisodeIndex + 1,
+              seriesCoverUrl: widget.args.seriesCoverUrl,
               seriesPoster: widget.args.seriesPoster,
               fallback: widget.args.poster,
             ),
@@ -842,6 +905,10 @@ class _PlaybackViewState extends State<_PlaybackView> {
             genres: _genres,
             plot: _plot,
             year: _year,
+            seasonNumber: numberForEpisode(
+                _currentSeasonNumbers, _currentEpisodeIndex + 1),
+            episodeNumber: numberForEpisode(
+                _currentEpisodeNumbers, _currentEpisodeIndex + 1),
           );
           repo.deleteProgress(
             providerID: widget.args.epPluginId,
@@ -1019,11 +1086,24 @@ class _PlaybackViewState extends State<_PlaybackView> {
       final newEpisodes = browseRes.episodes.isNotEmpty
           ? [
               for (final e in browseRes.episodes)
-                (id: e.id, title: e.title, thumb: e.thumbnailUrl)
+                (
+                  id: e.id,
+                  title: e.title,
+                  thumb: e.thumbnailUrl,
+                  episodeNumber: e.episodeNumber,
+                  seasonNumber: e.seasonNumber,
+                )
             ]
           : [
               for (final i in browseRes.items)
-                if (!i.isDir) (id: i.id, title: i.title, thumb: i.posterUrl),
+                if (!i.isDir)
+                  (
+                    id: i.id,
+                    title: i.title,
+                    thumb: i.posterUrl,
+                    episodeNumber: i.episodeNumber,
+                    seasonNumber: i.seasonNumber,
+                  ),
             ];
       if (newEpisodes.isEmpty) {
         if (mounted) setState(() => _resolvingEpisode = false);
@@ -1033,11 +1113,15 @@ class _PlaybackViewState extends State<_PlaybackView> {
       final newIds = newEpisodes.map((e) => e.id).toList();
       final newTitles = newEpisodes.map((e) => e.title).toList();
       final newThumbs = newEpisodes.map((e) => e.thumb).toList();
+      final newEpNums = newEpisodes.map((e) => e.episodeNumber).toList();
+      final newSeasonNums = newEpisodes.map((e) => e.seasonNumber).toList();
       if (mounted) {
         setState(() {
           _currentEpisodeList = newIds;
           _currentEpisodeTitles = newTitles;
           _currentEpisodeThumbs = newThumbs;
+          _currentEpisodeNumbers = newEpNums;
+          _currentSeasonNumbers = newSeasonNums;
           _currentSeasonIndex = newSeasonIndex;
         });
       }
@@ -1096,6 +1180,8 @@ class _PlaybackViewState extends State<_PlaybackView> {
           'episodeList': episodeList,
           'episodeTitles': episodeTitles,
           'episodeThumbs': _currentEpisodeThumbs,
+          'episodeNumbers': _currentEpisodeNumbers,
+          'seasonNumbers': _currentSeasonNumbers,
           'episodeIndex': newIndex,
           'allSeasonIds': widget.args.allSeasonIds,
           'allSeasonLabels': widget.args.allSeasonLabels,

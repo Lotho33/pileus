@@ -8,7 +8,15 @@
 /// server's catalog. [clearPlaybackEpisodeCache] is called from
 /// `rebuildGrpcClients` on a server switch so a "Cambia server" doesn't leave
 /// the next player showing the previous server's episode ids.
-final Map<String, List<({String id, String title, String thumb})>>
-    playbackEpisodeCache = {};
+final Map<
+    String,
+    List<
+        ({
+          String id,
+          String title,
+          String thumb,
+          int episodeNumber,
+          int seasonNumber
+        })>> playbackEpisodeCache = {};
 
 void clearPlaybackEpisodeCache() => playbackEpisodeCache.clear();

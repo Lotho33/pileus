@@ -303,6 +303,10 @@ class _SeriesPageLayoutState extends State<_SeriesPageLayout> {
         ? sd!.fanartUrl
         : (item.extra['fanart_url'] ?? '');
     final bgUrl = fanartUrl.isNotEmpty ? fanartUrl : item.posterUrl;
+    // Series' own horizontal cover (vix.series/animeunity 1.0.3+) — tried
+    // before the vertical poster when an episode has no thumbnail of its
+    // own. See episode_poster.dart's posterForEpisode().
+    final seriesCoverUrl = item.extra['cover_url'] ?? '';
     final seriesPlot = sd?.plot ?? '';
     final currentSeasonPlot =
         widget.seasons.isNotEmpty ? widget.seasons[_selectedIdx].overview : '';
@@ -345,6 +349,8 @@ class _SeriesPageLayoutState extends State<_SeriesPageLayout> {
     final allEpisodeIds = allEpisodes.map((e) => e.id).toList();
     final allEpisodeTitles = allEpisodes.map((e) => e.title).toList();
     final allEpisodeThumbs = allEpisodes.map((e) => e.thumbnailUrl).toList();
+    final allEpisodeNumbers = allEpisodes.map((e) => e.episodeNumber).toList();
+    final allSeasonNumbers = allEpisodes.map((e) => e.seasonNumber).toList();
     final allSeasonIds = widget.seasons.map((s) => s.directoryId).toList();
     final allSeasonLabels = widget.seasons.map((s) => s.label).toList();
 
@@ -885,6 +891,10 @@ class _SeriesPageLayoutState extends State<_SeriesPageLayout> {
                                                               allEpisodeTitles,
                                                           allEpisodeThumbs:
                                                               allEpisodeThumbs,
+                                                          allEpisodeNumbers:
+                                                              allEpisodeNumbers,
+                                                          allSeasonNumbers:
+                                                              allSeasonNumbers,
                                                           episodeIndex:
                                                               winStart + i,
                                                           allSeasonIds:
@@ -901,6 +911,8 @@ class _SeriesPageLayoutState extends State<_SeriesPageLayout> {
                                                                   : null,
                                                           seriesPosterUrl:
                                                               _posterUrl,
+                                                          seriesCoverUrl:
+                                                              seriesCoverUrl,
                                                           parentId:
                                                               widget.item.id,
                                                           seriesTitle:

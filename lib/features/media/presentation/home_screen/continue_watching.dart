@@ -627,22 +627,43 @@ class _ContinueWatchingCardState extends State<_ContinueWatchingCard> {
                         children: [
                           // Series name (overline) — only when this is an
                           // episode and it isn't just a repeat of the title.
-                          if (widget.item.showTitle.isNotEmpty &&
-                              widget.item.showTitle.toLowerCase() !=
-                                  widget.item.title.toLowerCase()) ...[
-                            Text(
-                              widget.item.showTitle,
-                              style: TextStyle(
-                                color: AppTheme.textMid,
-                                fontSize: AppScale.space(context, 11),
-                                fontWeight: FontWeight.w600,
-                                letterSpacing: 0.3,
-                              ),
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                            const SizedBox(height: 2),
-                          ],
+                          // "S{x} · E{y}" rides along on the same line when
+                          // known, rather than adding its own row — see
+                          // episode_poster.dart's episodeBadge().
+                          Builder(builder: (_) {
+                            final showOverline =
+                                widget.item.showTitle.isNotEmpty &&
+                                    widget.item.showTitle.toLowerCase() !=
+                                        widget.item.title.toLowerCase();
+                            final badge = episodeBadge(widget.item.seasonNumber,
+                                widget.item.episodeNumber);
+                            if (!showOverline && badge.isEmpty) {
+                              return const SizedBox.shrink();
+                            }
+                            final text = showOverline
+                                ? (badge.isEmpty
+                                    ? widget.item.showTitle
+                                    : '${widget.item.showTitle} · $badge')
+                                : badge;
+                            return Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Text(
+                                  text,
+                                  style: TextStyle(
+                                    color: AppTheme.textMid,
+                                    fontSize: AppScale.space(context, 11),
+                                    fontWeight: FontWeight.w600,
+                                    letterSpacing: 0.3,
+                                  ),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                                const SizedBox(height: 2),
+                              ],
+                            );
+                          }),
                           Text(
                             widget.item.title,
                             style: TextStyle(

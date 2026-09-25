@@ -3162,6 +3162,8 @@ class ProgressRequest extends $pb.GeneratedMessage {
     $core.Iterable<$core.String>? genres,
     $core.String? plot,
     $core.int? year,
+    $core.int? seasonNumber,
+    $core.int? episodeNumber,
   }) {
     final result = create();
     if (pluginId != null) result.pluginId = pluginId;
@@ -3176,6 +3178,8 @@ class ProgressRequest extends $pb.GeneratedMessage {
     if (genres != null) result.genres.addAll(genres);
     if (plot != null) result.plot = plot;
     if (year != null) result.year = year;
+    if (seasonNumber != null) result.seasonNumber = seasonNumber;
+    if (episodeNumber != null) result.episodeNumber = episodeNumber;
     return result;
   }
 
@@ -3204,6 +3208,8 @@ class ProgressRequest extends $pb.GeneratedMessage {
     ..pPS(10, _omitFieldNames ? '' : 'genres')
     ..aOS(11, _omitFieldNames ? '' : 'plot')
     ..aI(12, _omitFieldNames ? '' : 'year')
+    ..aI(13, _omitFieldNames ? '' : 'seasonNumber')
+    ..aI(14, _omitFieldNames ? '' : 'episodeNumber')
     ..hasRequiredFields = false;
 
   @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
@@ -3333,6 +3339,24 @@ class ProgressRequest extends $pb.GeneratedMessage {
   $core.bool hasYear() => $_has(11);
   @$pb.TagNumber(12)
   void clearYear() => $_clearField(12);
+
+  @$pb.TagNumber(13)
+  $core.int get seasonNumber => $_getIZ(12);
+  @$pb.TagNumber(13)
+  set seasonNumber($core.int value) => $_setSignedInt32(12, value);
+  @$pb.TagNumber(13)
+  $core.bool hasSeasonNumber() => $_has(12);
+  @$pb.TagNumber(13)
+  void clearSeasonNumber() => $_clearField(13);
+
+  @$pb.TagNumber(14)
+  $core.int get episodeNumber => $_getIZ(13);
+  @$pb.TagNumber(14)
+  set episodeNumber($core.int value) => $_setSignedInt32(13, value);
+  @$pb.TagNumber(14)
+  $core.bool hasEpisodeNumber() => $_has(13);
+  @$pb.TagNumber(14)
+  void clearEpisodeNumber() => $_clearField(14);
 }
 
 class ProgressResponse extends $pb.GeneratedMessage {
@@ -3526,6 +3550,8 @@ class ContinueWatchingItem extends $pb.GeneratedMessage {
     $core.Iterable<$core.String>? genres,
     $core.String? plot,
     $core.int? year,
+    $core.int? seasonNumber,
+    $core.int? episodeNumber,
   }) {
     final result = create();
     if (pluginId != null) result.pluginId = pluginId;
@@ -3541,6 +3567,8 @@ class ContinueWatchingItem extends $pb.GeneratedMessage {
     if (genres != null) result.genres.addAll(genres);
     if (plot != null) result.plot = plot;
     if (year != null) result.year = year;
+    if (seasonNumber != null) result.seasonNumber = seasonNumber;
+    if (episodeNumber != null) result.episodeNumber = episodeNumber;
     return result;
   }
 
@@ -3570,6 +3598,8 @@ class ContinueWatchingItem extends $pb.GeneratedMessage {
     ..pPS(11, _omitFieldNames ? '' : 'genres')
     ..aOS(12, _omitFieldNames ? '' : 'plot')
     ..aI(13, _omitFieldNames ? '' : 'year')
+    ..aI(14, _omitFieldNames ? '' : 'seasonNumber')
+    ..aI(15, _omitFieldNames ? '' : 'episodeNumber')
     ..hasRequiredFields = false;
 
   @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
@@ -3701,6 +3731,24 @@ class ContinueWatchingItem extends $pb.GeneratedMessage {
   $core.bool hasYear() => $_has(12);
   @$pb.TagNumber(13)
   void clearYear() => $_clearField(13);
+
+  @$pb.TagNumber(14)
+  $core.int get seasonNumber => $_getIZ(13);
+  @$pb.TagNumber(14)
+  set seasonNumber($core.int value) => $_setSignedInt32(13, value);
+  @$pb.TagNumber(14)
+  $core.bool hasSeasonNumber() => $_has(13);
+  @$pb.TagNumber(14)
+  void clearSeasonNumber() => $_clearField(14);
+
+  @$pb.TagNumber(15)
+  $core.int get episodeNumber => $_getIZ(14);
+  @$pb.TagNumber(15)
+  set episodeNumber($core.int value) => $_setSignedInt32(14, value);
+  @$pb.TagNumber(15)
+  $core.bool hasEpisodeNumber() => $_has(14);
+  @$pb.TagNumber(15)
+  void clearEpisodeNumber() => $_clearField(15);
 }
 
 class ContinueWatchingRequest extends $pb.GeneratedMessage {

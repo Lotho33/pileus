@@ -7,6 +7,7 @@ import '../../core/grpc/clients/media_client.dart' hide ContinueWatchingItem;
 import '../../core/theme/app_theme.dart';
 import '../../core/utils/image_sizing.dart';
 import '../../features/media/data/media_repository.dart';
+import '../../features/player/episode_poster.dart';
 import '../../features/player/resolve_and_play.dart';
 import '../../shared/widgets/open_catalog_item.dart';
 import 'package:cached_network_image_platform_interface/cached_network_image_platform_interface.dart'
@@ -104,6 +105,9 @@ class _ItemPanel extends StatefulWidget {
 class _ItemPanelState extends State<_ItemPanel> {
   List<String> _genres = const [];
   String _plot = '';
+  // Movie's own fanart — only used as the middle tier of posterForMovie()'s
+  // fallback chain for the CW poster below, not displayed in this dialog.
+  String _movieFanart = '';
 
   @override
   void initState() {
@@ -123,6 +127,7 @@ class _ItemPanelState extends State<_ItemPanel> {
         } else if (d.hasMovie()) {
           _genres = d.movie.genres;
           _plot = d.movie.plot;
+          _movieFanart = d.movie.fanartUrl;
         }
       });
     } catch (_) {}
@@ -139,7 +144,13 @@ class _ItemPanelState extends State<_ItemPanel> {
     if (mt == 'movie' || mt == 'episode') {
       resolveAndPlay(context, widget.pluginId, widget.item.id, extra: {
         'title': widget.item.title,
-        'poster': widget.item.posterUrl,
+        'poster': mt == 'movie'
+            ? posterForMovie(
+                coverUrl: widget.item.extra['cover_url'] ?? '',
+                fanartUrl: _movieFanart,
+                posterUrl: widget.item.posterUrl,
+              )
+            : widget.item.posterUrl,
         'mediaType': mt,
       });
     } else {

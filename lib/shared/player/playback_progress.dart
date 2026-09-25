@@ -82,6 +82,8 @@ class PlaybackProgress {
       genres: a.genres,
       plot: a.plot,
       year: a.year,
+      seasonNumber: numberForEpisode(a.seasonNumbers, a.episodeIndex),
+      episodeNumber: numberForEpisode(a.episodeNumbers, a.episodeIndex),
     );
   }
 
@@ -103,6 +105,8 @@ class PlaybackProgress {
       genres: a.genres,
       plot: a.plot,
       year: a.year,
+      seasonNumber: numberForEpisode(a.seasonNumbers, a.episodeIndex),
+      episodeNumber: numberForEpisode(a.episodeNumbers, a.episodeIndex),
     );
   }
 
@@ -140,6 +144,7 @@ class PlaybackProgress {
         poster: posterForEpisode(
           episodeThumbs: a.episodeThumbs,
           index: a.episodeIndex + 1,
+          seriesCoverUrl: a.seriesCoverUrl,
           seriesPoster: a.seriesPoster,
           fallback: a.poster,
         ),
@@ -150,6 +155,8 @@ class PlaybackProgress {
         // per-episode override at all.
         plot: a.plot,
         year: a.year,
+        seasonNumber: numberForEpisode(a.seasonNumbers, a.episodeIndex + 1),
+        episodeNumber: numberForEpisode(a.episodeNumbers, a.episodeIndex + 1),
       );
       repo.deleteProgress(providerID: a.epPluginId, playableID: mediaId);
     } else if (!hasSameSeasonNext && frac >= 0.95) {

@@ -119,6 +119,11 @@ class _MobilePlayerViewState extends State<_MobilePlayerView> {
   // poster bug) is now the source of truth for "what's this episode's
   // cover".
   late List<String> _curEpisodeThumbs;
+  // Parallel to _curEpisodeList — the real "S{x} · E{y}" numbers, not the
+  // list index. See PlaybackArgs.episodeNumbers/seasonNumbers and
+  // episode_poster.dart's numberForEpisode().
+  late List<int> _curEpisodeNumbers;
+  late List<int> _curSeasonNumbers;
   // Fresh per-episode rating/duration/year once known — null means "nothing
   // fresher than widget.args yet", so _currentArgs() falls back to the
   // original launch value (see PlaybackArgs.copyWith). Plot is deliberately
@@ -185,6 +190,8 @@ class _MobilePlayerViewState extends State<_MobilePlayerView> {
     _curEpisodeList = widget.args.episodeList;
     _curEpisodeTitles = widget.args.episodeTitles;
     _curEpisodeThumbs = widget.args.episodeThumbs;
+    _curEpisodeNumbers = widget.args.episodeNumbers;
+    _curSeasonNumbers = widget.args.seasonNumbers;
 
     SystemChrome.setPreferredOrientations(const [
       DeviceOrientation.landscapeLeft,
@@ -434,16 +441,35 @@ class _MobilePlayerViewState extends State<_MobilePlayerView> {
           await repo.browse(widget.args.epPluginId, widget.args.parentId, '');
       if (!mounted) return;
 
-      var eps = <({String id, String title, String thumb})>[];
+      var eps = <({
+        String id,
+        String title,
+        String thumb,
+        int episodeNumber,
+        int seasonNumber
+      })>[];
       if (res.episodes.isNotEmpty) {
         eps = [
           for (final e in res.episodes)
-            (id: e.id, title: e.title, thumb: e.thumbnailUrl)
+            (
+              id: e.id,
+              title: e.title,
+              thumb: e.thumbnailUrl,
+              episodeNumber: e.episodeNumber,
+              seasonNumber: e.seasonNumber,
+            )
         ];
       } else {
         eps = [
           for (final e in res.items)
-            if (!e.isDir) (id: e.id, title: e.title, thumb: e.posterUrl),
+            if (!e.isDir)
+              (
+                id: e.id,
+                title: e.title,
+                thumb: e.posterUrl,
+                episodeNumber: e.episodeNumber,
+                seasonNumber: e.seasonNumber,
+              ),
         ];
       }
 
@@ -457,12 +483,24 @@ class _MobilePlayerViewState extends State<_MobilePlayerView> {
           final se = sr.episodes.isNotEmpty
               ? [
                   for (final e in sr.episodes)
-                    (id: e.id, title: e.title, thumb: e.thumbnailUrl)
+                    (
+                      id: e.id,
+                      title: e.title,
+                      thumb: e.thumbnailUrl,
+                      episodeNumber: e.episodeNumber,
+                      seasonNumber: e.seasonNumber,
+                    )
                 ]
               : [
                   for (final e in sr.items)
                     if (!e.isDir)
-                      (id: e.id, title: e.title, thumb: e.posterUrl),
+                      (
+                        id: e.id,
+                        title: e.title,
+                        thumb: e.posterUrl,
+                        episodeNumber: e.episodeNumber,
+                        seasonNumber: e.seasonNumber,
+                      ),
                 ];
           if (se.length > 1 &&
               (target.isEmpty ||
@@ -482,7 +520,16 @@ class _MobilePlayerViewState extends State<_MobilePlayerView> {
   }
 
   void _applyResolvedEpisodes(
-      List<({String id, String title, String thumb})> eps, String target) {
+      List<
+              ({
+                String id,
+                String title,
+                String thumb,
+                int episodeNumber,
+                int seasonNumber
+              })>
+          eps,
+      String target) {
     if (!mounted) return;
     var idx = eps.indexWhere((e) => e.id == _curMediaId);
     if (idx < 0 && target.isNotEmpty) {
@@ -497,6 +544,8 @@ class _MobilePlayerViewState extends State<_MobilePlayerView> {
       _curEpisodeList = [for (final e in eps) e.id];
       _curEpisodeTitles = [for (final e in eps) e.title];
       _curEpisodeThumbs = [for (final e in eps) e.thumb];
+      _curEpisodeNumbers = [for (final e in eps) e.episodeNumber];
+      _curSeasonNumbers = [for (final e in eps) e.seasonNumber];
       _curEpisodeIndex = idx;
     });
   }
@@ -717,11 +766,24 @@ class _MobilePlayerViewState extends State<_MobilePlayerView> {
       final newEpisodes = browseRes.episodes.isNotEmpty
           ? [
               for (final e in browseRes.episodes)
-                (id: e.id, title: e.title, thumb: e.thumbnailUrl)
+                (
+                  id: e.id,
+                  title: e.title,
+                  thumb: e.thumbnailUrl,
+                  episodeNumber: e.episodeNumber,
+                  seasonNumber: e.seasonNumber,
+                )
             ]
           : [
               for (final i in browseRes.items)
-                if (!i.isDir) (id: i.id, title: i.title, thumb: i.posterUrl),
+                if (!i.isDir)
+                  (
+                    id: i.id,
+                    title: i.title,
+                    thumb: i.posterUrl,
+                    episodeNumber: i.episodeNumber,
+                    seasonNumber: i.seasonNumber,
+                  ),
             ];
       if (newEpisodes.isEmpty) {
         if (mounted) setState(() => _resolvingEpisode = false);
@@ -730,11 +792,15 @@ class _MobilePlayerViewState extends State<_MobilePlayerView> {
       final newIds = newEpisodes.map((e) => e.id).toList();
       final newTitles = newEpisodes.map((e) => e.title).toList();
       final newThumbs = newEpisodes.map((e) => e.thumb).toList();
+      final newEpNums = newEpisodes.map((e) => e.episodeNumber).toList();
+      final newSeasonNums = newEpisodes.map((e) => e.seasonNumber).toList();
       if (mounted) {
         setState(() {
           _curEpisodeList = newIds;
           _curEpisodeTitles = newTitles;
           _curEpisodeThumbs = newThumbs;
+          _curEpisodeNumbers = newEpNums;
+          _curSeasonNumbers = newSeasonNums;
           _curSeasonIndex = newSeasonIndex;
         });
       }
@@ -877,6 +943,8 @@ class _MobilePlayerViewState extends State<_MobilePlayerView> {
           'episodeList': episodeList,
           'episodeTitles': episodeTitles,
           'episodeThumbs': _curEpisodeThumbs,
+          'episodeNumbers': _curEpisodeNumbers,
+          'seasonNumbers': _curSeasonNumbers,
           'episodeIndex': newIndex,
           'allSeasonIds': widget.args.allSeasonIds,
           'allSeasonLabels': widget.args.allSeasonLabels,
@@ -900,6 +968,8 @@ class _MobilePlayerViewState extends State<_MobilePlayerView> {
         episodeList: _curEpisodeList,
         episodeTitles: _curEpisodeTitles,
         episodeThumbs: _curEpisodeThumbs,
+        episodeNumbers: _curEpisodeNumbers,
+        seasonNumbers: _curSeasonNumbers,
         episodeIndex: _curEpisodeIndex,
         sourceLabel: _curSourceLabel,
         seasonIndex: _curSeasonIndex,
@@ -907,6 +977,7 @@ class _MobilePlayerViewState extends State<_MobilePlayerView> {
         poster: posterForEpisode(
           episodeThumbs: _curEpisodeThumbs,
           index: _curEpisodeIndex,
+          seriesCoverUrl: widget.args.seriesCoverUrl,
           seriesPoster: widget.args.seriesPoster,
           fallback: widget.args.poster,
         ),

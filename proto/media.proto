@@ -302,6 +302,10 @@ message ProgressRequest {
   repeated string genres    = 10;
   string plot               = 11;
   int32  year               = 12;
+  // season_number/episode_number: same merge-on-conflict rule as above — 0
+  // leaves the stored value untouched. 0 for a movie/non-episodic item.
+  int32  season_number      = 13;
+  int32  episode_number     = 14;
 }
 message ProgressResponse {
   bool ok = 1;
@@ -329,6 +333,8 @@ message ContinueWatchingItem {
   repeated string genres    = 11;
   string plot               = 12;
   int32  year               = 13;
+  int32  season_number      = 14;
+  int32  episode_number     = 15;
 }
 message ContinueWatchingRequest {
   int32  limit     = 1;  // 0 = server default

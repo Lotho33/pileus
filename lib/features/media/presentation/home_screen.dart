@@ -24,6 +24,7 @@ import '../../../core/theme/app_theme.dart';
 import '../../../core/update/update_prompt.dart';
 import '../../../core/utils/image_sizing.dart';
 import '../data/media_repository.dart';
+import '../../player/episode_poster.dart' show episodeBadge;
 import '../../../shared/sdui/sdui_block.dart';
 import '../../../shared/sdui/sdui_block_view.dart';
 import '../../../shared/sdui/sdui_parser.dart';

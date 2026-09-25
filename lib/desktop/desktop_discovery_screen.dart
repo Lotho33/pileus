@@ -6,6 +6,7 @@ import 'package:http/http.dart' as http;
 
 import '../core/config/server_config.dart';
 import '../core/di/injection.dart';
+import '../core/grpc/host_resolver.dart';
 import '../features/auth/bloc/auth_bloc.dart';
 import '../features/auth/bloc/auth_event.dart';
 import '../features/auth/data/auth_repository.dart';
@@ -16,9 +17,10 @@ class _DiscoveryError implements Exception {
   _DiscoveryError(this.message);
 }
 
-/// Desktop server discovery: manual host entry + "retry auto-detect".
-/// Probe logic mirrors the mobile screen (HTTP /pileus/info + a gRPC TCP
-/// reachability check); only the presentation is a centred card.
+/// Desktop server discovery: manual host entry + "retry auto-detect" (which
+/// re-runs the UDP broadcast/mDNS scan — see _retryAutoDiscovery's doc
+/// comment). Probe logic mirrors the mobile screen (HTTP /pileus/info + a
+/// gRPC TCP reachability check); only the presentation is a centred card.
 class DesktopDiscoveryScreen extends StatefulWidget {
   const DesktopDiscoveryScreen({super.key});
 
@@ -40,6 +42,29 @@ class _DesktopDiscoveryScreenState extends State<DesktopDiscoveryScreen> {
   Future<void> _connect() async {
     final host = _ctrl.text.trim();
     if (host.isEmpty) return;
+    await _connectTo(host);
+  }
+
+  /// "Riprova rilevamento automatico" used to just re-dispatch
+  /// `AppStartedEvent`, which only re-checks the *already-saved* session —
+  /// it never actually re-ran the UDP/mDNS broadcast scan at all (that only
+  /// ever happens once, in `configureDependencies()` at cold app start —
+  /// see `resolveGrpcHost()`'s own doc comment). From this screen (already
+  /// past that first failed attempt) it was a silent no-op: nothing on the
+  /// network was re-probed, so the outcome couldn't change and the screen
+  /// just sat there (2026-09-25 — reported as "doesn't work"). This now
+  /// actually re-runs the same broadcast+TCP-candidate race, then validates
+  /// whatever it comes back with exactly like a manually typed host would.
+  Future<void> _retryAutoDiscovery() async {
+    setState(() {
+      _busy = true;
+      _error = null;
+    });
+    final host = await resolveGrpcHost();
+    await _connectTo(host);
+  }
+
+  Future<void> _connectTo(String host) async {
     setState(() {
       _busy = true;
       _error = null;
@@ -126,10 +151,7 @@ class _DesktopDiscoveryScreenState extends State<DesktopDiscoveryScreen> {
         ),
         const SizedBox(height: 6),
         TextButton(
-          onPressed: _busy
-              ? null
-              : () => getIt<AuthBloc>()
-                  .add(const AppStartedEvent(splashFloor: false)),
+          onPressed: _busy ? null : _retryAutoDiscovery,
           child: const Text('Riprova rilevamento automatico'),
         ),
       ],

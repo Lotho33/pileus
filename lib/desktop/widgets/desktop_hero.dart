@@ -6,6 +6,7 @@ import '../../core/grpc/clients/media_client.dart' hide ContinueWatchingItem;
 import '../../core/theme/app_theme.dart';
 import '../../core/utils/image_sizing.dart';
 import '../../features/media/data/media_repository.dart';
+import '../../features/player/episode_poster.dart';
 import '../../features/player/resolve_and_play.dart';
 import '../../shared/responsive.dart';
 import '../../shared/widgets/open_catalog_item.dart';
@@ -131,7 +132,19 @@ class _DesktopHeroState extends State<DesktopHero>
         widget.item.id,
         extra: {
           'title': widget.item.title,
-          'poster': widget.item.posterUrl,
+          // For a movie, the CW poster must be the horizontal
+          // extra['cover_url'] when the plugin has one, never the plain
+          // backdrop/vertical poster (_backdrop, already resolved
+          // synchronously in _reset(), stands in for "fanart" here — see
+          // posterForMovie()). An episode keeps its own thumbnail as-is,
+          // same as every other launch site.
+          'poster': mt == 'movie'
+              ? posterForMovie(
+                  coverUrl: widget.item.extra['cover_url'] ?? '',
+                  fanartUrl: _backdrop,
+                  posterUrl: widget.item.posterUrl,
+                )
+              : widget.item.posterUrl,
           'mediaType': mt,
         },
         sourcePicker: showDesktopSourcePicker,

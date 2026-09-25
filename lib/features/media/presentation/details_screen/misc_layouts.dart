@@ -168,6 +168,7 @@ class _VodClipLayout extends StatelessWidget {
                       mediaId: item.id,
                       posterUrl: item.posterUrl,
                       fanartUrl: item.extra['fanart_url'] ?? '',
+                      coverUrl: item.extra['cover_url'] ?? '',
                       itemTitle: item.title),
                 ],
               ),

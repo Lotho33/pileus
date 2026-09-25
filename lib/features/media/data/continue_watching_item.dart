@@ -21,6 +21,12 @@ class ContinueWatchingItem {
   final List<String> genres;
   final int year;
   final int durationSeconds;
+  // 0 for a movie/non-episodic item, or when the plugin never sent them —
+  // persisted server-side same as rating/genres/plot/year (watch_history's
+  // season_number/episode_number columns). The real "S{x}/E{y}" numbers,
+  // never a list position.
+  final int seasonNumber;
+  final int episodeNumber;
 
   const ContinueWatchingItem({
     required this.providerID,
@@ -36,6 +42,8 @@ class ContinueWatchingItem {
     this.genres = const [],
     this.year = 0,
     this.durationSeconds = 0,
+    this.seasonNumber = 0,
+    this.episodeNumber = 0,
   });
 
   double get progressFraction =>

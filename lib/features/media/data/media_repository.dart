@@ -370,10 +370,8 @@ class MediaRepository {
   // so sharing the network call is safe across a profile switch.
   Future<PluginListResponse>? _listPluginsInFlight;
 
-  Future<PluginListResponse> _fetchPluginList() =>
-      _listPluginsInFlight ??= _client
-          .listPlugins()
-          .whenComplete(() => _listPluginsInFlight = null);
+  Future<PluginListResponse> _fetchPluginList() => _listPluginsInFlight ??=
+      _client.listPlugins().whenComplete(() => _listPluginsInFlight = null);
 
   Future<List<PluginInfo>> _orderedPlugins() async {
     final resp = await _fetchPluginList();
@@ -525,6 +523,11 @@ class MediaRepository {
     List<String> genres = const [],
     String plot = '',
     int year = 0,
+    // 0 = unknown/not-episodic (a movie) — same keep-if-empty merge as the
+    // rest of this metadata server-side. See episode_poster.dart's
+    // numberForEpisode() for how callers compute these.
+    int seasonNumber = 0,
+    int episodeNumber = 0,
   }) async {
     try {
       await _client.updateProgress(ProgressRequest(
@@ -542,6 +545,8 @@ class MediaRepository {
         genres: genres,
         plot: plot,
         year: year,
+        seasonNumber: seasonNumber,
+        episodeNumber: episodeNumber,
       ));
     } catch (e) {
       if (_handledSessionExpiry(e)) return;
@@ -599,6 +604,8 @@ class MediaRepository {
                 genres: i.genres,
                 plot: i.plot,
                 year: i.year,
+                seasonNumber: i.seasonNumber,
+                episodeNumber: i.episodeNumber,
               ))
           .toList();
     } catch (e) {

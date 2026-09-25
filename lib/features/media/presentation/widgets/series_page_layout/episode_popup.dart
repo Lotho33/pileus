@@ -12,11 +12,14 @@ class _EpisodePopup extends StatefulWidget {
   final List<String> allEpisodeIds;
   final List<String> allEpisodeTitles;
   final List<String> allEpisodeThumbs;
+  final List<int> allEpisodeNumbers;
+  final List<int> allSeasonNumbers;
   final int episodeIndex;
   final List<String> allSeasonIds;
   final List<String> allSeasonLabels;
   final int seasonIndex;
   final String seriesPosterUrl;
+  final String seriesCoverUrl;
   final String parentId;
   final String seriesTitle;
   final String seriesPlot;
@@ -30,11 +33,14 @@ class _EpisodePopup extends StatefulWidget {
     required this.allEpisodeIds,
     required this.allEpisodeTitles,
     this.allEpisodeThumbs = const [],
+    this.allEpisodeNumbers = const [],
+    this.allSeasonNumbers = const [],
     required this.episodeIndex,
     required this.allSeasonIds,
     required this.allSeasonLabels,
     required this.seasonIndex,
     this.seriesPosterUrl = '',
+    this.seriesCoverUrl = '',
     this.parentId = '',
     this.seriesTitle = '',
     this.seriesPlot = '',
@@ -100,9 +106,8 @@ class _EpisodePopupState extends State<_EpisodePopup> {
     // completing and Future.wait registering it never ran. This narrows
     // down which of the two (or Future.wait itself) is where it actually
     // stalls.
-    final streamsFuture = repo
-        .getStreams(widget.pluginId, widget.item.id)
-        .then((v) {
+    final streamsFuture =
+        repo.getStreams(widget.pluginId, widget.item.id).then((v) {
       perf('episode_popup: streamsFuture completed '
           'sources=${v.sources.length}');
       return v;
@@ -137,9 +142,8 @@ class _EpisodePopupState extends State<_EpisodePopup> {
     // result, which the D-pad can already back out of.
     List<Object>? results;
     try {
-      results =
-          await Future.wait([streamsFuture, detailsFuture]).timeout(
-              const Duration(seconds: 15));
+      results = await Future.wait([streamsFuture, detailsFuture])
+          .timeout(const Duration(seconds: 15));
     } on TimeoutException {
       perf('episode_popup: Future.wait TIMED OUT — see streamsFuture/'
           'detailsFuture completion lines above (or their absence)');
@@ -490,6 +494,10 @@ class _EpisodePopupState extends State<_EpisodePopup> {
                                                         widget.allEpisodeTitles,
                                                     'episodeThumbs':
                                                         widget.allEpisodeThumbs,
+                                                    'episodeNumbers': widget
+                                                        .allEpisodeNumbers,
+                                                    'seasonNumbers':
+                                                        widget.allSeasonNumbers,
                                                     'episodeIndex':
                                                         widget.episodeIndex,
                                                     'allSeasonIds':
@@ -506,10 +514,16 @@ class _EpisodePopupState extends State<_EpisodePopup> {
                                                             .isNotEmpty
                                                         ? widget
                                                             .item.thumbnailUrl
-                                                        : widget
-                                                            .seriesPosterUrl,
+                                                        : (widget.seriesCoverUrl
+                                                                .isNotEmpty
+                                                            ? widget
+                                                                .seriesCoverUrl
+                                                            : widget
+                                                                .seriesPosterUrl),
                                                     'seriesPoster':
                                                         widget.seriesPosterUrl,
+                                                    'seriesCoverUrl':
+                                                        widget.seriesCoverUrl,
                                                     'parentId': widget.parentId,
                                                     // Series-level metadata for
                                                     // the continue-watching card

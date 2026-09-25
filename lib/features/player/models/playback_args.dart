@@ -12,6 +12,14 @@ class PlaybackArgs {
   // episode's thumbnail the session happened to launch with (see `poster`
   // below and episode_poster.dart's posterForEpisode()).
   final List<String> episodeThumbs;
+  // Parallel to episodeList — the real "S{x} · E{y}" numbers (not the list
+  // *index*, which is just position and can differ from a plugin's own
+  // numbering, e.g. specials). 0 means "unknown". Read from Browse's
+  // EpisodeInfo.episodeNumber/seasonNumber, same source as episodeThumbs —
+  // lets Continue Watching show the season/episode without a client-side
+  // re-fetch (see MediaRepository.updateProgress).
+  final List<int> episodeNumbers;
+  final List<int> seasonNumbers;
   final int episodeIndex;
   final String epPluginId;
   final String sourceLabel;
@@ -28,6 +36,11 @@ class PlaybackArgs {
   // nor the entry-point `poster` above is available. Immutable for the whole
   // session, same as showTitle/plot below.
   final String seriesPoster;
+  // The series' own horizontal `extra['cover_url']` (vix.series/animeunity
+  // 1.0.3+) — tried in posterForEpisode() *before* seriesPoster (vertical)
+  // when an episode has no thumbnail of its own. Same immutability as
+  // seriesPoster.
+  final String seriesCoverUrl;
   final String parentId;
   final int seekTo;
   // Threaded through to MediaRepository.postProgress so continue-watching
@@ -51,6 +64,8 @@ class PlaybackArgs {
     this.episodeList = const [],
     this.episodeTitles = const [],
     this.episodeThumbs = const [],
+    this.episodeNumbers = const [],
+    this.seasonNumbers = const [],
     this.episodeIndex = -1,
     this.sourceLabel = '',
     this.allSeasonIds = const [],
@@ -60,6 +75,7 @@ class PlaybackArgs {
     this.liveSourceLabels = const [],
     this.poster = '',
     this.seriesPoster = '',
+    this.seriesCoverUrl = '',
     this.parentId = '',
     this.seekTo = 0,
     this.showTitle = '',
@@ -85,6 +101,10 @@ class PlaybackArgs {
           (extra?['episodeTitles'] as List?)?.cast<String>() ?? const [],
       episodeThumbs:
           (extra?['episodeThumbs'] as List?)?.cast<String>() ?? const [],
+      episodeNumbers:
+          (extra?['episodeNumbers'] as List?)?.cast<int>() ?? const [],
+      seasonNumbers:
+          (extra?['seasonNumbers'] as List?)?.cast<int>() ?? const [],
       episodeIndex: extra?['episodeIndex'] as int? ?? -1,
       epPluginId: extra?['pluginId'] as String? ?? pluginId,
       sourceLabel: extra?['sourceLabel'] as String? ?? '',
@@ -100,6 +120,7 @@ class PlaybackArgs {
       liveMediaId: extra?['liveMediaId'] as String? ?? mediaId,
       poster: extra?['poster'] as String? ?? '',
       seriesPoster: extra?['seriesPoster'] as String? ?? '',
+      seriesCoverUrl: extra?['seriesCoverUrl'] as String? ?? '',
       parentId: extra?['parentId'] as String? ?? '',
       seekTo: (extra?['seekTo'] as num?)?.toInt() ?? 0,
       showTitle: extra?['showTitle'] as String? ?? '',
@@ -127,6 +148,8 @@ class PlaybackArgs {
     List<String>? episodeList,
     List<String>? episodeTitles,
     List<String>? episodeThumbs,
+    List<int>? episodeNumbers,
+    List<int>? seasonNumbers,
     int? episodeIndex,
     String? sourceLabel,
     int? seasonIndex,
@@ -147,6 +170,8 @@ class PlaybackArgs {
       episodeList: episodeList ?? this.episodeList,
       episodeTitles: episodeTitles ?? this.episodeTitles,
       episodeThumbs: episodeThumbs ?? this.episodeThumbs,
+      episodeNumbers: episodeNumbers ?? this.episodeNumbers,
+      seasonNumbers: seasonNumbers ?? this.seasonNumbers,
       episodeIndex: episodeIndex ?? this.episodeIndex,
       sourceLabel: sourceLabel ?? this.sourceLabel,
       allSeasonIds: allSeasonIds,
@@ -156,6 +181,7 @@ class PlaybackArgs {
       liveSourceLabels: liveSourceLabels,
       poster: (poster != null && poster.isNotEmpty) ? poster : this.poster,
       seriesPoster: seriesPoster,
+      seriesCoverUrl: seriesCoverUrl,
       parentId: parentId,
       seekTo: seekTo ?? this.seekTo,
       showTitle: showTitle,

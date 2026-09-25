@@ -431,6 +431,7 @@ class _ViewState extends State<_View> {
         poster: posterForEpisode(
           episodeThumbs: _nav.episodeThumbs,
           index: _nav.episodeIndex + 1,
+          seriesCoverUrl: _nav.seriesCoverUrl,
           seriesPoster: _nav.seriesPoster,
           fallback: a.poster,
         ),
@@ -440,6 +441,10 @@ class _ViewState extends State<_View> {
         // PlaybackArgs.copyWith's doc comment.
         plot: a.plot,
         year: a.year,
+        seasonNumber:
+            numberForEpisode(_nav.seasonNumbers, _nav.episodeIndex + 1),
+        episodeNumber:
+            numberForEpisode(_nav.episodeNumbers, _nav.episodeIndex + 1),
       );
       repo.deleteProgress(providerID: a.epPluginId, playableID: _curMediaId);
     } else if (!hasSameSeasonNext && frac >= 0.95) {
@@ -632,6 +637,8 @@ class _ViewState extends State<_View> {
       genres: a.genres,
       plot: a.plot,
       year: a.year,
+      seasonNumber: _currentSeasonNumber(),
+      episodeNumber: _currentEpisodeNumber(),
     );
   }
 
@@ -655,6 +662,8 @@ class _ViewState extends State<_View> {
       genres: a.genres,
       plot: a.plot,
       year: a.year,
+      seasonNumber: _currentSeasonNumber(),
+      episodeNumber: _currentEpisodeNumber(),
     );
   }
 
@@ -664,9 +673,18 @@ class _ViewState extends State<_View> {
   String _currentEpisodePoster() => posterForEpisode(
         episodeThumbs: _nav.episodeThumbs,
         index: _nav.episodeIndex,
+        seriesCoverUrl: _nav.seriesCoverUrl,
         seriesPoster: _nav.seriesPoster,
         fallback: widget.args.poster,
       );
+
+  // This episode's real "S{x}"/"E{y}" number — 0 when unknown (a movie, or a
+  // plugin that doesn't tag episodes), which the CW card hides rather than
+  // showing "S0 · E0".
+  int _currentEpisodeNumber() =>
+      numberForEpisode(_nav.episodeNumbers, _nav.episodeIndex);
+  int _currentSeasonNumber() =>
+      numberForEpisode(_nav.seasonNumbers, _nav.episodeIndex);
 
   void _exit() {
     if (context.canPop()) {

@@ -24,6 +24,7 @@ import '../features/media/bloc/plugin_event.dart';
 import '../features/media/bloc/plugin_state.dart';
 import '../features/media/data/continue_watching_item.dart';
 import '../features/media/data/media_repository.dart';
+import '../features/player/episode_poster.dart' show episodeBadge;
 import 'widgets/mobile_hero.dart';
 import 'widgets/mobile_poster_card.dart';
 import 'widgets/plugin_switcher_pill.dart';
@@ -795,16 +796,29 @@ class _CwCard extends StatelessWidget {
             // Series name (overline) + what's actually playing (episode/movie
             // title) — was collapsed to just the series name before, which
             // silently dropped the episode number/name entirely. Matches the
-            // TV card's overline+title convention.
-            if (item.showTitle.isNotEmpty &&
-                item.showTitle.toLowerCase() != item.title.toLowerCase())
-              Text(
-                item.showTitle,
+            // TV card's overline+title convention. "S{x} · E{y}" rides on
+            // the same line when known — see episode_poster.dart's
+            // episodeBadge().
+            Builder(builder: (_) {
+              final showOverline = item.showTitle.isNotEmpty &&
+                  item.showTitle.toLowerCase() != item.title.toLowerCase();
+              final badge = episodeBadge(item.seasonNumber, item.episodeNumber);
+              if (!showOverline && badge.isEmpty) {
+                return const SizedBox.shrink();
+              }
+              final text = showOverline
+                  ? (badge.isEmpty
+                      ? item.showTitle
+                      : '${item.showTitle} · $badge')
+                  : badge;
+              return Text(
+                text,
                 maxLines: 1,
                 textAlign: TextAlign.center,
                 overflow: TextOverflow.ellipsis,
                 style: const TextStyle(color: AppTheme.textLow, fontSize: 11),
-              ),
+              );
+            }),
             Text(
               item.title,
               maxLines: 1,

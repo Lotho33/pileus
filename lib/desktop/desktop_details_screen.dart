@@ -17,6 +17,7 @@ import '../features/media/bloc/details_event.dart';
 import '../features/media/bloc/details_state.dart';
 import '../features/media/data/continue_watching_item.dart';
 import '../features/media/data/media_repository.dart';
+import '../features/player/episode_poster.dart';
 import '../features/player/resolve_and_play.dart';
 import '../shared/responsive.dart';
 import '../shared/widgets/error_retry_view.dart';
@@ -69,8 +70,7 @@ class DesktopDetailsScreen extends StatelessWidget {
                   return _Error(
                     message: s.message,
                     onRetry: () => context.read<DetailsBloc>().add(
-                        LoadDetailsEvent(
-                            pluginId: pluginId, mediaId: mediaId)),
+                        LoadDetailsEvent(pluginId: pluginId, mediaId: mediaId)),
                   );
                 }
                 final res = s is DetailsLoaded ? s.response : null;
@@ -164,13 +164,22 @@ class _Body extends StatelessWidget {
         return;
       }
     }
+    // Movie fallback — the CW poster must be the horizontal
+    // extra['cover_url'] when the plugin has one, never the plain
+    // backdrop/vertical poster. See posterForMovie().
+    final movieFanart =
+        details?.hasMovie() == true ? details!.movie.fanartUrl : '';
     await resolveAndPlay(
       context,
       pluginId,
       item.id,
       extra: {
         'title': item.title,
-        'poster': item.posterUrl,
+        'poster': posterForMovie(
+          coverUrl: item.extra['cover_url'] ?? '',
+          fanartUrl: movieFanart,
+          posterUrl: item.posterUrl,
+        ),
         'mediaType': item.mediaType,
       },
       sourcePicker: showDesktopSourcePicker,
@@ -188,12 +197,17 @@ class _Body extends StatelessWidget {
         'showTitle': item.title,
         'poster': eps[i].thumbnailUrl.isNotEmpty
             ? eps[i].thumbnailUrl
-            : item.posterUrl,
+            : (item.extra['cover_url']?.isNotEmpty == true
+                ? item.extra['cover_url']
+                : item.posterUrl),
         'seriesPoster': item.posterUrl,
+        'seriesCoverUrl': item.extra['cover_url'] ?? '',
         'parentId': season.directoryId,
         'episodeList': eps.map((e) => e.id).toList(),
         'episodeTitles': eps.map((e) => e.title).toList(),
         'episodeThumbs': eps.map((e) => e.thumbnailUrl).toList(),
+        'episodeNumbers': eps.map((e) => e.episodeNumber).toList(),
+        'seasonNumbers': eps.map((e) => e.seasonNumber).toList(),
         'episodeIndex': i,
         // Without these, auto-advance/next-episode across a season boundary
         // silently no-ops — same fields mobile's equivalent call sites send.
@@ -550,14 +564,14 @@ class _PlayButtonState extends State<_PlayButton> {
       final match = widget.isSeries
           ? items.firstOrNull
           : items
-              .where((i) =>
-                  i.parentID.isEmpty && i.playableID == widget.item.id)
+              .where(
+                  (i) => i.parentID.isEmpty && i.playableID == widget.item.id)
               .firstOrNull;
       // A "next episode" row parked at ~31s just to clear mycelium's
       // progress_time>=30 filter (see PlaybackProgress.maybeClear) isn't a
       // real resume point — same guard the home Continue Watching card uses.
-      final isRealProgress = match != null &&
-          !(match.totalTime <= 0 && match.progressTime <= 35);
+      final isRealProgress =
+          match != null && !(match.totalTime <= 0 && match.progressTime <= 35);
       if (isRealProgress && mounted) setState(() => _resume = match);
     } catch (_) {
       // best-effort — falls back to onPlayDefault

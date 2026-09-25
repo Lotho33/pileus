@@ -7,6 +7,7 @@ import '../core/theme/app_theme.dart';
 import '../core/utils/image_sizing.dart';
 import '../features/media/data/media_repository.dart';
 import '../shared/widgets/open_catalog_item.dart';
+import '../features/player/episode_poster.dart';
 import '../features/player/resolve_and_play.dart';
 import 'package:cached_network_image_platform_interface/cached_network_image_platform_interface.dart'
     show ImageRenderMethodForWeb;
@@ -39,6 +40,10 @@ class _ItemSheet extends StatefulWidget {
 class _ItemSheetState extends State<_ItemSheet> {
   List<String> _genres = const [];
   String _plot = '';
+  // Movie's own fanart — used only as the middle tier of posterForMovie()'s
+  // fallback chain for the CW poster below, not displayed anywhere in this
+  // sheet itself.
+  String _movieFanart = '';
   bool _preparing = false;
 
   @override
@@ -59,6 +64,7 @@ class _ItemSheetState extends State<_ItemSheet> {
         } else if (d.hasMovie()) {
           _genres = d.movie.genres;
           _plot = d.movie.plot;
+          _movieFanart = d.movie.fanartUrl;
         }
       });
     } catch (_) {}
@@ -92,10 +98,19 @@ class _ItemSheetState extends State<_ItemSheet> {
               extra: <String, dynamic>{
                 'title': eps.first.title,
                 'showTitle': it.title,
-                'poster': it.posterUrl,
+                'poster': eps.first.thumbnailUrl.isNotEmpty
+                    ? eps.first.thumbnailUrl
+                    : (it.extra['cover_url']?.isNotEmpty == true
+                        ? it.extra['cover_url']
+                        : it.posterUrl),
+                'seriesPoster': it.posterUrl,
+                'seriesCoverUrl': it.extra['cover_url'] ?? '',
                 'parentId': s.directoryId,
                 'episodeList': eps.map((e) => e.id).toList(),
                 'episodeTitles': eps.map((e) => e.title).toList(),
+                'episodeThumbs': eps.map((e) => e.thumbnailUrl).toList(),
+                'episodeNumbers': eps.map((e) => e.episodeNumber).toList(),
+                'seasonNumbers': eps.map((e) => e.seasonNumber).toList(),
                 'episodeIndex': 0,
               },
             );
@@ -113,7 +128,11 @@ class _ItemSheetState extends State<_ItemSheet> {
       it.id,
       extra: <String, dynamic>{
         'title': it.title,
-        'poster': it.posterUrl,
+        'poster': posterForMovie(
+          coverUrl: it.extra['cover_url'] ?? '',
+          fanartUrl: _movieFanart,
+          posterUrl: it.posterUrl,
+        ),
         'mediaType': it.mediaType,
       },
     );

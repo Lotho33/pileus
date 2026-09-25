@@ -138,7 +138,33 @@ class _DesktopSearchScreenState extends State<DesktopSearchScreen> {
     });
   }
 
+  static const _supportedFilterTypes = {
+    'select',
+    'multiselect',
+    'bool',
+    'number',
+    'range',
+  };
+
+  /// Always re-fetches right before opening — see mobile_search_screen.dart's
+  /// identical `_openFilters` for the full reasoning: `DesktopSearchScreen`
+  /// is the same kind of persistent `IndexedStack` tab (`desktop_shell.dart`)
+  /// as mobile's, so `initState`/the one plugin-resolution-triggered
+  /// `_loadFilters` call only ever runs once per cold start, with no retry if
+  /// that attempt raced the app's own startup. A plugin that genuinely
+  /// implements filters must always be able to show them.
   Future<void> _openFilters() async {
+    final id = _pluginId;
+    if (id == null) return;
+    await _loadFilters(id);
+    if (!mounted) return;
+    if (!_filters.any((f) => _supportedFilterTypes.contains(f.type))) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+            content: Text('Questo plugin non ha filtri di ricerca.')),
+      );
+      return;
+    }
     final result = await showFilterSheet(context,
         filters: _filters, active: _active, centered: true);
     if (result == null || !mounted) return;
@@ -154,13 +180,8 @@ class _DesktopSearchScreenState extends State<DesktopSearchScreen> {
       builder: (context, ps) {
         final plugins = _pluginsOf(ps);
         final active = _resolve(plugins);
-        final hasFilters = _filters.any((f) => const {
-              'select',
-              'multiselect',
-              'bool',
-              'number',
-              'range'
-            }.contains(f.type));
+        final hasFilters =
+            _filters.any((f) => _supportedFilterTypes.contains(f.type));
 
         return ResponsiveBuilder(
           builder: (context, bp, _) {
@@ -195,13 +216,15 @@ class _DesktopSearchScreenState extends State<DesktopSearchScreen> {
                         ),
                       const SizedBox(width: 8),
                       // Always present so the toolbar doesn't reflow between
-                      // plugins — just disabled when the plugin has no
-                      // filters.
+                      // plugins. Enabled whenever a plugin is selected, not
+                      // gated on `hasFilters` — see _openFilters' doc
+                      // comment; tapping it always re-fetches and tells the
+                      // user plainly if this plugin genuinely has none.
                       Badge(
                         isLabelVisible: _active.isNotEmpty,
                         label: Text('${_active.length}'),
                         child: OutlinedButton.icon(
-                          onPressed: hasFilters ? _openFilters : null,
+                          onPressed: active != null ? _openFilters : null,
                           icon: const Icon(Icons.tune_rounded, size: 18),
                           label: const Text('Filtri'),
                         ),

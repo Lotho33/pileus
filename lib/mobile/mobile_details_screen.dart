@@ -16,6 +16,7 @@ import '../features/media/bloc/details_event.dart';
 import '../features/media/bloc/details_state.dart';
 import '../features/media/data/continue_watching_item.dart';
 import '../features/media/data/media_repository.dart';
+import '../features/player/episode_poster.dart';
 import '../features/player/resolve_and_play.dart';
 import '../shared/widgets/error_retry_view.dart';
 import 'package:cached_network_image_platform_interface/cached_network_image_platform_interface.dart'
@@ -61,8 +62,9 @@ class _View extends StatelessWidget {
           if (s is DetailsError) {
             return _Error(
               message: s.message,
-              onRetry: () => context.read<DetailsBloc>().add(
-                  LoadDetailsEvent(pluginId: pluginId, mediaId: mediaId)),
+              onRetry: () => context
+                  .read<DetailsBloc>()
+                  .add(LoadDetailsEvent(pluginId: pluginId, mediaId: mediaId)),
             );
           }
           final res = s is DetailsLoaded ? s.response : null;
@@ -126,7 +128,6 @@ class _Body extends StatelessWidget {
                 : '';
     return fromDetails.isNotEmpty ? fromDetails : item.bannerUrl;
   }
-
 
   @override
   Widget build(BuildContext context) {
@@ -339,13 +340,20 @@ class _Body extends StatelessWidget {
                           'showTitle': item.title,
                           'poster': eps[i].thumbnailUrl.isNotEmpty
                               ? eps[i].thumbnailUrl
-                              : item.posterUrl,
+                              : (item.extra['cover_url']?.isNotEmpty == true
+                                  ? item.extra['cover_url']
+                                  : item.posterUrl),
                           'seriesPoster': item.posterUrl,
+                          'seriesCoverUrl': item.extra['cover_url'] ?? '',
                           'parentId': season.directoryId,
                           'episodeList': eps.map((e) => e.id).toList(),
                           'episodeTitles': eps.map((e) => e.title).toList(),
                           'episodeThumbs':
                               eps.map((e) => e.thumbnailUrl).toList(),
+                          'episodeNumbers':
+                              eps.map((e) => e.episodeNumber).toList(),
+                          'seasonNumbers':
+                              eps.map((e) => e.seasonNumber).toList(),
                           'episodeIndex': i,
                           // Same as _play() above: without these, auto-advance
                           // across a season boundary silently no-ops.
@@ -422,14 +430,14 @@ class _PlayButtonState extends State<_PlayButton> {
       final match = widget.isSeries
           ? items.firstOrNull
           : items
-              .where((i) =>
-                  i.parentID.isEmpty && i.playableID == widget.item.id)
+              .where(
+                  (i) => i.parentID.isEmpty && i.playableID == widget.item.id)
               .firstOrNull;
       // A "next episode" row parked at ~31s just to clear mycelium's
       // progress_time>=30 filter (see PlaybackProgress.maybeClear) isn't a
       // real resume point — same guard the home Continue Watching card uses.
-      final isRealProgress = match != null &&
-          !(match.totalTime <= 0 && match.progressTime <= 35);
+      final isRealProgress =
+          match != null && !(match.totalTime <= 0 && match.progressTime <= 35);
       if (isRealProgress && mounted) setState(() => _resume = match);
     } catch (_) {
       // best-effort — falls back to the default "play from start" button
@@ -469,8 +477,9 @@ class _PlayButtonState extends State<_PlayButton> {
         if (!context.mounted) return;
         if (browse.episodes.isNotEmpty) {
           final eps = browse.episodes;
-          final series =
-              widget.details?.hasSeries() == true ? widget.details!.series : null;
+          final series = widget.details?.hasSeries() == true
+              ? widget.details!.series
+              : null;
           await resolveAndPlay(
             context,
             widget.pluginId,
@@ -480,12 +489,17 @@ class _PlayButtonState extends State<_PlayButton> {
               'showTitle': widget.item.title,
               'poster': eps.first.thumbnailUrl.isNotEmpty
                   ? eps.first.thumbnailUrl
-                  : widget.item.posterUrl,
+                  : (widget.item.extra['cover_url']?.isNotEmpty == true
+                      ? widget.item.extra['cover_url']
+                      : widget.item.posterUrl),
               'seriesPoster': widget.item.posterUrl,
+              'seriesCoverUrl': widget.item.extra['cover_url'] ?? '',
               'parentId': season.directoryId,
               'episodeList': eps.map((e) => e.id).toList(),
               'episodeTitles': eps.map((e) => e.title).toList(),
               'episodeThumbs': eps.map((e) => e.thumbnailUrl).toList(),
+              'episodeNumbers': eps.map((e) => e.episodeNumber).toList(),
+              'seasonNumbers': eps.map((e) => e.seasonNumber).toList(),
               'episodeIndex': 0,
               'allSeasonIds': seasons.map((s) => s.directoryId).toList(),
               'allSeasonLabels': seasons.map((s) => s.label).toList(),
@@ -502,13 +516,23 @@ class _PlayButtonState extends State<_PlayButton> {
         }
       }
     }
+    // Movie fallback (no seasons, or a non-series item entirely) — the CW
+    // poster must be the horizontal extra['cover_url'] when the plugin has
+    // one, never the plain backdrop/vertical poster. See posterForMovie().
+    final movieFanart = widget.details?.hasMovie() == true
+        ? widget.details!.movie.fanartUrl
+        : '';
     await resolveAndPlay(
       context,
       widget.pluginId,
       widget.item.id,
       extra: <String, dynamic>{
         'title': widget.item.title,
-        'poster': widget.item.posterUrl,
+        'poster': posterForMovie(
+          coverUrl: widget.item.extra['cover_url'] ?? '',
+          fanartUrl: movieFanart,
+          posterUrl: widget.item.posterUrl,
+        ),
         'mediaType': widget.item.mediaType,
       },
     );
