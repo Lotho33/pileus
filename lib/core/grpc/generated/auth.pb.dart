@@ -1040,6 +1040,98 @@ class RenameDeviceResponse extends $pb.GeneratedMessage {
   void clearOk() => $_clearField(1);
 }
 
+class UnpairSelfRequest extends $pb.GeneratedMessage {
+  factory UnpairSelfRequest() => create();
+
+  UnpairSelfRequest._();
+
+  factory UnpairSelfRequest.fromBuffer($core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromBuffer(data, registry);
+  factory UnpairSelfRequest.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromJson(json, registry);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'UnpairSelfRequest',
+      package: const $pb.PackageName(_omitMessageNames ? '' : 'mycelium'),
+      createEmptyInstance: create)
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  UnpairSelfRequest clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  UnpairSelfRequest copyWith(void Function(UnpairSelfRequest) updates) =>
+      super.copyWith((message) => updates(message as UnpairSelfRequest))
+          as UnpairSelfRequest;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static UnpairSelfRequest create() => UnpairSelfRequest._();
+  @$core.override
+  UnpairSelfRequest createEmptyInstance() => create();
+  @$core.pragma('dart2js:noInline')
+  static UnpairSelfRequest getDefault() => _defaultInstance ??=
+      $pb.GeneratedMessage.$_defaultFor<UnpairSelfRequest>(create);
+  static UnpairSelfRequest? _defaultInstance;
+}
+
+class UnpairSelfResponse extends $pb.GeneratedMessage {
+  factory UnpairSelfResponse({
+    $core.bool? ok,
+  }) {
+    final result = create();
+    if (ok != null) result.ok = ok;
+    return result;
+  }
+
+  UnpairSelfResponse._();
+
+  factory UnpairSelfResponse.fromBuffer($core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromBuffer(data, registry);
+  factory UnpairSelfResponse.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromJson(json, registry);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'UnpairSelfResponse',
+      package: const $pb.PackageName(_omitMessageNames ? '' : 'mycelium'),
+      createEmptyInstance: create)
+    ..aOB(1, _omitFieldNames ? '' : 'ok')
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  UnpairSelfResponse clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  UnpairSelfResponse copyWith(void Function(UnpairSelfResponse) updates) =>
+      super.copyWith((message) => updates(message as UnpairSelfResponse))
+          as UnpairSelfResponse;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static UnpairSelfResponse create() => UnpairSelfResponse._();
+  @$core.override
+  UnpairSelfResponse createEmptyInstance() => create();
+  @$core.pragma('dart2js:noInline')
+  static UnpairSelfResponse getDefault() => _defaultInstance ??=
+      $pb.GeneratedMessage.$_defaultFor<UnpairSelfResponse>(create);
+  static UnpairSelfResponse? _defaultInstance;
+
+  @$pb.TagNumber(1)
+  $core.bool get ok => $_getBF(0);
+  @$pb.TagNumber(1)
+  set ok($core.bool value) => $_setBool(0, value);
+  @$pb.TagNumber(1)
+  $core.bool hasOk() => $_has(0);
+  @$pb.TagNumber(1)
+  void clearOk() => $_clearField(1);
+}
+
 const $core.bool _omitFieldNames =
     $core.bool.fromEnvironment('protobuf.omit_field_names');
 const $core.bool _omitMessageNames =

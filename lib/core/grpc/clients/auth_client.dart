@@ -14,7 +14,9 @@ export '../generated/auth.pbgrpc.dart'
         DeleteProfileRequest,
         DeleteProfileResponse,
         UpdateProfileRequest,
-        SetProfilePreferencesRequest;
+        SetProfilePreferencesRequest,
+        UnpairSelfRequest,
+        UnpairSelfResponse;
 
 // Same rationale and value as MediaGrpcClient's (see media_client.dart):
 // without a per-RPC deadline, a hung call here left the calling
@@ -60,5 +62,13 @@ class AuthGrpcClient {
       _stub.setProfilePreferences(
           SetProfilePreferencesRequest(
               profileId: profileId, preferencesJson: preferencesJson),
+          options: CallOptions(timeout: _defaultRpcTimeout));
+
+  /// Deregisters this device from mycelium (its own device_id, derived
+  /// server-side from the JWT — never able to unpair another device). Used
+  /// by "Cambia server" so a device doesn't linger in the dashboard's device
+  /// list forever after the person has moved to a different server.
+  Future<UnpairSelfResponse> unpairSelf() =>
+      _stub.unpairSelf(UnpairSelfRequest(),
           options: CallOptions(timeout: _defaultRpcTimeout));
 }

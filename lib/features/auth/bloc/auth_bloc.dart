@@ -313,6 +313,12 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
 
   Future<void> _onChangeServer(
       ChangeServerEvent event, Emitter<AuthState> emit) async {
+    // Fire-and-forget, and strictly before forgetServer(): once that runs,
+    // the host/JWT/TLS fingerprint this call needs are gone. Never awaited —
+    // "Cambia server" is instant today and a slow/unreachable old server
+    // must not add any delay to leaving it (see AuthRepository.unpairSelf's
+    // doc for why it's also fine for this to silently fail).
+    unawaited(_repo.unpairSelf());
     await _repo.forgetServer();
     await _resetHomePrefetchBlocs();
     // main.dart's app-wide listener routes this to /discovery. Once a new

@@ -123,6 +123,23 @@ class AuthRepository {
     _interceptor.clear();
   }
 
+  /// Best-effort: asks the server to forget this device right away
+  /// (mycelium.UnpairSelf) before [forgetServer] wipes the host/JWT/TLS
+  /// fingerprint this call needs to reach it — call this first. Never
+  /// throws and never allowed to block/prevent changing server: an
+  /// unreachable server, an already-expired JWT, or — on the certMismatch
+  /// recovery path — a TLS fingerprint that no longer matches (the device is
+  /// leaving *because* the server's identity changed) must all just be
+  /// swallowed silently, same as a device that was already removed from the
+  /// server's list would be.
+  Future<void> unpairSelf() async {
+    try {
+      await _client.unpairSelf();
+    } catch (_) {
+      // Ignored on purpose — see above.
+    }
+  }
+
   Future<List<LocalProfile>> getLocalProfiles() => _readProfiles();
 
   /// Persists which profile should be auto-selected on the next cold start

@@ -1,9 +1,11 @@
 import 'dart:convert';
 
 /// Per-profile home-screen customisation for plugins and their catalogs
-/// (carousels), stored locally by [MediaRepository] alongside the plugin
-/// order — never round-tripped to the server. Each profile keeps its own
-/// copy (see MediaRepository._pluginPrefsKey).
+/// (carousels). Server-synced as part of the profile's `ProfilePrefs`
+/// "plugins" block (see `ProfilePrefs`/`SettingsRepository`), so it follows
+/// the profile to every paired device — `MediaRepository.loadPluginPrefs`/
+/// `savePluginPrefs` are the read/write entry points UI code actually calls,
+/// with a one-time migration from this class's old local-only storage.
 ///
 ///  - [hiddenPlugins]: plugin ids that should not appear in the home nav or
 ///    load any content at all.

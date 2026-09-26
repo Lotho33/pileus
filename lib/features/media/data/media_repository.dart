@@ -9,6 +9,7 @@ import '../../../core/di/injection.dart' show getIt;
 import '../../../core/grpc/auth_interceptor.dart';
 import '../../../core/grpc/clients/media_client.dart' hide ContinueWatchingItem;
 import '../../../core/grpc/grpc_errors.dart';
+import '../../settings/data/settings_repository.dart';
 import 'continue_watching_item.dart';
 import 'plugin_prefs.dart';
 
@@ -22,6 +23,12 @@ class MediaRepository {
   // ContinueWatchingBloc — long-lived lazy singletons) talking to the dead
   // HTTP/2 channel after a re-discovery.
   MediaGrpcClient get _client => getIt<MediaGrpcClient>();
+
+  // Plugin order/visibility (loadPluginOrder/savePluginOrder/loadPluginPrefs/
+  // savePluginPrefs below) delegate here — same getIt-per-call idiom as
+  // _client above, so this stays consistent even though SettingsRepository
+  // itself isn't rebuilt by rebuildGrpcClients.
+  SettingsRepository get _settings => getIt<SettingsRepository>();
 
   static const int _cacheTtlSeconds = 86400; // 24h default for static catalogs
   // Sentinel: cacheTtlSeconds = -1 means "bypass cache entirely" (live/dynamic).
@@ -456,7 +463,24 @@ class MediaRepository {
   Future<TriggerRefreshResponse> triggerRefresh(String pluginId) =>
       _client.triggerRefresh(pluginId);
 
+  /// Server-synced (SettingsRepository, part of the profile's ProfilePrefs
+  /// blob) — follows the profile to every paired device. Used to be
+  /// local-only under [_pluginOrderKey] below, which meant pairing a new
+  /// device lost any custom order; that key now only serves the one-time
+  /// migration in [_legacyLoadPluginOrder].
   Future<List<String>> loadPluginOrder() async {
+    final synced = _settings.getPluginOrder();
+    if (synced.isNotEmpty) return synced;
+    // Self-limiting: once seeded, getPluginOrder() stops being empty, so
+    // this legacy read never fires again for this profile.
+    final legacy = await _legacyLoadPluginOrder();
+    if (legacy.isNotEmpty) {
+      await _settings.setPluginOrder(legacy);
+    }
+    return legacy;
+  }
+
+  Future<List<String>> _legacyLoadPluginOrder() async {
     final entry =
         _readEntry(_pluginOrderKey) ?? _readEntry(_pluginOrderKeyPrefix);
     if (entry == null || entry.jsonLayoutStructure.isEmpty) return [];
@@ -468,8 +492,13 @@ class MediaRepository {
     }
   }
 
+  Future<void> savePluginOrder(List<String> pluginIds) =>
+      _settings.setPluginOrder(pluginIds);
+
   // ── per-plugin home customisation (visibility + catalog order/hiding) ──
-  // Same per-profile keying + bare-key fallback as _pluginOrderKey above.
+  // Same per-profile keying + bare-key fallback as _pluginOrderKey above —
+  // kept only for the one-time legacy-migration read in
+  // _legacyLoadPluginPrefs, same story as loadPluginOrder above.
   static const String _pluginPrefsKeyPrefix = '__plugin_prefs__';
 
   String get _pluginPrefsKey {
@@ -479,7 +508,18 @@ class MediaRepository {
         : '$_pluginPrefsKeyPrefix:$pid';
   }
 
+  /// Server-synced, same story as [loadPluginOrder] above.
   Future<PluginPrefs> loadPluginPrefs() async {
+    final synced = _settings.getPluginPrefs();
+    if (!synced.isEmpty) return synced;
+    final legacy = await _legacyLoadPluginPrefs();
+    if (!legacy.isEmpty) {
+      await _settings.setPluginPrefs(legacy);
+    }
+    return legacy;
+  }
+
+  Future<PluginPrefs> _legacyLoadPluginPrefs() async {
     final entry =
         _readEntry(_pluginPrefsKey) ?? _readEntry(_pluginPrefsKeyPrefix);
     if (entry == null || entry.jsonLayoutStructure.isEmpty) {
@@ -488,21 +528,8 @@ class MediaRepository {
     return PluginPrefs.decode(entry.jsonLayoutStructure);
   }
 
-  Future<void> savePluginPrefs(PluginPrefs prefs) async {
-    final entry = LayoutCache()
-      ..screenEndpoint = _pluginPrefsKey
-      ..jsonLayoutStructure = prefs.encode()
-      ..cachedAtTimestamp = DateTime.now().millisecondsSinceEpoch ~/ 1000;
-    await _writeEntry(entry);
-  }
-
-  Future<void> savePluginOrder(List<String> pluginIds) async {
-    final entry = LayoutCache()
-      ..screenEndpoint = _pluginOrderKey
-      ..jsonLayoutStructure = jsonEncode(pluginIds)
-      ..cachedAtTimestamp = DateTime.now().millisecondsSinceEpoch ~/ 1000;
-    await _writeEntry(entry);
-  }
+  Future<void> savePluginPrefs(PluginPrefs prefs) =>
+      _settings.setPluginPrefs(prefs);
 
   /// Saves playback position + metadata (title, poster, rating, genres,
   /// plot, year) via gRPC, in one call — used both for the periodic

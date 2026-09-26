@@ -95,6 +95,13 @@ class AuthServiceClient extends $grpc.Client {
     return $createUnaryCall(_$renameDevice, request, options: options);
   }
 
+  $grpc.ResponseFuture<$0.UnpairSelfResponse> unpairSelf(
+    $0.UnpairSelfRequest request, {
+    $grpc.CallOptions? options,
+  }) {
+    return $createUnaryCall(_$unpairSelf, request, options: options);
+  }
+
   // method descriptors
 
   static final _$authorizeDevice =
@@ -142,6 +149,11 @@ class AuthServiceClient extends $grpc.Client {
           '/mycelium.AuthService/RenameDevice',
           ($0.RenameDeviceRequest value) => value.writeToBuffer(),
           $0.RenameDeviceResponse.fromBuffer);
+  static final _$unpairSelf =
+      $grpc.ClientMethod<$0.UnpairSelfRequest, $0.UnpairSelfResponse>(
+          '/mycelium.AuthService/UnpairSelf',
+          ($0.UnpairSelfRequest value) => value.writeToBuffer(),
+          $0.UnpairSelfResponse.fromBuffer);
 }
 
 @$pb.GrpcServiceName('mycelium.AuthService')
@@ -228,6 +240,13 @@ abstract class AuthServiceBase extends $grpc.Service {
             ($core.List<$core.int> value) =>
                 $0.RenameDeviceRequest.fromBuffer(value),
             ($0.RenameDeviceResponse value) => value.writeToBuffer()));
+    $addMethod($grpc.ServiceMethod<$0.UnpairSelfRequest, $0.UnpairSelfResponse>(
+        'UnpairSelf',
+        unpairSelf_Pre,
+        false,
+        false,
+        ($core.List<$core.int> value) => $0.UnpairSelfRequest.fromBuffer(value),
+        ($0.UnpairSelfResponse value) => value.writeToBuffer()));
   }
 
   $async.Future<$0.AuthorizeDeviceResponse> authorizeDevice_Pre(
@@ -307,4 +326,12 @@ abstract class AuthServiceBase extends $grpc.Service {
 
   $async.Future<$0.RenameDeviceResponse> renameDevice(
       $grpc.ServiceCall call, $0.RenameDeviceRequest request);
+
+  $async.Future<$0.UnpairSelfResponse> unpairSelf_Pre($grpc.ServiceCall $call,
+      $async.Future<$0.UnpairSelfRequest> $request) async {
+    return unpairSelf($call, await $request);
+  }
+
+  $async.Future<$0.UnpairSelfResponse> unpairSelf(
+      $grpc.ServiceCall call, $0.UnpairSelfRequest request);
 }

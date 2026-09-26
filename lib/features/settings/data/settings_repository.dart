@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../../core/grpc/auth_interceptor.dart';
+import '../../media/data/plugin_prefs.dart';
 import 'profile_prefs.dart';
 
 /// App preferences. Two tiers:
@@ -267,4 +268,20 @@ class SettingsRepository {
     await _prefs.setDouble(_scoped(_kSubtitleBottomPadding), v);
     await _updateBlob((b) => b.copyWith(subtitleBottomPadding: v));
   }
+
+  // ── Plugin order/visibility (server-synced, same blob as subtitles) ────
+  // MediaRepository is the only caller — it used to keep these local-only
+  // (per-device), which meant pairing a new device lost all home-screen
+  // customisation. No local per-profile `key@$pid` fallback here (unlike
+  // the subtitle getters above): MediaRepository itself owns the one-time
+  // migration from its old local-only storage, since it's the one that
+  // knows that storage's shape.
+
+  List<String> getPluginOrder() => _blob.pluginOrder;
+  Future<void> setPluginOrder(List<String> order) =>
+      _updateBlob((b) => b.copyWith(pluginOrder: order));
+
+  PluginPrefs getPluginPrefs() => _blob.pluginPrefs;
+  Future<void> setPluginPrefs(PluginPrefs prefs) =>
+      _updateBlob((b) => b.copyWith(pluginPrefs: prefs));
 }

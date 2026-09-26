@@ -101,6 +101,18 @@ message RenameDeviceResponse {
   bool ok = 1;
 }
 
+// UnpairSelf lets a device deregister itself (e.g. "Cambia server" in
+// Pileus) instead of lingering forever in mycelium's device list until an
+// admin removes it by hand. No device_id field on purpose — like
+// RenameDevice, this always acts on the caller's own JWT-derived identity,
+// never an id supplied in the request, so a device can never unpair another
+// one. Profiles are untouched; if the device ever comes back with a valid
+// pairing code it just re-registers.
+message UnpairSelfRequest {}
+message UnpairSelfResponse {
+  bool ok = 1;
+}
+
 service AuthService {
   rpc AuthorizeDevice  (AuthorizeDeviceRequest)  returns (AuthorizeDeviceResponse);
   rpc CreateProfile    (CreateProfileRequest)    returns (ProfileResponse);
@@ -111,4 +123,5 @@ service AuthService {
   rpc RefreshToken     (RefreshTokenRequest)     returns (AuthorizeDeviceResponse);
   rpc ListDevices      (ListDevicesRequest)      returns (ListDevicesResponse);
   rpc RenameDevice     (RenameDeviceRequest)     returns (RenameDeviceResponse);
+  rpc UnpairSelf       (UnpairSelfRequest)       returns (UnpairSelfResponse);
 }
