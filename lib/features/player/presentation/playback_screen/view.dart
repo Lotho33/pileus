@@ -157,6 +157,13 @@ class _PlaybackViewState extends State<_PlaybackView> {
   List<String> _genres = const [];
   int _year = 0;
   bool _resolvingEpisode = false;
+  // True from the moment _resolveEpisodeAt commits to switching episode
+  // until the new stream is confirmed open (_onPosition/_saveProgress can
+  // trust _currentMediaId again). Guards the heartbeat/dispose save and the
+  // end-of-title cleanup against firing in that window — same audit finding
+  // as mobile/desktop/web, 2026-09-26: a 15s tick landing while _engine.
+  // stop() was still mid-reset wrote the wrong identity/position pairing.
+  bool _transitioningEpisode = false;
   bool _autoAdvanced = false;
   // Guards the continue-watching cleanup below against firing more than
   // once per media — reset whenever `_currentMediaId` changes.
@@ -234,6 +241,15 @@ class _PlaybackViewState extends State<_PlaybackView> {
       if (!mounted || widget.args.isLive) return;
       _saveProgress();
     });
+    // Unlike mobile/desktop/web, TV never listened for the app going to
+    // background at all — the only saves were this 15s heartbeat and
+    // dispose() (which only runs when the route itself is torn down, not
+    // when the OS backgrounds the app while it stays alive underneath, e.g.
+    // the remote's Home button). On a low-RAM Android TV box the process can
+    // be reclaimed while backgrounded, losing everything since the last
+    // heartbeat tick with nothing to catch it — audit finding, 2026-09-26.
+    // Same pattern already in production on the other 3 platforms.
+    AppLifecycleReactor.instance.state.addListener(_onAppLifecycle);
     if (args.isLive) _armLiveStallWatchdog();
 
     _resolveSeriesMetaIfMissing().whenComplete(() {
@@ -641,6 +657,7 @@ class _PlaybackViewState extends State<_PlaybackView> {
     _errorGraceTimer?.cancel();
     _liveStallWatchdog?.cancel();
     _optimisticSeekClearTimer?.cancel();
+    AppLifecycleReactor.instance.state.removeListener(_onAppLifecycle);
     _engine.removeListener(_onEngineChanged);
     _uiCubit.close(); // cancella internamente il suo _hideTimer
     if (!widget.args.isLive) _saveProgress();
@@ -648,6 +665,31 @@ class _PlaybackViewState extends State<_PlaybackView> {
     _engine.dispose();
     getIt<PluginBloc>().resumePolling();
     super.dispose();
+  }
+
+  // Mirrors mobile/desktop/web's own lifecycle handler — see its call site
+  // in initState for why TV never had this until now. The engine's own
+  // native decoder already pauses when backgrounded; this only gates the
+  // 15s heartbeat and forces one last save the instant the app can no
+  // longer be seen, same reasoning as the other 3 platforms.
+  void _onAppLifecycle() {
+    if (!mounted) return;
+    if (AppLifecycleReactor.instance.isBackgrounded) {
+      if (_heartbeatTimer != null) {
+        _heartbeatTimer!.cancel();
+        _heartbeatTimer = null;
+        if (!widget.args.isLive) {
+          try {
+            _saveProgress();
+          } catch (_) {}
+        }
+      }
+    } else if (_heartbeatTimer == null && !widget.args.isLive) {
+      _heartbeatTimer = Timer.periodic(const Duration(seconds: 15), (_) {
+        if (!mounted || widget.args.isLive) return;
+        _saveProgress();
+      });
+    }
   }
 
   // ── Progress ───────────────────────────────────────────────────────────────
@@ -658,7 +700,11 @@ class _PlaybackViewState extends State<_PlaybackView> {
     // method — the stream.playing listener firing on natural EOF, the 15s
     // heartbeat, and the unconditional dispose() save — would otherwise
     // silently recreate the entry it just cleared.
-    if (_progressCleared) return;
+    // _transitioningEpisode: see its doc comment — mid episode-switch there's
+    // nothing reliable to save (the one call that must go through
+    // regardless, the final save for the outgoing episode fired from
+    // _resolveEpisodeAt, runs before this flag is set, so it's unaffected).
+    if (_progressCleared || _transitioningEpisode) return;
     final pos = _engine.position;
     final dur = _engine.duration;
     if (pos.inSeconds <= 0) return;
@@ -869,7 +915,12 @@ class _PlaybackViewState extends State<_PlaybackView> {
       //    and the auto-advance carries on into the next season.
       //  - Movie, or the genuinely last episode, ~95% in: it really is
       //    finished — drop it so it doesn't linger at ~100% forever.
-      if (!_progressCleared && dur.inSeconds > 0) {
+      // _transitioningEpisode: mid episode-switch, `pos`/`dur` here can still
+      // be the outgoing episode's while `_currentMediaId`/`_currentEpisodeIndex`
+      // already point at the incoming one (or vice versa, right as the new
+      // stream attaches) — same failure mode as the other 3 platforms'
+      // equivalent guard, audit finding 2026-09-26.
+      if (!_progressCleared && !_transitioningEpisode && dur.inSeconds > 0) {
         final frac = pos.inSeconds / dur.inSeconds;
         final hasSameSeasonNext = _currentEpisodeIndex >= 0 &&
             _currentEpisodeIndex + 1 < _currentEpisodeList.length;
@@ -1019,6 +1070,10 @@ class _PlaybackViewState extends State<_PlaybackView> {
     _engine.open(url, headers: headers);
     if (!widget.args.isLive) _markOpened();
     _issueResumeSeek();
+    // The new stream is confirmed resolved and opening — whatever transition
+    // _resolveEpisodeAt started (if any; a no-op when this is the very first
+    // stream) is over, heartbeat/dispose saves are safe again.
+    _transitioningEpisode = false;
   }
 
   // ── Episode navigation ─────────────────────────────────────────────────────
@@ -1151,6 +1206,16 @@ class _PlaybackViewState extends State<_PlaybackView> {
     if (!mounted) return;
 
     if (match != null) {
+      // Final save for the outgoing episode, using the engine's position
+      // exactly as it still is right now — must run before stop() (which
+      // zeroes it) and before _currentMediaId flips below. The
+      // getStreams fetch just above can take a while (a slow plugin), during
+      // which the outgoing episode is still genuinely playing and should
+      // keep being heartbeat-saved normally — this is why the flag is set
+      // here and not any earlier. See _transitioningEpisode's doc; cleared
+      // in _startPlayback once the new stream actually attaches.
+      _saveProgress();
+      _transitioningEpisode = true;
       _errorGraceTimer?.cancel();
       _engine.stop();
       _uiCubit.setNextEpisodeSecs(null);
@@ -1172,6 +1237,10 @@ class _PlaybackViewState extends State<_PlaybackView> {
                 pluginId: widget.args.epPluginId, streamId: match.id),
           );
     } else {
+      // No source at all for the target episode — the screen is about to be
+      // replaced by a fresh /episode/ route (below), but still worth a final
+      // save for whatever was actually watched here first.
+      _saveProgress();
       setState(() => _resolvingEpisode = false);
       _engine.stop();
       context.pushReplacement(
@@ -1350,6 +1419,12 @@ class _PlaybackViewState extends State<_PlaybackView> {
             WidgetsBinding.instance.addPostFrameCallback((_) {
               if (mounted) _errorOverlayKey.currentState?.requestInitialFocus();
             });
+            // A resolve failure after _resolveEpisodeAt already set
+            // _transitioningEpisode (stream resolution errored out before
+            // ever reaching PlaybackReady/_startPlayback, which is otherwise
+            // the only place that clears it) must not leave the heartbeat/
+            // dispose save disabled for the rest of the session.
+            _transitioningEpisode = false;
           }
         },
         child: Scaffold(

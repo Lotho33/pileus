@@ -133,6 +133,14 @@ class _MobilePlayerViewState extends State<_MobilePlayerView> {
   int? _curDurationSeconds;
   int? _curYear;
   bool _resolvingEpisode = false;
+  // True from the moment _resolveEpisodeAt commits to switching episode
+  // until the new stream is confirmed open (markStarted has run for it).
+  // Guards the heartbeat/dispose save and maybeClear against firing in that
+  // window — same audit finding as desktop/web/TV, 2026-09-26: a 15s tick
+  // landing while _engine.stop() was still mid-reset, or after _progress had
+  // already been reassigned to the new episode but the engine hadn't caught
+  // up, wrote the wrong identity/position pairing.
+  bool _transitioningEpisode = false;
   bool _autoAdvanced = false;
   // Countdown shown in the closing seconds of an episode; null = hidden.
   int? _nextEpisodeSecs;
@@ -222,7 +230,7 @@ class _MobilePlayerViewState extends State<_MobilePlayerView> {
     // resume point.
     if (!widget.args.isLive) {
       _progressTimer = Timer.periodic(
-          const Duration(seconds: 15), (_) => _progress.save(_engine));
+          const Duration(seconds: 15), (_) => _saveProgressGuarded());
     }
 
     // One-shot background fetch: a launch path that only knows a single
@@ -246,14 +254,22 @@ class _MobilePlayerViewState extends State<_MobilePlayerView> {
         _progressTimer = null;
         if (!widget.args.isLive) {
           try {
-            _progress.save(_engine);
+            _saveProgressGuarded();
           } catch (_) {}
         }
       }
     } else if (_progressTimer == null && !widget.args.isLive) {
       _progressTimer = Timer.periodic(
-          const Duration(seconds: 15), (_) => _progress.save(_engine));
+          const Duration(seconds: 15), (_) => _saveProgressGuarded());
     }
+  }
+
+  // See _transitioningEpisode's doc — the one guard every heartbeat/
+  // dispose/backgrounding save site below goes through, instead of each
+  // repeating the check.
+  void _saveProgressGuarded() {
+    if (_transitioningEpisode) return;
+    _progress.save(_engine);
   }
 
   void _ensureEngineInitialized() {
@@ -296,7 +312,7 @@ class _MobilePlayerViewState extends State<_MobilePlayerView> {
     // the last heartbeat (e.g. the user backs out 8s after the last tick).
     if (!widget.args.isLive) {
       try {
-        _progress.save(_engine);
+        _saveProgressGuarded();
       } catch (_) {}
     }
     WakelockPlus.disable();
@@ -330,7 +346,12 @@ class _MobilePlayerViewState extends State<_MobilePlayerView> {
 
     _progress.maybeResumeSeek(_engine);
 
-    if (playing) _progress.maybeClear(_engine);
+    // Guarded like the heartbeat above: mid-transition the engine can still
+    // report the outgoing episode's high position against a _progress
+    // already reassigned to the incoming one, which would immediately roll
+    // it forward again and skip an episode in Continue Watching — the same
+    // failure mode as the web player's equivalent bug.
+    if (playing && !_transitioningEpisode) _progress.maybeClear(_engine);
 
     if (playing != _lastPlaying) {
       _lastPlaying = playing;
@@ -369,6 +390,10 @@ class _MobilePlayerViewState extends State<_MobilePlayerView> {
     _progress.onStreamOpened();
     await _engine.open(s.resolvedUrl, headers: s.httpHeaders);
     _progress.markStarted(_engine);
+    // The cold path's counterpart to the warm path's own clear in
+    // _resolveEpisodeAt — this is the "new stream confirmed open" signal
+    // for whichever path actually ran.
+    _transitioningEpisode = false;
   }
 
   void _retry() {
@@ -828,6 +853,15 @@ class _MobilePlayerViewState extends State<_MobilePlayerView> {
       final year = _prefetchedYear;
       final skipTimes = _prefetchedSkipTimes;
       _clearPrefetch();
+      // Final save for the outgoing episode, using the engine's position
+      // exactly as it still is right now — must run before stop() (which
+      // zeroes it) and before _progress gets reassigned below. See
+      // _transitioningEpisode's doc: set right after, not any earlier, so
+      // the normal heartbeat keeps covering the outgoing episode for as long
+      // as it's genuinely still playing (this warm path is fast, but the
+      // cold path below can spend up to ~20s resolving before it gets here).
+      _saveProgressGuarded();
+      _transitioningEpisode = true;
       _engine.stop();
       setState(() {
         _curEpisodeIndex = newIndex;
@@ -854,6 +888,7 @@ class _MobilePlayerViewState extends State<_MobilePlayerView> {
       _progress.onStreamOpened();
       await _engine.open(url, headers: headers);
       if (mounted) _progress.markStarted(_engine);
+      _transitioningEpisode = false;
       return;
     }
     _clearPrefetch();
@@ -903,6 +938,13 @@ class _MobilePlayerViewState extends State<_MobilePlayerView> {
     if (match != null) {
       final ep =
           (details != null && details.hasEpisode()) ? details.episode : null;
+      // Same reasoning as the warm path above — final save + set the flag
+      // right before stop(), not any earlier (the getStreams/getDetails
+      // fetches just above can take up to ~20s, during which the outgoing
+      // episode is still genuinely playing and should keep being
+      // heartbeat-saved normally).
+      _saveProgressGuarded();
+      _transitioningEpisode = true;
       _engine.stop();
       setState(() {
         _curEpisodeIndex = newIndex;
@@ -1013,6 +1055,12 @@ class _MobilePlayerViewState extends State<_MobilePlayerView> {
       body: BlocListener<PlaybackBloc, PlaybackState>(
         listener: (context, s) {
           if (s is PlaybackReady) _onReady(s);
+          // A resolve failure after _resolveEpisodeAt's cold path already
+          // set _transitioningEpisode (stream resolution errored out before
+          // ever reaching PlaybackReady/_onReady, which is otherwise the
+          // only place that clears it) must not leave the heartbeat/dispose
+          // save disabled for the rest of the session.
+          if (s is PlaybackFailed) _transitioningEpisode = false;
         },
         child: GestureDetector(
           onTap: _toggleControls,

@@ -1,3 +1,4 @@
+import 'dart:async' show unawaited;
 import 'dart:convert';
 
 import 'package:fixnum/fixnum.dart' show Int64;
@@ -9,6 +10,7 @@ import '../../../core/di/injection.dart' show getIt;
 import '../../../core/grpc/auth_interceptor.dart';
 import '../../../core/grpc/clients/media_client.dart' hide ContinueWatchingItem;
 import '../../../core/grpc/grpc_errors.dart';
+import '../../auth/data/auth_repository.dart';
 import '../../settings/data/settings_repository.dart';
 import 'continue_watching_item.dart';
 import 'plugin_prefs.dart';
@@ -463,12 +465,60 @@ class MediaRepository {
   Future<TriggerRefreshResponse> triggerRefresh(String pluginId) =>
       _client.triggerRefresh(pluginId);
 
+  // A device that's been paired for a while never re-pulls ProfilePrefs
+  // (subtitles + plugin order/visibility) from the server on its own:
+  // AuthBloc._onAppStarted's "remembered profile" cold-start path — the
+  // common case, every launch after the first — reads straight from the
+  // local profile cache and never calls syncProfilesFromServer(); that only
+  // happens at a fresh pairing or when the profile picker is shown. So a
+  // reorder made on another device would otherwise never arrive here until
+  // something else forced a full re-sync. loadPluginOrder/loadPluginPrefs
+  // below are the one shared read path every platform's UI already goes
+  // through (see plugin_bloc.dart/mobile_plugins_screen.dart/
+  // desktop_settings_pane.dart/plugin_settings_screen.dart), so refreshing
+  // here — instead of teaching each of those call sites separately —
+  // covers all of them at once.
+  //
+  // Fire-and-forget on purpose, not awaited before returning below: this
+  // must never add a network round-trip to the latency of showing the home
+  // screen's plugin row. It corrects SettingsRepository's cache in the
+  // background; the fix becomes visible on the *next* call (PluginBloc's
+  // own ~30s poll already re-runs loadPluginOrder/loadPluginPrefs, so a
+  // stale order self-heals within about one poll cycle, not instantly but
+  // without ever blocking).
+  //
+  // Debounced because listPlugins() calls both loadPluginOrder() and
+  // loadPluginPrefs() back-to-back on every poll: without this they'd fire
+  // two syncProfilesFromServer() calls each time for no benefit.
+  DateTime? _lastPrefsSync;
+  static const _prefsSyncMinInterval = Duration(seconds: 10);
+
+  void _refreshProfilePrefsIfStale() {
+    final now = DateTime.now();
+    if (_lastPrefsSync != null &&
+        now.difference(_lastPrefsSync!) < _prefsSyncMinInterval) {
+      return;
+    }
+    _lastPrefsSync = now;
+    unawaited(_syncProfilePrefsBestEffort());
+  }
+
+  Future<void> _syncProfilePrefsBestEffort() async {
+    try {
+      await getIt<AuthRepository>().syncProfilesFromServer();
+    } catch (_) {
+      // Best-effort — whatever's already cached in SettingsRepository just
+      // stays as-is, same as before this existed.
+    }
+  }
+
   /// Server-synced (SettingsRepository, part of the profile's ProfilePrefs
   /// blob) — follows the profile to every paired device. Used to be
   /// local-only under [_pluginOrderKey] below, which meant pairing a new
   /// device lost any custom order; that key now only serves the one-time
   /// migration in [_legacyLoadPluginOrder].
   Future<List<String>> loadPluginOrder() async {
+    _refreshProfilePrefsIfStale();
     final synced = _settings.getPluginOrder();
     if (synced.isNotEmpty) return synced;
     // Self-limiting: once seeded, getPluginOrder() stops being empty, so
@@ -510,6 +560,7 @@ class MediaRepository {
 
   /// Server-synced, same story as [loadPluginOrder] above.
   Future<PluginPrefs> loadPluginPrefs() async {
+    _refreshProfilePrefsIfStale();
     final synced = _settings.getPluginPrefs();
     if (!synced.isEmpty) return synced;
     final legacy = await _legacyLoadPluginPrefs();

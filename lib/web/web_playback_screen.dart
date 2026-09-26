@@ -182,6 +182,13 @@ class _ViewState extends State<_View> {
   late String _curTitle = widget.args.title ?? '';
   late final EpisodeNavState _nav = EpisodeNavState.fromArgs(widget.args);
   bool _resolvingEpisode = false;
+  // True from the moment _openEpisode starts switching to a new episode
+  // until _onReady confirms the new stream has actually attached. Guards
+  // _saveProgress (heartbeat/dispose/backgrounding) against firing in that
+  // window: without it, a 15s tick or a dispose-on-exit landing while the
+  // old <video> was still mid-teardown wrote the *new* episode's identity
+  // with the *old* episode's stale position (audit finding, 2026-09-26).
+  bool _transitioningEpisode = false;
   bool _autoAdvanced = false;
   bool _nextEpisodeDismissed = false;
   int? _nextEpisodeSecs;
@@ -325,6 +332,10 @@ class _ViewState extends State<_View> {
   void _onReady(PlaybackReady s) {
     if (_opened) return;
     _opened = true;
+    // The new stream is confirmed resolved and about to attach — the
+    // transition started by _openEpisode is over, heartbeat/dispose saves
+    // are safe again (against the new episode's own state, from here on).
+    _transitioningEpisode = false;
     // Fires for both the very first stream and every subsequent episode
     // (see _openEpisode, which dispatches InitializeVideoEvent and resets
     // _opened) — so AniSkip markers refresh per-episode for free.
@@ -372,6 +383,11 @@ class _ViewState extends State<_View> {
     if (!mounted) return;
     _liveWatchdog?.recordProgress();
     if (widget.args.isLive) return;
+    // Belt-and-suspenders alongside the _video.pause() in _openEpisode: a
+    // 'timeupdate' already queued before pause() takes effect must not run
+    // _maybeClearProgress against the outgoing episode's position while
+    // _curMediaId/_nav already point at the incoming one.
+    if (_transitioningEpisode) return;
 
     final pos = _video.currentTime;
     final dur = _video.duration;
@@ -422,7 +438,10 @@ class _ViewState extends State<_View> {
       repo.updateProgress(
         pluginId: a.epPluginId,
         mediaId: nextId,
-        parentId: _nav.parentId,
+        // See _saveProgress's comment — the stable series id, not
+        // _nav.parentId (which EpisodeNavState may already have rewritten to
+        // a season-folder id if resolving this next episode crossed one).
+        parentId: a.parentId,
         position: const Duration(seconds: 31),
         title: nextTitle.isNotEmpty ? nextTitle : a.showTitle,
         showTitle: a.showTitle,
@@ -506,6 +525,20 @@ class _ViewState extends State<_View> {
   /// `_attachSource` once PlaybackReady arrives.
   void _openEpisode(EpisodeNavTarget target) {
     if (!mounted) return;
+    // Final save for the episode being left, using _curMediaId/the video's
+    // current position exactly as they still are — must run before anything
+    // below changes them. _saveProgress no-ops on its own if there's nothing
+    // meaningful to save (isLive/_progressCleared), so this is always safe
+    // to call unconditionally here.
+    _saveProgress();
+    // From here until _onReady confirms the new stream attached, suppress
+    // the heartbeat/dispose save entirely (see _transitioningEpisode's doc).
+    // Pausing the outgoing <video> too — previously it kept playing the old
+    // stream until the new src/hls.js got attached in _onReady, which is
+    // what let a 'timeupdate' fire against stale content after _curMediaId
+    // had already flipped.
+    _transitioningEpisode = true;
+    _video.pause();
     _hls?.destroy();
     _hls = null;
     setState(() {
@@ -618,7 +651,15 @@ class _ViewState extends State<_View> {
     // _progressCleared: once _maybeClearProgress has closed/rolled the entry
     // forward (≥95%/≥90%), the 15s heartbeat must not silently recreate it —
     // same guard PlaybackProgress.save uses on desktop/mobile.
-    if (widget.args.isLive || _progressCleared) return;
+    // _transitioningEpisode: mid episode-switch, _curMediaId may already
+    // point at the new episode while _video's position is still the old
+    // one's (or vice versa, right as the new source attaches) — nothing
+    // reliable to save until _onReady clears this. The one call that must
+    // go through regardless (the final save for the outgoing episode, fired
+    // from _openEpisode) runs before this flag is set, so it's unaffected.
+    if (widget.args.isLive || _progressCleared || _transitioningEpisode) {
+      return;
+    }
     final pos = _video.currentTime;
     final dur = _video.duration;
     if (pos.isNaN || pos <= 0) return;
@@ -626,7 +667,12 @@ class _ViewState extends State<_View> {
     getIt<MediaRepository>().updateProgress(
       pluginId: a.epPluginId,
       mediaId: _curMediaId,
-      parentId: _nav.parentId,
+      // The series' own stable id, never the season-folder id EpisodeNavState
+      // rewrites into _nav.parentId while browsing across a season boundary
+      // (see EpisodeNavState._resolveAt) — using that here left a stale
+      // sibling Continue Watching card behind on a season crossing, since
+      // mycelium's per-series cleanup in UpsertProgress is keyed on parent_id.
+      parentId: a.parentId,
       position: Duration(seconds: pos.toInt()),
       totalDuration:
           dur.isFinite ? Duration(seconds: dur.toInt()) : Duration.zero,
@@ -652,7 +698,8 @@ class _ViewState extends State<_View> {
     getIt<MediaRepository>().updateProgress(
       pluginId: a.epPluginId,
       mediaId: _curMediaId,
-      parentId: _nav.parentId,
+      // See _saveProgress's comment — the stable series id, not _nav.parentId.
+      parentId: a.parentId,
       position: Duration.zero,
       totalDuration: Duration.zero,
       title: _curTitle.isNotEmpty ? _curTitle : a.showTitle,

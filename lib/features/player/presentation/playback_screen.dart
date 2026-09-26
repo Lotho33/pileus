@@ -8,6 +8,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
 import 'package:wakelock_plus/wakelock_plus.dart';
 
+import '../../../core/app_lifecycle.dart';
 import '../../../core/di/injection.dart';
 import '../../../core/perf_profile.dart';
 import '../../../core/theme/app_scale.dart';

@@ -110,6 +110,14 @@ class _ViewState extends State<_View> with WindowListener {
   late String _curTitle = widget.args.title ?? '';
   late final EpisodeNavState _nav = EpisodeNavState.fromArgs(widget.args);
   bool _resolvingEpisode = false;
+  // True from the moment _openEpisode starts switching to a new episode
+  // until the new stream is confirmed open (markStarted has run for it).
+  // Guards the heartbeat/dispose save and maybeClear against firing in that
+  // window: without it, a 15s tick or a dispose-on-exit landing while
+  // _engine.stop() was still mid-reset — or _progress had already been
+  // reassigned to the new episode but the engine hadn't caught up — wrote
+  // the wrong identity/position pairing (audit finding, 2026-09-26).
+  bool _transitioningEpisode = false;
   bool _autoAdvanced = false;
   bool _nextEpisodeDismissed = false;
   int? _nextEpisodeSecs;
@@ -153,14 +161,22 @@ class _ViewState extends State<_View> with WindowListener {
         _progressTimer = null;
         if (!widget.args.isLive) {
           try {
-            _progress.save(_engine);
+            _saveProgressGuarded();
           } catch (_) {}
         }
       }
     } else if (_progressTimer == null && !widget.args.isLive) {
       _progressTimer = Timer.periodic(
-          const Duration(seconds: 15), (_) => _progress.save(_engine));
+          const Duration(seconds: 15), (_) => _saveProgressGuarded());
     }
+  }
+
+  // See _transitioningEpisode's doc — the one guard every heartbeat/
+  // dispose/backgrounding save site below goes through, instead of each
+  // repeating the check.
+  void _saveProgressGuarded() {
+    if (_transitioningEpisode) return;
+    _progress.save(_engine);
   }
 
   @override
@@ -194,7 +210,7 @@ class _ViewState extends State<_View> with WindowListener {
 
     if (!widget.args.isLive) {
       _progressTimer = Timer.periodic(
-          const Duration(seconds: 15), (_) => _progress.save(_engine));
+          const Duration(seconds: 15), (_) => _saveProgressGuarded());
     }
     _posSub = _engine.positionStream.listen(_onPosition);
     if (widget.args.isLive) {
@@ -260,7 +276,7 @@ class _ViewState extends State<_View> with WindowListener {
     _liveWatchdog?.disarm();
     if (!widget.args.isLive) {
       try {
-        _progress.save(_engine);
+        _saveProgressGuarded();
       } catch (_) {}
     }
     WakelockPlus.disable();
@@ -296,7 +312,12 @@ class _ViewState extends State<_View> with WindowListener {
         rebuild = true;
       }
       _progress.maybeApplyAudioPref(_engine);
-      _progress.maybeClear(_engine);
+      // Guarded like the heartbeat above: mid-transition the engine can
+      // still report the outgoing episode's high position against a
+      // _progress already reassigned to the incoming one, which would
+      // immediately roll it forward again and skip an episode in Continue
+      // Watching — the same failure mode as the web player's equivalent bug.
+      if (!_transitioningEpisode) _progress.maybeClear(_engine);
     }
     _progress.maybeResumeSeek(_engine);
 
@@ -340,6 +361,10 @@ class _ViewState extends State<_View> with WindowListener {
     _progress.onStreamOpened();
     await _engine.open(s.resolvedUrl, headers: s.httpHeaders);
     _progress.markStarted(_engine);
+    // The cold path's counterpart to the warm path's own clear in
+    // _openEpisode — this is the "new stream confirmed open" signal for
+    // whichever path actually ran.
+    _transitioningEpisode = false;
   }
 
   void _onPosition(Duration pos) {
@@ -446,6 +471,15 @@ class _ViewState extends State<_View> with WindowListener {
       final title = _prefetchedTitle;
       final skipTimes = _prefetchedSkipTimes;
       _clearPrefetch();
+      // Final save for the outgoing episode, using the engine's position
+      // exactly as it still is right now — must run before stop() (which
+      // zeroes it) and before _progress gets reassigned below. See
+      // _transitioningEpisode's doc: set right after, not any earlier, so
+      // the normal heartbeat keeps covering the outgoing episode for as long
+      // as it's genuinely still playing (this warm path is fast, but the
+      // cold path below can spend up to ~20s resolving before it gets here).
+      _saveProgressGuarded();
+      _transitioningEpisode = true;
       _engine.stop();
       setState(() {
         _curMediaId = newMediaId;
@@ -466,6 +500,7 @@ class _ViewState extends State<_View> with WindowListener {
       _progress.onStreamOpened();
       await _engine.open(url, headers: headers);
       if (mounted) _progress.markStarted(_engine);
+      _transitioningEpisode = false;
       return;
     }
     _clearPrefetch();
@@ -498,6 +533,13 @@ class _ViewState extends State<_View> with WindowListener {
     if (!mounted) return;
 
     if (match != null) {
+      // Same reasoning as the warm path above — final save + set the flag
+      // right before stop(), not any earlier (the getStreams/getDetails
+      // fetches just above can take up to ~20s, during which the outgoing
+      // episode is still genuinely playing and should keep being
+      // heartbeat-saved normally).
+      _saveProgressGuarded();
+      _transitioningEpisode = true;
       _engine.stop();
       setState(() {
         _curMediaId = newMediaId;
@@ -515,6 +557,8 @@ class _ViewState extends State<_View> with WindowListener {
       context.read<PlaybackBloc>().add(
             SelectStreamEvent(pluginId: widget.pluginId, streamId: match.id),
           );
+      // _transitioningEpisode cleared in _onReady, once the new stream
+      // (dispatched above) actually attaches and markStarted runs for it.
     } else {
       setState(() {
         _resolvingEpisode = false;
@@ -772,6 +816,12 @@ class _ViewState extends State<_View> with WindowListener {
         child: BlocListener<PlaybackBloc, PlaybackState>(
           listener: (context, s) {
             if (s is PlaybackReady) _onReady(s);
+            // A resolve failure after _openEpisode's cold path already set
+            // _transitioningEpisode (stream resolution errored out before
+            // ever reaching PlaybackReady/_onReady, which is otherwise the
+            // only place that clears it) must not leave the heartbeat/
+            // dispose save disabled for the rest of the session.
+            if (s is PlaybackFailed) _transitioningEpisode = false;
           },
           child: MouseRegion(
             onHover: (_) => _wake(),
