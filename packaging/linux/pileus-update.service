@@ -1,0 +1,9 @@
+[Unit]
+Description=Pileus — pull newest release
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=oneshot
+EnvironmentFile=-/etc/default/pileus-update
+ExecStart=/usr/local/bin/pileus-update.sh

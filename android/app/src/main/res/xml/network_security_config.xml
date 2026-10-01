@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Pileus is a bring-your-own-server client: the user points it at their own
+  Mycelium instance, which on a home LAN almost always serves gRPC and the
+  HLS stream proxy over plain http:// (no TLS on a private network). The
+  server host is entered by the user or auto-discovered, so it can't be
+  enumerated here as a fixed domain, and Android's network-security-config
+  does not support IP ranges — hence a base-config that permits cleartext.
+
+  This file exists to make that decision explicit and reviewable, and to be
+  the single place to tighten the policy if discovery ever moves to a known
+  hostname or HTTPS-only.
+
+  System CA trust only; no user-added CAs, no debug overrides shipped.
+-->
+<network-security-config>
+    <base-config cleartextTrafficPermitted="true">
+        <trust-anchors>
+            <certificates src="system"/>
+        </trust-anchors>
+    </base-config>
+</network-security-config>

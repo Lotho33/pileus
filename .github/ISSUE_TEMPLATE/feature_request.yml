@@ -1,0 +1,38 @@
+name: Feature request
+description: Suggest an improvement to the Pileus client
+labels: [enhancement]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Pileus is a bring-your-own-server client for Mycelium — it has no
+        content sources of its own and is deliberately agnostic about what
+        plugins a Mycelium instance runs. Requests to add or target a
+        specific content source are out of scope here (that belongs in a
+        Mycelium plugin, a separate concern from this client).
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem
+      description: What are you trying to do that Pileus makes hard today?
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed solution
+    validations:
+      required: true
+  - type: dropdown
+    id: target
+    attributes:
+      label: Which target(s)
+      multiple: true
+      options:
+        - Android TV / Fire TV
+        - Mobile
+        - Desktop
+        - Web
+        - All / shared
+    validations:
+      required: true

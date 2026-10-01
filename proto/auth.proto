@@ -1,0 +1,197 @@
+syntax = "proto3";
+
+package mycelium;
+
+option go_package = "github.com/Lotho33/stipes-sdk/sdk/gen;gen";
+
+// ─────────────────────────────────────────────────────────────────────────────
+// AuthService — Pileus player → Core
+// Device pairing (rotating code) and profile management.
+// All calls after pairing carry JWT via "authorization: Bearer <token>"
+// and optionally "x-profile-id: <uuid>" (+ "x-profile-session: <token>" for
+// a PIN-protected profile unlocked just for this session, see UnlockProfile).
+// ─────────────────────────────────────────────────────────────────────────────
+
+message AuthorizeDeviceRequest {
+  string device_id = 1;
+  string pin_hash  = 2;
+}
+
+message AuthorizeDeviceResponse {
+  string device_jwt = 1;
+  int64  expires_at = 2;
+  // field 3 reserved — was: string error (use gRPC status codes instead)
+  reserved 3;
+  reserved "error";
+}
+
+message CreateProfileRequest {
+  string name             = 1;
+  string avatar_url       = 2;
+  reserved 3;                     // was: bool is_child (no parental/child concept — removed)
+  reserved "is_child";
+  reserved 4;                     // was: string parental_pin_hash (feature removed)
+  reserved "parental_pin_hash";
+  // Opaque JSON blob of person-scoped client preferences (subtitle style, …).
+  // Optional; the server stores "{}" when empty and never parses the contents.
+  string preferences_json = 5;
+}
+
+message ProfileResponse {
+  string profile_id       = 1;
+  string name             = 2;
+  string avatar_url       = 3;
+  reserved 4;                     // was: bool is_child (no parental/child concept — removed)
+  reserved "is_child";
+  reserved 5;                     // was: bool has_pin (parental PIN removed)
+  reserved "has_pin";
+  // Opaque JSON blob of person-scoped client preferences. The client owns the
+  // schema; the server only stores and echoes it. Profiles are server-wide,
+  // so this follows the person across every paired device.
+  string preferences_json = 6;
+  // Profile access PIN (a new feature: NOT the removed parental PIN, whose
+  // field 5 stays reserved). The three flags below are computed for the
+  // calling device, so the client knows whether to ask for the PIN.
+  bool pin_protected  = 7;
+  // The caller may use this profile right now: no PIN, device trusted, or a
+  // valid session token for it sent as "x-profile-session".
+  bool unlocked       = 8;
+  // The calling device holds persistent trust for this profile (PIN entered
+  // with remember_device) — lets the client offer "forget this device".
+  bool device_trusted = 9;
+}
+
+message ListProfilesRequest {}
+message ListProfilesResponse {
+  repeated ProfileResponse profiles = 1;
+}
+
+message DeleteProfileRequest {
+  string profile_id = 1;
+}
+message DeleteProfileResponse {
+  bool ok = 1;
+  // field 2 reserved — was: string error (use gRPC status codes instead)
+  reserved 2;
+  reserved "error";
+}
+
+message UpdateProfileRequest {
+  string profile_id  = 1;
+  string name        = 2;
+  string avatar_url  = 3;
+  reserved 4;                      // was: bool is_child (no parental/child concept — removed)
+  reserved "is_child";
+  reserved 5;                      // was: string parental_pin_hash (feature removed)
+  reserved "parental_pin_hash";
+}
+
+// SetProfilePreferences replaces only the preferences blob — a separate call
+// so the client doesn't have to round-trip name/avatar just to save a
+// setting. preferences_json is stored verbatim ("{}" to clear).
+message SetProfilePreferencesRequest {
+  string profile_id       = 1;
+  string preferences_json = 2;
+}
+
+message RefreshTokenRequest {}
+
+message DeviceInfo {
+  string device_id    = 1;
+  string label        = 2;
+  int64  created_at   = 3;
+  int64  last_seen_at = 4;
+}
+message ListDevicesRequest {}
+message ListDevicesResponse {
+  repeated DeviceInfo devices = 1;
+}
+
+message RenameDeviceRequest {
+  string device_id = 1;
+  string label     = 2;
+}
+message RenameDeviceResponse {
+  bool ok = 1;
+}
+
+// UnpairSelf lets a device deregister itself (e.g. "Cambia server" in
+// Pileus) instead of lingering forever in mycelium's device list until an
+// admin removes it by hand. No device_id field on purpose - like
+// RenameDevice, this always acts on the caller's own JWT-derived identity,
+// never an id supplied in the request, so a device can never unpair another
+// one. Profiles are untouched (device_id there is audit-only); if the
+// device ever comes back with a valid pairing code it just re-registers.
+message UnpairSelfRequest {}
+message UnpairSelfResponse {
+  bool ok = 1;
+}
+
+// ─── Profile PIN ─────────────────────────────────────────────────────────────
+// A profile with a PIN can only be used (any call carrying its x-profile-id,
+// except AuthService calls) by a device that either:
+//   - is trusted for it: the PIN was entered once with remember_device=true
+//     (e.g. the living-room TV on the "Famiglia" profile) — persists across
+//     app restarts until revoked; or
+//   - sends "x-profile-session: <session_token>" from an UnlockProfile with
+//     remember_device=false — a one-off session ("just this time" on the
+//     shared TV). The client keeps the token in memory only and drops it on
+//     exit/app close, so the PIN is asked again next time. The server also
+//     expires it after 4 h idle / 24 h total, and on LockProfile.
+// Otherwise those calls fail with PERMISSION_DENIED. Wrong PINs are rate
+// limited per device+profile and per profile (RESOURCE_EXHAUSTED while
+// locked out). A PIN is 4-8 digits.
+
+message UnlockProfileRequest {
+  string profile_id      = 1;
+  string pin             = 2;
+  bool   remember_device = 3;
+}
+message UnlockProfileResponse {
+  bool   ok                 = 1;
+  // Set only for a one-off session (remember_device=false on a protected
+  // profile). Send it as "x-profile-session" with every call for this profile.
+  string session_token      = 2;
+  int64  session_expires_at = 3; // unix seconds, absolute cap (idle expiry is shorter)
+  bool   device_trusted     = 4;
+}
+
+// LockProfile ends the caller's session(s) on a profile (call it on "exit
+// profile"); forget_device also drops this device's persistent trust.
+message LockProfileRequest {
+  string profile_id    = 1;
+  bool   forget_device = 2;
+}
+message LockProfileResponse {
+  bool ok = 1;
+}
+
+// SetProfilePin sets, changes or (new_pin empty) removes a profile's PIN.
+// current_pin is required when the profile already has one. Any change
+// revokes every trusted device and session of the profile: each device has
+// to unlock again with the new PIN.
+message SetProfilePinRequest {
+  string profile_id  = 1;
+  string current_pin = 2;
+  string new_pin     = 3;
+}
+message SetProfilePinResponse {
+  bool ok            = 1;
+  bool pin_protected = 2;
+}
+
+service AuthService {
+  rpc AuthorizeDevice       (AuthorizeDeviceRequest)       returns (AuthorizeDeviceResponse);
+  rpc CreateProfile         (CreateProfileRequest)         returns (ProfileResponse);
+  rpc ListProfiles          (ListProfilesRequest)          returns (ListProfilesResponse);
+  rpc DeleteProfile         (DeleteProfileRequest)         returns (DeleteProfileResponse);
+  rpc UpdateProfile         (UpdateProfileRequest)         returns (ProfileResponse);
+  rpc SetProfilePreferences (SetProfilePreferencesRequest) returns (ProfileResponse);
+  rpc RefreshToken          (RefreshTokenRequest)          returns (AuthorizeDeviceResponse);
+  rpc UnpairSelf            (UnpairSelfRequest)            returns (UnpairSelfResponse);
+  rpc ListDevices           (ListDevicesRequest)           returns (ListDevicesResponse);
+  rpc RenameDevice          (RenameDeviceRequest)          returns (RenameDeviceResponse);
+  rpc UnlockProfile         (UnlockProfileRequest)         returns (UnlockProfileResponse);
+  rpc LockProfile           (LockProfileRequest)           returns (LockProfileResponse);
+  rpc SetProfilePin         (SetProfilePinRequest)         returns (SetProfilePinResponse);
+}

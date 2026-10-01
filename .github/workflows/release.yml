@@ -1,0 +1,211 @@
+# Builds the Android APKs (both the `tv` and `mobile` flavors — distinct
+# applicationIds, so Obtainium needs two separate app entries, one per
+# flavor, each filtered to its own asset name pattern) AND the web/PWA
+# bundle on every `vX.Y.Z` tag, and attaches them to the matching GitHub
+# Release — this is the Obtainium / sideload beta channel (see RELEASE.md);
+# the in-app update check stays wired in for Android
+# (--dart-define=PILEUS_GITHUB_REPO). The Play/Amazon *store* artifacts
+# (signed AAB, no update check) are a separate, manually-run pipeline
+# (store.yml). Linux/Windows bundles are separate manual conveniences too
+# (linux.yml / windows.yml) — unlike web, not every release needs a fresh
+# desktop bundle re-deployed.
+#
+# GitHub-hosted runner, standard actions — no self-hosted runner or custom
+# registry secret needed. GITHUB_TOKEN (builtin, `contents: write` below)
+# covers release creation + asset upload.
+#
+# Needs: repo secrets
+#   ANDROID_KEYSTORE_BASE64   base64 -w0 android/app/release.jks
+#   ANDROID_KEYSTORE_PASSWORD / ANDROID_KEY_ALIAS / ANDROID_KEY_PASSWORD
+# and, optionally, repo variable PILEUS_MYCELIUM_HOST (baked in via
+# --dart-define for TVs where `mycelium.local` won't resolve). The web job
+# needs none of the above — no signing, no native toolchain.
+
+name: release
+
+on:
+  push:
+    tags: ["v*.*.*"]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "existing tag to (re)build, e.g. v1.4.0"
+        required: true
+
+permissions:
+  contents: write # create the GitHub Release
+
+jobs:
+  android:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ github.event.inputs.tag || github.ref }}
+
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: Derive version
+        id: v
+        run: |
+          ref="${{ github.event.inputs.tag || github.ref_name }}"
+          echo "name=${ref#v}" >> "$GITHUB_OUTPUT"
+          echo "build=${{ github.run_number }}" >> "$GITHUB_OUTPUT"
+
+      - run: flutter pub get
+
+      # ── Android signing ────────────────────────────────────────────────
+      - name: Android signing config
+        env:
+          KS_B64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          KS_PASS: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          KEY_PASS: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          set -eu
+
+          # ── safe diagnostics: presence + length only, never the value ──
+          present() { [ -n "${1:-}" ] && echo "set (${#1} chars)" || echo "MISSING"; }
+          echo "ANDROID_KEYSTORE_BASE64  : $(present "${KS_B64:-}")"
+          echo "ANDROID_KEYSTORE_PASSWORD: $([ -n "${KS_PASS:-}" ] && echo set || echo MISSING)"
+          echo "ANDROID_KEY_ALIAS        : ${KEY_ALIAS:-<MISSING>}"
+          echo "ANDROID_KEY_PASSWORD     : $([ -n "${KEY_PASS:-}" ] && echo set || echo MISSING)"
+
+          if [ -z "${KS_B64:-}" ]; then
+            echo "::error::ANDROID_KEYSTORE_BASE64 not set — refusing to publish a debug-signed APK."
+            echo "Set the signing secrets (see RELEASE.md) and re-run the tag."
+            exit 1
+          fi
+
+          if ! echo "$KS_B64" | base64 -d > android/app/release.jks; then
+            echo "::error::ANDROID_KEYSTORE_BASE64 is not valid base64 — regenerate with 'base64 -w0 android/app/release.jks'"
+            exit 1
+          fi
+          echo "release.jks: $(wc -c < android/app/release.jks) bytes"
+          # Fail here with a clear message instead of a cryptic
+          # ':app:packageRelease > KeytoolException ... : null' five minutes in.
+          if ! keytool -list -keystore android/app/release.jks -storepass "$KS_PASS" >/dev/null 2>&1; then
+            echo "::error::release.jks unreadable — check ANDROID_KEYSTORE_BASE64 (truncated? wrong file?) and ANDROID_KEYSTORE_PASSWORD"
+            exit 1
+          fi
+          if ! keytool -list -keystore android/app/release.jks -storepass "$KS_PASS" -alias "$KEY_ALIAS" >/dev/null 2>&1; then
+            echo "::error::alias '$KEY_ALIAS' not in keystore — check ANDROID_KEY_ALIAS (case-sensitive)"
+            exit 1
+          fi
+          {
+            echo "storeFile=release.jks"
+            echo "storePassword=$KS_PASS"
+            echo "keyAlias=$KEY_ALIAS"
+            echo "keyPassword=$KEY_PASS"
+          } > android/key.properties
+          echo "Signing: RELEASE  (alias=$KEY_ALIAS)"
+
+      - name: Build APKs (tv)
+        run: |
+          # Drop the unused libmpv.so (~12 MB/ABI — Android always uses
+          # ExoPlayer) and turn on R8 code+resource shrink. This beta channel
+          # is where an R8 mis-strip should surface — before a store
+          # submission, not after.
+          flutter build apk --release --flavor tv --split-per-abi \
+            --target-platform android-arm,android-arm64 \
+            -PpileusExcludeMpv=true -PpileusR8=true \
+            --obfuscate --split-debug-info=build/symbols-tv \
+            --build-name="${{ steps.v.outputs.name }}" \
+            --build-number="${{ steps.v.outputs.build }}" \
+            --dart-define=PILEUS_GITHUB_REPO="${{ github.repository }}" \
+            --dart-define=PILEUS_MYCELIUM_HOST="${{ vars.PILEUS_MYCELIUM_HOST }}"
+          mkdir -p dist
+          # flutter names split-per-abi flavored APKs app-<abi>-<flavor>-release.apk
+          # (abi first), e.g. app-arm64-v8a-tv-release.apk. Naming kept
+          # without "-tv-" for backwards compat with existing Obtainium
+          # filename filters (this asset name predates the mobile build).
+          for f in build/app/outputs/flutter-apk/app-*-tv-release.apk; do
+            abi=$(basename "$f" | sed -E 's/^app-(.+)-tv-release\.apk$/\1/')
+            cp "$f" "dist/pileus-${{ steps.v.outputs.name }}-android-${abi}.apk"
+          done
+          # Obfuscation symbols — needed to de-obfuscate any crash/ANR stack
+          # trace from a build produced by this pipeline. Keep them.
+          tar czf "dist/pileus-${{ steps.v.outputs.name }}-android-symbols.tar.gz" \
+            -C build/symbols-tv . || true
+
+      - name: Build APKs (mobile)
+        run: |
+          # Same size cuts as tv. Distinct applicationId
+          # (com.lotho33.pileus.mobile) — Obtainium needs a second app entry
+          # for this one, filtered on the "-mobile-" asset name below.
+          flutter build apk --release --flavor mobile -t lib/main_mobile.dart \
+            --split-per-abi --target-platform android-arm,android-arm64 \
+            -PpileusExcludeMpv=true -PpileusR8=true \
+            --obfuscate --split-debug-info=build/symbols-mobile \
+            --build-name="${{ steps.v.outputs.name }}" \
+            --build-number="${{ steps.v.outputs.build }}" \
+            --dart-define=PILEUS_GITHUB_REPO="${{ github.repository }}" \
+            --dart-define=PILEUS_MYCELIUM_HOST="${{ vars.PILEUS_MYCELIUM_HOST }}"
+          for f in build/app/outputs/flutter-apk/app-*-mobile-release.apk; do
+            abi=$(basename "$f" | sed -E 's/^app-(.+)-mobile-release\.apk$/\1/')
+            cp "$f" "dist/pileus-${{ steps.v.outputs.name }}-mobile-android-${abi}.apk"
+          done
+          tar czf "dist/pileus-${{ steps.v.outputs.name }}-mobile-android-symbols.tar.gz" \
+            -C build/symbols-mobile . || true
+
+      - name: Checksums
+        run: ( cd dist && sha256sum * > SHA256SUMS.txt )
+
+      - name: GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.event.inputs.tag || github.ref_name }}
+          generate_release_notes: true
+          files: dist/*
+
+  # Runs after `android` so the release already exists by the time this
+  # uploads to it (two parallel jobs both creating the same release via
+  # action-gh-release would race). The bundle expects to be served from the
+  # same origin as Mycelium — see docs/WEB.md for what that still needs on
+  # the server side before playback works end to end; this job only
+  # produces and publishes the static files.
+  web:
+    needs: android
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ github.event.inputs.tag || github.ref }}
+
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: Derive version
+        id: v
+        run: |
+          ref="${{ github.event.inputs.tag || github.ref_name }}"
+          echo "name=${ref#v}" >> "$GITHUB_OUTPUT"
+          echo "build=${{ github.run_number }}" >> "$GITHUB_OUTPUT"
+
+      - run: flutter pub get
+
+      - name: Build web bundle
+        run: |
+          set -eu
+          V="${{ steps.v.outputs.name }}"
+          # PILEUS_STORE_BUILD=true: same reasoning as the store Android
+          # builds — a web/PWA install is always "latest" from the origin
+          # it's served from, so the sideload update-check/dialog (which
+          # points at GitHub releases) doesn't apply here.
+          flutter build web --release -t lib/main_web.dart --base-href / \
+            --build-name="$V" --build-number="${{ steps.v.outputs.build }}" \
+            --dart-define=PILEUS_STORE_BUILD=true
+          mkdir -p dist
+          tar czf "dist/pileus-$V-web.tar.gz" -C build/web .
+          ( cd dist && sha256sum * > SHA256SUMS-web.txt )
+
+      - name: GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.event.inputs.tag || github.ref_name }}
+          files: dist/*

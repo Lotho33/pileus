@@ -1,0 +1,163 @@
+import 'package:flutter/material.dart';
+
+import '../../../core/theme/app_theme.dart';
+import '../on_screen_keyboard.dart';
+import '../tv_focusable.dart';
+import 'dialog_action_button.dart';
+
+/// Simple text-input dialog (rename, avatar URL, ...). Returns the trimmed
+/// value, or null if cancelled / left empty.
+///
+/// Pairs the field with OnScreenKeyboard — it used to be a bare TextField
+/// with no D-pad-native way to type into it at all, blocking "Rinomina
+/// profilo" and "URL avatar" entirely for a remote-control user.
+///
+/// The `controller` / `FocusNode` live on a real State ([_SettingsTextInput],
+/// below), NOT as function-scoped locals disposed right after
+/// `await showDialog`. That old shape disposed the controller a frame or two
+/// before the dialog's exit transition finished painting, so the still-
+/// mounted `EditableText` rebuilt against a disposed controller and threw
+/// ("A TextEditingController was used after being disposed") — a red screen
+/// for the duration of the fade-out. Tying disposal to the widget's own
+/// lifecycle removes that race entirely.
+Future<String?> showSettingsTextInputDialog(
+  BuildContext context, {
+  required String title,
+  String initialValue = '',
+  String? hintText,
+}) async {
+  final result = await showDialog<String>(
+    context: context,
+    barrierColor: Colors.black54,
+    builder: (dialogCtx) => _SettingsTextInput(
+      title: title,
+      initialValue: initialValue,
+      hintText: hintText,
+    ),
+  );
+  return (result != null && result.isNotEmpty) ? result : null;
+}
+
+class _SettingsTextInput extends StatefulWidget {
+  final String title;
+  final String initialValue;
+  final String? hintText;
+  const _SettingsTextInput({
+    required this.title,
+    required this.initialValue,
+    this.hintText,
+  });
+
+  @override
+  State<_SettingsTextInput> createState() => _SettingsTextInputState();
+}
+
+class _SettingsTextInputState extends State<_SettingsTextInput> {
+  late final _controller = TextEditingController(text: widget.initialValue);
+  final _fieldFn = FocusNode();
+  final _keyboardKey = GlobalKey<OnScreenKeyboardState>();
+  // Was: "Salva" with an empty field just closed the dialog like "Annulla"
+  // (both ended up popping null) — the user got zero feedback that nothing
+  // was saved. Now an empty save is refused with an inline message instead
+  // of silently closing.
+  String? _error;
+
+  @override
+  void initState() {
+    super.initState();
+    // The keyboard's first key isn't in the tree on this same frame — hand
+    // focus to it on the next one (same idiom as the search bar).
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _keyboardKey.currentState?.firstFocusNode.requestFocus();
+    });
+    // A controller listener rather than TextField.onChanged: the field is
+    // readOnly (input comes from OnScreenKeyboard mutating _controller
+    // directly, see below), and this reacts to that the same way.
+    _controller.addListener(_onTextChanged);
+  }
+
+  void _onTextChanged() {
+    if (_error != null && _controller.text.trim().isNotEmpty) {
+      setState(() => _error = null);
+    }
+  }
+
+  @override
+  void dispose() {
+    _controller.removeListener(_onTextChanged);
+    _fieldFn.dispose();
+    _controller.dispose();
+    super.dispose();
+  }
+
+  void _pop([String? value]) => Navigator.of(context).pop(value);
+
+  void _save() {
+    final v = _controller.text.trim();
+    if (v.isEmpty) {
+      setState(() => _error = 'Inserisci un testo.');
+      return;
+    }
+    _pop(v);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return TvFocusable(
+      canRequestFocus: false,
+      onEsc: () => _pop(),
+      builder: (context, _) => AlertDialog(
+        backgroundColor: AppTheme.surface,
+        title: Text(widget.title),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            // Ancestor-only catcher — EditableText only binds left/right
+            // (caret) itself, so arrowDown is free to bubble up here and
+            // hand off to the on-screen keyboard below.
+            TvFocusable(
+              canRequestFocus: false,
+              onDown: () =>
+                  _keyboardKey.currentState?.firstFocusNode.requestFocus(),
+              builder: (context, _) => TextField(
+                controller: _controller,
+                focusNode: _fieldFn,
+                // OnScreenKeyboard below is the only intended input source —
+                // readOnly stops Android's own IME popping up on top of it.
+                readOnly: true,
+                // No blinking caret / theme-default focus glow for real
+                // D-pad focus landing here — see
+                // device_pairing_screen.dart's identical field for why.
+                showCursor: false,
+                style: const TextStyle(color: Colors.white),
+                decoration: InputDecoration(
+                  hintText: widget.hintText,
+                  errorText: _error,
+                  focusedBorder: Theme.of(context)
+                      .inputDecorationTheme
+                      .enabledBorder,
+                ),
+                onSubmitted: (_) => _save(),
+              ),
+            ),
+            const SizedBox(height: 14),
+            OnScreenKeyboard(
+              key: _keyboardKey,
+              controller: _controller,
+              onSubmit: _save,
+              onNavigateUp: () => _fieldFn.requestFocus(),
+            ),
+          ],
+        ),
+        actions: [
+          DialogActionButton(label: 'Annulla', onPressed: () => _pop()),
+          DialogActionButton(
+            label: 'Salva',
+            primary: true,
+            onPressed: _save,
+          ),
+        ],
+      ),
+    );
+  }
+}

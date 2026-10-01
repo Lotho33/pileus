@@ -1,0 +1,18 @@
+{
+  "//": "webOS (LG Smart TV) packaging manifest for Pileus — see docs/TIZEN_WEBOS.md for how this fits into the build. Copy this file (and icon.png/largeIcon.png from this same directory) into build/web/ after `flutter build web -t lib/main_web_tv.dart`, then package with `ares-package build/web`.",
+
+  "id": "tv.pileus.app",
+  "version": "1.5.1",
+  "vendor": "Lotho33",
+  "type": "web",
+  "main": "index.html",
+  "title": "Pileus",
+  "icon": "icon.png",
+  "largeIcon": "largeIcon.png",
+  "iconColor": "#0D0D1A",
+  "splashBackground": "icon.png",
+  "resolution": "1920x1080",
+  "uiRevision": "2",
+  "disableBackHistoryAPI": true,
+  "inspectable": true
+}

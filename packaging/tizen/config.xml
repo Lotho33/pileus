@@ -1,0 +1,76 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Tizen (Samsung Smart TV) packaging manifest for Pileus — see
+  docs/TIZEN_WEBOS.md for how this fits into the build.
+
+  Copy this file (and icon.png from this same directory) into the built web
+  output before packaging:
+
+    flutter build web -t lib/main_web_tv.dart
+    cp packaging/tizen/config.xml packaging/tizen/icon.png build/web/
+
+  Then either:
+    - open build/web/ as a Tizen Web project in Tizen Studio and build/run
+      from there (it reads this file directly), or
+    - package from the CLI: `tizen package -t wgt -s <profile> -- build/web`
+
+  `id`/`tizen:application id`/`package` below are PLACEHOLDERS — Tizen
+  requires a real author certificate (Tizen Studio > Certificate Manager)
+  whose 10-character author ID becomes the actual package/app ID prefix.
+  Generate one and replace PLACEHOLDERAUTH below with it before signing;
+  an unsigned/placeholder-ID package will build but won't install on a
+  real TV or in the emulator.
+-->
+<widget xmlns="http://www.w3.org/ns/widgets"
+        xmlns:tizen="http://tizen.org/ns/widgets"
+        id="https://github.com/Lotho33/pileus"
+        version="1.5.1"
+        viewmodes="maximized">
+
+  <tizen:application id="PLACEHOLDERAUTH.PileusTV"
+                      package="PLACEHOLDERAUTH"
+                      required_version="6.0"/>
+
+  <name>Pileus</name>
+  <icon src="icon.png"/>
+  <content src="index.html"/>
+
+  <!-- Internet access — required for every gRPC-Web/HTTP call this app
+       makes (both LAN and remote/HTTPS server mode, see
+       lib/core/grpc/server_address.dart). Without this privilege Tizen
+       blocks outgoing requests entirely at the platform level, independent
+       of any CORS/CSP configured on the server side. -->
+  <tizen:privilege name="http://tizen.org/privilege/internet"/>
+
+  <!-- Matches server_discovery_screen.dart's LAN /24 sweep (see
+       _sweepLan's own doc) — needed only if that ever runs on Tizen; it's
+       a no-op on web today (kIsWeb-gated), kept here for when/if a native
+       Tizen network-info API backs it instead. Harmless to leave declared
+       even if unused. -->
+  <tizen:privilege name="http://tizen.org/privilege/network.get"/>
+
+  <feature name="http://tizen.org/feature/screen.size.all"/>
+
+  <tizen:setting screen-orientation="landscape"
+                 context-menu="disable"
+                 background-support="disable"
+                 encryption="disable"
+                 install-location="auto"
+                 hwkey-event="enable"/>
+
+  <!-- Every request this app makes is cross-origin by construction (see
+       main_web_tv.dart's own doc: a packaged app is never "served by
+       mycelium", so there is no same-origin host to default to — manual
+       server entry, LAN or remote/HTTPS, is the only path). Wide open
+       because the actual server address is only known at runtime (typed
+       by the person pairing the TV), not at build time. -->
+  <access origin="*" subdomains="true"/>
+
+  <tizen:profile name="tv-samsung"/>
+
+  <!-- Lets the remote's dedicated Return/Back key reach the app as a key
+       event at all — without this some Tizen TV profiles intercept it at
+       the platform level before it ever reaches the WebView. Paired with
+       web/index.html's key bridge (keyCode 10009 → synthetic Escape). -->
+  <tizen:metadata key="http://samsung.com/tv/metadata/use.dialog.hwkey" value="true"/>
+</widget>

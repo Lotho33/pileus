@@ -1,0 +1,52 @@
+name: Bug report
+description: Something in the Pileus client is broken or behaves wrong
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        For security-sensitive reports, do **not** file here — see SECURITY.md.
+        Server / plugin problems belong in the Mycelium project, not this one.
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened
+      description: What you did, what you expected, what you got instead.
+      placeholder: Steps to reproduce, ideally from a clean start.
+    validations:
+      required: true
+  - type: dropdown
+    id: target
+    attributes:
+      label: Target
+      options:
+        - Android TV / Fire TV
+        - Mobile
+        - Desktop (Linux)
+        - Desktop (Windows)
+        - Web
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Pileus version / commit
+      placeholder: e.g. 1.2.3, or a commit hash for a source build
+    validations:
+      required: true
+  - type: input
+    id: device
+    attributes:
+      label: Device / OS
+      placeholder: e.g. Chromecast with Google TV, Fire TV Stick 4K, Fedora 41
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs
+      description: >
+        If you can, enable Preferences → "Diagnostica (log su adb)", reproduce,
+        and paste the `pileus/…` lines. Redact any stream host / media names
+        you don't want public.
+      render: text

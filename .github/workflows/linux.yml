@@ -1,0 +1,72 @@
+# Builds the Linux desktop bundle for a `vX.Y.Z` tag and attaches it to the
+# matching GitHub Release (created if the android/web release.yml run
+# hasn't made it yet). `scripts/release.sh` dispatches this automatically
+# after pushing a tag (set PILEUS_SKIP_LINUX_BUILD=1 to skip that); it can
+# also be run by hand from Actions -> linux -> Run workflow, with the tag
+# as input.
+#
+# GitHub-hosted `ubuntu-latest` runner, no self-hosted infra, no extra
+# secret — GITHUB_TOKEN (builtin, `contents: write` below) covers release
+# creation + asset upload via softprops/action-gh-release, same as the
+# android/web jobs in release.yml and windows.yml.
+
+name: linux
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "existing tag to build, e.g. v1.5.0"
+        required: true
+
+permissions:
+  contents: write # create/update the GitHub Release
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ inputs.tag }}
+
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: Derive version
+        id: v
+        run: |
+          tag="${{ inputs.tag }}"
+          echo "name=${tag#v}" >> "$GITHUB_OUTPUT"
+          echo "build=${{ github.run_number }}" >> "$GITHUB_OUTPUT"
+
+      - name: Linux build deps
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            build-essential clang cmake ninja-build pkg-config \
+            libgtk-3-dev liblzma-dev libmpv-dev mpv
+
+      - run: |
+          flutter config --enable-linux-desktop
+          flutter pub get
+
+      - name: Build Linux bundle
+        run: |
+          flutter build linux --release -t lib/main_desktop.dart \
+            --build-name="${{ steps.v.outputs.name }}" \
+            --build-number="${{ steps.v.outputs.build }}" \
+            --dart-define=PILEUS_GITHUB_REPO="${{ github.repository }}" \
+            --dart-define=PILEUS_MYCELIUM_HOST="${{ vars.PILEUS_MYCELIUM_HOST }}"
+          mkdir -p dist
+          tar czf "dist/pileus-${{ steps.v.outputs.name }}-linux-x64.tar.gz" \
+            -C build/linux/x64/release/bundle .
+          ( cd dist && sha256sum * > SHA256SUMS-linux.txt )
+
+      - name: GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ inputs.tag }}
+          files: dist/*

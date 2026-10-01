@@ -1,0 +1,128 @@
+# Builds the Play Store / Amazon Appstore artifacts for an existing
+# `vX.Y.Z` tag and attaches them to this workflow run as downloadable
+# artifacts (Actions tab -> this run -> Artifacts) — never to the public
+# GitHub Release itself. Run by hand: Actions -> store -> Run workflow,
+# with the tag as input.
+#
+# Builds BOTH store apps (tv + mobile, distinct applicationIds/listings).
+#
+# Difference from release.yml (the sideload/Obtainium beta channel):
+#   * signed **AAB** (Play requires it) + signed per-ABI APKs (Amazon)
+#   * --dart-define=PILEUS_STORE_BUILD=true -> in-app update check compiled
+#     out entirely for this build
+#   * -PpileusRequireSigning=true -> build fails instead of silently
+#     falling back to debug signing
+#   * --obfuscate + symbols/mapping kept for crash de-obfuscation
+#   * both flavors: -PpileusExcludeMpv (drop the unused libmpv.so, ~12 MB/ABI
+#     — Android always uses ExoPlayer, the libmpv engine throws if
+#     constructed there) + -PpileusR8 (code + resource shrink). A bad strip
+#     only shows at runtime — smoke-test playback / gRPC / subtitle
+#     rendering on a device before uploading either flavor to a store
+#     console.
+#
+# Needs: the same ANDROID_KEYSTORE_* signing secrets as release.yml
+# (mandatory here — no debug-signing fallback).
+#
+# After it runs, download the AAB/APKs from the workflow run's Artifacts
+# section and upload them to the Play Console / Amazon Developer console by
+# hand — this workflow never talks to either store's API.
+
+name: store
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Release tag to build (e.g. v1.5.0)"
+        required: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ inputs.tag }}
+
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: Derive version
+        id: v
+        run: |
+          tag="${{ inputs.tag }}"
+          echo "name=${tag#v}" >> "$GITHUB_OUTPUT"
+          echo "build=${{ github.run_number }}" >> "$GITHUB_OUTPUT"
+
+      - run: flutter pub get
+
+      - name: Android signing config (mandatory)
+        env:
+          KS_B64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          KS_PASS: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          KEY_PASS: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          set -eu
+          if [ -z "${KS_B64:-}" ] || [ -z "${KS_PASS:-}" ] || [ -z "${KEY_ALIAS:-}" ] || [ -z "${KEY_PASS:-}" ]; then
+            echo "::error::store builds require ANDROID_KEYSTORE_BASE64 / ANDROID_KEYSTORE_PASSWORD / ANDROID_KEY_ALIAS / ANDROID_KEY_PASSWORD"
+            exit 1
+          fi
+          echo "$KS_B64" | base64 -d > android/app/release.jks
+          keytool -list -keystore android/app/release.jks -storepass "$KS_PASS" -alias "$KEY_ALIAS" >/dev/null
+          {
+            echo "storeFile=release.jks"
+            echo "storePassword=$KS_PASS"
+            echo "keyAlias=$KEY_ALIAS"
+            echo "keyPassword=$KEY_PASS"
+          } > android/key.properties
+          echo "Signing: RELEASE (alias=$KEY_ALIAS)"
+
+      - name: Build TV (AAB + per-ABI APKs)
+        run: |
+          set -eu
+          V="${{ steps.v.outputs.name }}"
+          common="--release --flavor tv -PpileusRequireSigning=true \
+            -PpileusExcludeMpv=true -PpileusR8=true \
+            --obfuscate --split-debug-info=build/symbols-tv \
+            --dart-define=PILEUS_STORE_BUILD=true \
+            --build-name=$V --build-number=${{ steps.v.outputs.build }}"
+          flutter build appbundle $common
+          flutter build apk --split-per-abi --target-platform android-arm,android-arm64 $common
+          mkdir -p dist
+          cp build/app/outputs/bundle/tvRelease/app-tv-release.aab "dist/pileus-$V-tv-store.aab"
+          for f in build/app/outputs/flutter-apk/app-*-tv-release.apk; do
+            abi=$(basename "$f" | sed -E 's/^app-(.+)-tv-release\.apk$/\1/')
+            cp "$f" "dist/pileus-$V-tv-store-${abi}.apk"
+          done
+          tar czf "dist/pileus-$V-tv-symbols.tar.gz" -C build/symbols-tv .
+          cp build/app/outputs/mapping/tvRelease/mapping.txt "dist/pileus-$V-tv-mapping.txt" || true
+
+      - name: Build Mobile (AAB + per-ABI APKs)
+        run: |
+          set -eu
+          V="${{ steps.v.outputs.name }}"
+          common="--release --flavor mobile -t lib/main_mobile.dart \
+            -PpileusRequireSigning=true -PpileusExcludeMpv=true -PpileusR8=true \
+            --obfuscate --split-debug-info=build/symbols-mobile \
+            --dart-define=PILEUS_STORE_BUILD=true \
+            --build-name=$V --build-number=${{ steps.v.outputs.build }}"
+          flutter build appbundle $common
+          flutter build apk --split-per-abi --target-platform android-arm,android-arm64 $common
+          cp build/app/outputs/bundle/mobileRelease/app-mobile-release.aab "dist/pileus-$V-mobile-store.aab"
+          for f in build/app/outputs/flutter-apk/app-*-mobile-release.apk; do
+            abi=$(basename "$f" | sed -E 's/^app-(.+)-mobile-release\.apk$/\1/')
+            cp "$f" "dist/pileus-$V-mobile-store-${abi}.apk"
+          done
+          tar czf "dist/pileus-$V-mobile-symbols.tar.gz" -C build/symbols-mobile .
+          cp build/app/outputs/mapping/mobileRelease/mapping.txt "dist/pileus-$V-mobile-mapping.txt" || true
+          ( cd dist && sha256sum * > SHA256SUMS.txt )
+          ls -la dist
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: pileus-${{ steps.v.outputs.name }}-store
+          path: dist/*
+          retention-days: 90

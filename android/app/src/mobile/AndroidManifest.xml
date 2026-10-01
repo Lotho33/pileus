@@ -1,0 +1,35 @@
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
+    <!-- Mobile flavor overrides on top of src/main/AndroidManifest.xml.
+
+         - src/main declares `android.software.leanback` required="true"
+           (TV listing). Strip that requirement here so the phone/tablet
+           build is not filtered off non-TV devices on the store.
+         - Drop the TV home-screen banner + its drawables (dead weight on a
+           phone; with -PpileusR8 shrinkResources removes the PNGs too).
+         - src/main also carries three renderer opt-outs that are Amlogic /
+           Mali-450 TV-box workarounds (Impeller off, GLES backend,
+           SurfaceControl off — see the comments there). They degrade the
+           renderer on capable phones/tablets, so remove them from this
+           flavor: mobile gets Flutter's default Impeller/Vulkan path.
+
+         Orientation is driven from Dart (SystemChrome in lib/main_mobile.dart
+         and the player screen), not pinned per-activity here. -->
+    <uses-feature
+        android:name="android.software.leanback"
+        tools:node="remove"/>
+
+    <application tools:remove="android:banner">
+        <activity android:name=".MainActivity">
+            <meta-data
+                android:name="io.flutter.embedding.android.ImpellerBackend"
+                tools:node="remove"/>
+            <meta-data
+                android:name="io.flutter.embedding.android.EnableImpeller"
+                tools:node="remove"/>
+            <meta-data
+                android:name="io.flutter.embedding.android.EnableSurfaceControl"
+                tools:node="remove"/>
+        </activity>
+    </application>
+</manifest>

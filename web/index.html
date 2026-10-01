@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <base href="$FLUTTER_BASE_HREF">
+
+  <meta charset="UTF-8">
+  <meta content="IE=Edge" http-equiv="X-UA-Compatible">
+  <meta name="description" content="Client per il tuo server multimediale Mycelium.">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Pileus">
+  <link rel="apple-touch-icon" href="icons/Icon-192.png">
+  <meta name="theme-color" content="#0D0D1A">
+
+  <link rel="icon" type="image/png" href="favicon.png"/>
+
+  <title>Pileus</title>
+  <link rel="manifest" href="manifest.json">
+
+  <style>
+    html, body { margin: 0; padding: 0; height: 100%; background: #0D0D1A; }
+    /* Boot placeholder — shown until Flutter paints its first frame. */
+    #boot {
+      position: fixed; inset: 0; display: flex; align-items: center;
+      justify-content: center; background: #0D0D1A;
+      transition: opacity .3s ease; z-index: 9999;
+    }
+    #boot.hide { opacity: 0; pointer-events: none; }
+    #boot .ring {
+      width: 34px; height: 34px; border-radius: 50%;
+      border: 3px solid rgba(124,106,247,.25);
+      border-top-color: #7C6AF7;
+      animation: spin .9s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+  </style>
+</head>
+<body>
+  <div id="boot"><div class="ring"></div></div>
+  <script>
+    window.addEventListener('flutter-first-frame', function () {
+      var b = document.getElementById('boot');
+      if (b) { b.classList.add('hide'); setTimeout(function(){ b.remove(); }, 350); }
+    });
+  </script>
+  <script>
+    // TV remote key bridge (Tizen/webOS — see docs/TIZEN_WEBOS.md).
+    // Samsung/LG TV remotes report Back and the
+    // dedicated media-transport buttons as legacy numeric `keyCode`s with
+    // no standard `key` string alongside them — neither a plain browser
+    // nor Flutter's own web key-mapping table knows what to do with those,
+    // so every existing D-pad/Escape/media-key handler in the app (all
+    // keyed off LogicalKeyboardKey, see back_dispatch.dart and
+    // playback_screen/view.dart) would otherwise never fire for them.
+    //
+    // This intercepts the raw event and replaces it with a synthetic one
+    // carrying a standard `key` Flutter's mapping table already understands
+    // (Escape for Back, the standard Media* keys for transport) — must be
+    // registered here, before flutter_bootstrap.js loads below, so it's
+    // first in the window's capture-phase listener order and can reliably
+    // run before Flutter's own listener sees the original raw event.
+    // Harmless everywhere else: none of these keyCodes occur on a real
+    // computer keyboard, so this is dead code outside an actual Tizen/webOS
+    // remote — NOT verified on real hardware yet, only against each
+    // platform's published remote-control keyCode reference; confirm on a
+    // Tizen Studio / webOS TV Simulator session before relying on it.
+    (function () {
+      var REMOTE_KEYCODE_MAP = {
+        10009: 'Escape', // Tizen: Back
+        461: 'Escape',   // webOS: Back
+        415: 'MediaPlay',
+        19: 'MediaPause',
+        10252: 'MediaPlayPause', // Tizen: Play/Pause
+        413: 'MediaStop',
+        412: 'MediaRewind',      // Tizen: Rewind
+        417: 'MediaFastForward'  // Tizen: Fast-forward
+      };
+      window.addEventListener('keydown', function (e) {
+        var mappedKey = REMOTE_KEYCODE_MAP[e.keyCode];
+        if (!mappedKey) return;
+        e.stopImmediatePropagation();
+        e.preventDefault();
+        window.dispatchEvent(new KeyboardEvent('keydown', {
+          key: mappedKey,
+          code: mappedKey,
+          bubbles: true,
+          cancelable: true
+        }));
+      }, true);
+    })();
+  </script>
+  <!-- Bundled locally (not a CDN) so the PWA works offline and no external
+       host has to be whitelisted in a deployment CSP. Chrome/Firefox need it
+       to play HLS; Safari plays HLS natively and this stays dormant. -->
+  <script src="hls.min.js"></script>
+  <script src="flutter_bootstrap.js" async></script>
+</body>
+</html>

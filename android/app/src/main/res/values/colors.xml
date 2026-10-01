@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Matches AppTheme.bg (lib/core/theme/app_theme.dart) — the native
+         pre-Flutter launch screen shown by the OS while the engine starts
+         (see launch_background.xml/styles.xml) has to agree with it, or it
+         reads as a broken/blank white flash before the real splash appears. -->
+    <color name="pileus_bg">#FF0D0D1A</color>
+    <!-- AppTheme.primary (lib/core/theme/app_theme.dart) — adaptive icon
+         background and the launcher/leanback banner's backdrop, so both
+         match the purple used throughout the app itself (splash lockup,
+         focus highlights, primary buttons). -->
+    <color name="pileus_purple">#FF7C6AF7</color>
+</resources>
