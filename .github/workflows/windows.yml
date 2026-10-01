@@ -80,8 +80,15 @@ jobs:
           # expanding the actual "ProgramFiles(x86)" env var.
           & "${env:ProgramFiles(x86)}\Inno Setup 6\iscc.exe" "packaging\windows\pileus.iss" "/DAppVersion=$v"
 
-          # Checksums
-          Get-ChildItem dist -File | ForEach-Object {
+          # Checksums — materialize the file list BEFORE Out-File opens the
+          # destination for writing below. Piping Get-ChildItem straight
+          # into the ForEach/Out-File chain races: Out-File creates and
+          # holds SHA256SUMS-windows.txt open in the same `dist` directory
+          # Get-ChildItem is still (lazily) enumerating, so that half-open
+          # file itself gets picked up and Get-FileHash fails on it
+          # ("being used by another process").
+          $distFiles = Get-ChildItem dist -File
+          $distFiles | ForEach-Object {
             (Get-FileHash $_.FullName -Algorithm SHA256).Hash.ToLower() + "  " + $_.Name
           } | Out-File -Encoding ascii "dist/SHA256SUMS-windows.txt"
 
