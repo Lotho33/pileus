@@ -73,7 +73,12 @@ jobs:
           # Installer — iscc lands on PATH after the choco install above,
           # but a fresh PATH from a prior step isn't always picked up by the
           # current pwsh process, so call it by its known install location.
-          & "$env:ProgramFiles(x86)\Inno Setup 6\iscc.exe" "packaging\windows\pileus.iss" "/DAppVersion=$v"
+          # `${env:ProgramFiles(x86)}` (braces) is required here — PowerShell
+          # parses the bare `$env:ProgramFiles(x86)` as the env var
+          # `ProgramFiles` followed by literal text `(x86)`, silently
+          # producing "C:\Program Files(x86)\..." (no space) instead of
+          # expanding the actual "ProgramFiles(x86)" env var.
+          & "${env:ProgramFiles(x86)}\Inno Setup 6\iscc.exe" "packaging\windows\pileus.iss" "/DAppVersion=$v"
 
           # Checksums
           Get-ChildItem dist -File | ForEach-Object {
