@@ -803,6 +803,21 @@ class _MpvPlayerEngine extends PlayerEngine {
         !kIsWeb) {
       try {
         final dynamic native = _player.platform;
+        // Same handle-not-ready-yet race initialize() already hit and fixed
+        // for 'volume-max' (see that doc comment for the full story) — the
+        // mpv handle (`ctx`) is still `nullptr` until Player's fire-and-
+        // forget _create() finishes, independently of how soon open() is
+        // called after initialize(). Usually plenty of time passes before a
+        // screen actually calls open() (the plugin's own stream-resolve
+        // RPC), but a plugin that resolves near-instantly (a direct_stream
+        // URL with nothing to look up) could call this before the handle
+        // existed, handing mpv's C API a null `ctx` — segfault, not a
+        // catchable Dart exception. `waitForPlayerInitialization` (not
+        // setProperty's own `waitForInitialization: true`, which also waits
+        // for a video controller — only attaches post-open(), the exact
+        // deadlock this facade avoids elsewhere) only waits for that handle,
+        // so it's safe to await here, ahead of _player.open() below.
+        await (native.waitForPlayerInitialization as Future<void>);
         native.setProperty('start', 'none', waitForInitialization: false);
       } catch (_) {
         // Best-effort — a failure here just means ResumeSeekController's

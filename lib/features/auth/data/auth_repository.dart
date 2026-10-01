@@ -66,7 +66,27 @@ class AuthRepository {
   }
 
   Future<DeviceSession> authorizeDevice(String pin) async {
-    final deviceId = const Uuid().v4();
+    // Reuse existing row (preserves grpcHost/tlsFingerprint) or create new.
+    final existing = DeviceSession.readFrom(_prefs);
+    final session = existing ?? DeviceSession();
+
+    // device_id identifies this *installation* to the server — generated
+    // once and reused on every later pairing attempt, never regenerated per
+    // call (the previous behavior: a fresh `Uuid().v4()` right here, every
+    // single time). mycelium-core treats an unrecognized device_id as a
+    // brand new device enrolling, so re-pairing after a lost session (a
+    // crash, a session that expired, a wrong PIN retried) used to show up
+    // server-side as a string of entirely unrelated devices burning through
+    // a single-use/short-lived pairing code each time — no revocation on
+    // either side, just a client that forgot who it was. Written to disk
+    // *before* the RPC below (not just after a successful response) so it
+    // stays stable even if authorizeDevice itself fails or the process dies
+    // mid-call.
+    if (session.deviceId.isEmpty) {
+      session.deviceId = const Uuid().v4();
+      await DeviceSession.writeTo(_prefs, session);
+    }
+    final deviceId = session.deviceId;
 
     // Deliberately a raw string — despite the proto field's name. The
     // mycelium server checks it against a short-lived pairing code the user
@@ -78,11 +98,7 @@ class AuthRepository {
           AuthorizeDeviceRequest(deviceId: deviceId, pinHash: pin),
         ));
 
-    // Reuse existing row (preserves grpcHost/tlsFingerprint) or create new.
-    final existing = DeviceSession.readFrom(_prefs);
-    final session = existing ?? DeviceSession();
     session
-      ..deviceId = deviceId
       ..deviceJwt = response.deviceJwt
       ..expiresAtTimestamp = response.expiresAt.toInt()
       ..isAuthorized = true;
@@ -114,17 +130,22 @@ class AuthRepository {
     _interceptor.setCredentials(session.deviceJwt, '');
   }
 
-  /// Clears only the auth fields (deviceId/JWT/authorized flag/last active
-  /// profile), preserving grpcHost/vpnHost/tlsFingerprint — a session
-  /// expiring mid-use (SessionExpiredEvent) is not a "forget this server"
-  /// event. Wiping the whole row here used to force a full re-discovery on
-  /// next launch and drop the pinned TLS fingerprint, silently downgrading
-  /// the gRPC channel to plaintext (see DeviceSession.tlsFingerprint's doc).
+  /// Clears the auth fields (JWT/authorized flag/last active profile),
+  /// preserving grpcHost/vpnHost/tlsFingerprint — a session expiring
+  /// mid-use (SessionExpiredEvent) is not a "forget this server" event.
+  /// Wiping the whole row here used to force a full re-discovery on next
+  /// launch and drop the pinned TLS fingerprint, silently downgrading the
+  /// gRPC channel to plaintext (see DeviceSession.tlsFingerprint's doc).
+  ///
+  /// deviceId is deliberately left untouched (this used to clear it too):
+  /// it identifies the installation, not this one session, and the next
+  /// authorizeDevice() call already reuses whatever's here instead of
+  /// minting a new one — see its own doc for why re-churning it on every
+  /// logout/re-pair was the actual bug.
   Future<void> logout() async {
     final session = DeviceSession.readFrom(_prefs);
     if (session == null) return;
     session
-      ..deviceId = ''
       ..deviceJwt = ''
       ..expiresAtTimestamp = 0
       ..isAuthorized = false

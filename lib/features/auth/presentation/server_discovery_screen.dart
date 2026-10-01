@@ -65,6 +65,8 @@ class _ServerDiscoveryScreenState extends State<ServerDiscoveryScreen> {
   final _keyboardKey = GlobalKey<OnScreenKeyboardState>();
   final _connettiFocusNode = FocusNode();
   final _retryFocusNode = FocusNode();
+  final _continuaFocusNode = FocusNode();
+  final _useDifferentFocusNode = FocusNode();
   bool _connecting = false;
   String? _error;
 
@@ -80,6 +82,8 @@ class _ServerDiscoveryScreenState extends State<ServerDiscoveryScreen> {
     _manualFocusNode.dispose();
     _connettiFocusNode.dispose();
     _retryFocusNode.dispose();
+    _continuaFocusNode.dispose();
+    _useDifferentFocusNode.dispose();
     super.dispose();
   }
 
@@ -285,6 +289,25 @@ class _ServerDiscoveryScreenState extends State<ServerDiscoveryScreen> {
     }
   }
 
+  /// Bails out of the auto-found result into the manual-entry UI — reuses
+  /// `_ScanState.notFound`'s screen without re-running `_scan()` (a fresh
+  /// scan would almost certainly just land back on the same auto-found
+  /// server, since nothing about the network changed). Needed because
+  /// `_scan()` always runs on every entry to this screen, including from
+  /// "Cambia server" elsewhere in the app — on a LAN with more than one
+  /// Mycelium reachable (or just not the one the user actually wants right
+  /// now), landing in `_ScanState.found` used to be a dead end: "Continua"
+  /// was the only option.
+  void _switchToManual() {
+    setState(() {
+      _scanState = _ScanState.notFound;
+      _error = null;
+    });
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _manualFocusNode.requestFocus();
+    });
+  }
+
   Future<void> _saveHost(String host, _ProbeResult result) async {
     await getIt<AuthRepository>().saveHostInfo(host, result.tlsFingerprint,
         grpcPort: result.grpcPort);
@@ -436,8 +459,10 @@ class _ServerDiscoveryScreenState extends State<ServerDiscoveryScreen> {
               final busy = state is AuthLoading;
               return _GradientButton(
                 autofocus: true,
+                focusNode: _continuaFocusNode,
                 loading: busy,
                 label: busy ? '' : 'Continua',
+                onDown: busy ? null : () => _useDifferentFocusNode.requestFocus(),
                 // splashFloor: false — this is a direct button press, not a
                 // cold start, so skip the 2 s splash hold. The button stays
                 // in its loading state until the bloc resolves and the
@@ -449,6 +474,13 @@ class _ServerDiscoveryScreenState extends State<ServerDiscoveryScreen> {
                         .add(const AppStartedEvent(splashFloor: false)),
               );
             },
+          ),
+          SizedBox(height: AppScale.space(context, 12)),
+          _TextActionButton(
+            focusNode: _useDifferentFocusNode,
+            onUp: () => _continuaFocusNode.requestFocus(),
+            label: 'Usa un altro indirizzo',
+            onPressed: _switchToManual,
           ),
         ],
       );

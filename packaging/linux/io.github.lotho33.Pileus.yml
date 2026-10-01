@@ -57,8 +57,8 @@ modules:
           /app/share/icons/hicolor/256x256/apps/io.github.lotho33.Pileus.png
     sources:
       - type: archive
-        url: <TARBALL_URL>
-        sha256: <TARBALL_SHA256>
+        url: https://github.com/Lotho33/pileus/releases/download/v1.5.2/pileus-1.5.2-linux-x64.tar.gz
+        sha256: b5d2c78c0ddbdd376cdd2d21866476a05e8c27eddfe6bf95e278eeb3a04729a1
       - type: file
         path: io.github.lotho33.Pileus.desktop
       - type: file

@@ -136,6 +136,16 @@ class _DesktopProfilesScreenState extends State<DesktopProfilesScreen> {
                     ],
                   ),
                 ),
+                const SizedBox(height: 32),
+                // Escape hatch for the case none of the local profiles can
+                // actually be reached from here — every one of them
+                // PIN-protected and locked, with no way to back out and
+                // connect to a different Mycelium instead.
+                TextButton(
+                  onPressed: () =>
+                      getIt<AuthBloc>().add(const ChangeServerEvent()),
+                  child: const Text('Cambia server'),
+                ),
               ],
             ),
           ),

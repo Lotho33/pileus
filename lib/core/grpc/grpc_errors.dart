@@ -1,7 +1,25 @@
+import 'package:flutter/foundation.dart' show debugPrint;
 import 'package:grpc/grpc.dart';
 
-bool isUnauthenticated(Object e) =>
-    e is GrpcError && e.code == StatusCode.unauthenticated;
+/// True only for a real UNAUTHENTICATED (16) response — never a transport
+/// failure (UNAVAILABLE, a timeout, a dropped connection after a crash).
+/// Every one of the ~20 call sites across the app that decide whether to
+/// drop the device session and bounce back to pairing (SessionExpiredEvent)
+/// go through this single function, so logging the server's own message
+/// right here — instead of at each call site — covers the whole app for
+/// free: on the live demo server, a session that unexpectedly resets used
+/// to come back with no trace of *why* (a stale JWT past the server's own
+/// revocation? a device_id the server genuinely never saw before, because
+/// an earlier pairing never finished persisting? ...), only that it did.
+/// Not gated on kDebugMode — debugPrint isn't stripped in release anyway
+/// (see auth_interceptor.dart's identical note), and unlike the JWT logged
+/// there, the server's message here ("invalid token: …",
+/// "device revoked or unknown") is plain diagnostic text, not a credential.
+bool isUnauthenticated(Object e) {
+  if (e is! GrpcError || e.code != StatusCode.unauthenticated) return false;
+  debugPrint('[auth] UNAUTHENTICATED: ${e.message}');
+  return true;
+}
 
 /// FAILED_PRECONDITION (9) is how mycelium-core reports a resolve that the
 /// user simply can't do right now for reasons a retry can't fix — a

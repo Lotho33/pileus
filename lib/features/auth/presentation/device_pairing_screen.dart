@@ -22,6 +22,7 @@ class _DevicePairingScreenState extends State<DevicePairingScreen> {
   final _pinController = TextEditingController();
   final _focusNode = FocusNode();
   final _submitFn = FocusNode();
+  final _changeServerFn = FocusNode();
   final _keyboardKey = GlobalKey<OnScreenKeyboardState>();
 
   @override
@@ -36,6 +37,7 @@ class _DevicePairingScreenState extends State<DevicePairingScreen> {
     _pinController.dispose();
     _focusNode.dispose();
     _submitFn.dispose();
+    _changeServerFn.dispose();
     super.dispose();
   }
 
@@ -196,10 +198,31 @@ class _DevicePairingScreenState extends State<DevicePairingScreen> {
                                             onNavigateUp: () => _keyboardKey
                                                 .currentState?.firstFocusNode
                                                 .requestFocus(),
+                                            onNavigateDown: () =>
+                                                _changeServerFn.requestFocus(),
                                             onPressed: () => _submit(context),
                                           ),
                                         );
                                       },
+                                    ),
+                                    // Auto-discovery (configureDependencies(),
+                                    // once at cold start) silently points
+                                    // this screen at whatever LAN server
+                                    // answered first — no manual-entry screen
+                                    // ever shown when that succeeds. Without
+                                    // this, a device on a LAN with more than
+                                    // one Mycelium (or the wrong one for this
+                                    // device) had no way back to that field.
+                                    SizedBox(
+                                        height: AppScale.space(context, 8)),
+                                    _TextActionButton(
+                                      label: 'Cambia server',
+                                      focusNode: _changeServerFn,
+                                      onNavigateUp: () =>
+                                          _submitFn.requestFocus(),
+                                      onPressed: () => context
+                                          .read<AuthBloc>()
+                                          .add(const ChangeServerEvent()),
                                     ),
                                   ],
                                 ),
@@ -292,9 +315,13 @@ class _PairingCodeField extends StatelessWidget {
 class _SubmitButton extends StatelessWidget {
   final FocusNode? focusNode;
   final VoidCallback? onNavigateUp;
+  final VoidCallback? onNavigateDown;
   final VoidCallback onPressed;
   const _SubmitButton(
-      {this.focusNode, this.onNavigateUp, required this.onPressed});
+      {this.focusNode,
+      this.onNavigateUp,
+      this.onNavigateDown,
+      required this.onPressed});
 
   @override
   Widget build(BuildContext context) {
@@ -302,6 +329,7 @@ class _SubmitButton extends StatelessWidget {
       focusNode: focusNode,
       onActivate: onPressed,
       onUp: onNavigateUp,
+      onDown: onNavigateDown,
       builder: (context, focused) => AnimatedContainer(
         duration: const Duration(milliseconds: 150),
         height: AppScale.space(context, 56),
@@ -326,6 +354,42 @@ class _SubmitButton extends StatelessWidget {
             fontWeight: FontWeight.w600,
             letterSpacing: 0.3,
           ),
+        ),
+      ),
+    );
+  }
+}
+
+// Same look as server_discovery_screen.dart's identical private widget —
+// kept separate rather than shared since each screen's focus chain is its
+// own small, self-contained loop.
+class _TextActionButton extends StatelessWidget {
+  final String label;
+  final VoidCallback onPressed;
+  final FocusNode? focusNode;
+  final VoidCallback? onNavigateUp;
+  const _TextActionButton({
+    required this.label,
+    required this.onPressed,
+    this.focusNode,
+    this.onNavigateUp,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return TvFocusable(
+      focusNode: focusNode,
+      onActivate: onPressed,
+      onUp: onNavigateUp,
+      builder: (context, focused) => Padding(
+        padding: EdgeInsets.symmetric(vertical: AppScale.space(context, 8)),
+        child: Text(
+          label,
+          style: TextStyle(
+            color: focused ? Colors.white : Colors.white38,
+            fontSize: AppScale.caption(context),
+          ),
+          textAlign: TextAlign.center,
         ),
       ),
     );

@@ -108,6 +108,17 @@ class _MobileProfilesScreenState extends State<MobileProfilesScreen> {
         appBar: AppBar(
           backgroundColor: AppTheme.bg,
           title: const Text('Chi sta guardando?'),
+          actions: [
+            // Escape hatch for the case none of the local profiles can
+            // actually be reached from here — every one of them
+            // PIN-protected and locked, with no way to back out and
+            // connect to a different Mycelium instead.
+            TextButton(
+              onPressed: () =>
+                  getIt<AuthBloc>().add(const ChangeServerEvent()),
+              child: const Text('Cambia server'),
+            ),
+          ],
         ),
         body: SafeArea(
           child: GridView.count(

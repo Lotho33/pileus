@@ -119,6 +119,13 @@ class _ProfileSelectionView extends StatefulWidget {
 class _ProfileSelectionViewState extends State<_ProfileSelectionView> {
   int _focusedIndex = 0;
   List<FocusNode> _fns = [];
+  // Escape hatch for the case none of the local profiles can actually be
+  // reached from here — every one of them PIN-protected and locked, with
+  // no "change server" anywhere on this screen to back out of that and
+  // connect to a different Mycelium instead. Desktop/mobile have the same
+  // gap on their own profile-selection screen (unlike the pairing screen,
+  // which already has "Cambia server" on all 3 platforms).
+  final _changeServerFn = FocusNode();
 
   void _rebuildFns(int count) {
     for (final f in _fns) {
@@ -155,6 +162,7 @@ class _ProfileSelectionViewState extends State<_ProfileSelectionView> {
     for (final f in _fns) {
       f.dispose();
     }
+    _changeServerFn.dispose();
     super.dispose();
   }
 
@@ -177,6 +185,10 @@ class _ProfileSelectionViewState extends State<_ProfileSelectionView> {
               : (_focusedIndex < last ? _focusedIndex + 1 : 0);
           setState(() => _focusedIndex = next);
           _fns[next].requestFocus();
+          return KeyEventResult.handled;
+        }
+        if (event.logicalKey == LogicalKeyboardKey.arrowDown) {
+          _changeServerFn.requestFocus();
           return KeyEventResult.handled;
         }
         if (event.logicalKey == LogicalKeyboardKey.escape ||
@@ -240,6 +252,21 @@ class _ProfileSelectionViewState extends State<_ProfileSelectionView> {
                       onFocused: (i) => setState(() => _focusedIndex = i),
                       isWide: isWide,
                       cardSize: animatedCardSize,
+                    ),
+                  ),
+                  SizedBox(height: AppScale.space(context, 32)),
+                  TvFocusable(
+                    focusNode: _changeServerFn,
+                    onActivate: () => context
+                        .read<AuthBloc>()
+                        .add(const ChangeServerEvent()),
+                    onUp: () => _fns[_focusedIndex].requestFocus(),
+                    builder: (context, focused) => Text(
+                      'Cambia server',
+                      style: TextStyle(
+                        color: focused ? Colors.white : Colors.white38,
+                        fontSize: AppScale.caption(context),
+                      ),
                     ),
                   ),
                 ],
