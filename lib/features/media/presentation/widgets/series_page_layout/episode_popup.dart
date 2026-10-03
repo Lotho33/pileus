@@ -64,12 +64,23 @@ class _EpisodePopupState extends State<_EpisodePopup> {
   // no sources at all), so the popup is never left with a dead D-pad.
   final _closeFn = FocusNode();
   final _firstPlayFn = FocusNode();
+  // One node per source button beyond the first (index 0 always reuses
+  // _firstPlayFn above) — lets Left/Right be chained explicitly between
+  // them instead of relying on implicit directional traversal, which has
+  // repeatedly proven unreliable for this app on TV (see watch_button.dart's
+  // identical note — this popup has the exact same multi-source row).
+  final Map<int, FocusNode> _playFns = {};
+  FocusNode _playFn(int i) =>
+      i == 0 ? _firstPlayFn : _playFns.putIfAbsent(i, () => FocusNode());
 
   @override
   void dispose() {
     _scrollCtrl.dispose();
     _closeFn.dispose();
     _firstPlayFn.dispose();
+    for (final n in _playFns.values) {
+      n.dispose();
+    }
     super.dispose();
   }
 
@@ -471,11 +482,18 @@ class _EpisodePopupState extends State<_EpisodePopup> {
                                                       ? _sources[i].label
                                                       : 'Guarda',
                                               autofocus: i == 0,
-                                              focusNode:
-                                                  i == 0 ? _firstPlayFn : null,
+                                              focusNode: _playFn(i),
                                               onUp: i == 0
                                                   ? () =>
                                                       _closeFn.requestFocus()
+                                                  : null,
+                                              onLeft: i > 0
+                                                  ? () => _playFn(i - 1)
+                                                      .requestFocus()
+                                                  : null,
+                                              onRight: i < _sources.length - 1
+                                                  ? () => _playFn(i + 1)
+                                                      .requestFocus()
                                                   : null,
                                               onTap: () {
                                                 final src = _sources[i];

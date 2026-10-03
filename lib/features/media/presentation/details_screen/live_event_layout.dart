@@ -309,6 +309,20 @@ class _SourceList extends StatefulWidget {
 
 class _SourceListState extends State<_SourceList> {
   int _focused = 0;
+  // Same class of bug as watch_button.dart's language-selection row and
+  // live_event_popup.dart's _SourceRows — a list of TvFocusables with no
+  // explicit Up/Down chain between them fell through to implicit
+  // directional traversal, unreliable on TV here. One node per row.
+  final Map<int, FocusNode> _rowFns = {};
+  FocusNode _rowFn(int i) => _rowFns.putIfAbsent(i, () => FocusNode());
+
+  @override
+  void dispose() {
+    for (final n in _rowFns.values) {
+      n.dispose();
+    }
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -328,11 +342,16 @@ class _SourceListState extends State<_SourceList> {
           return Padding(
             padding: EdgeInsets.only(bottom: sh * (8.0 / 1080.0)),
             child: TvFocusable(
+              focusNode: _rowFn(i),
               autofocus: i == 0,
               onFocusChange: (v) {
                 if (v) setState(() => _focused = i);
               },
               onActivate: () => widget.onTap(src),
+              onUp: i > 0 ? () => _rowFn(i - 1).requestFocus() : null,
+              onDown: i < widget.sources.length - 1
+                  ? () => _rowFn(i + 1).requestFocus()
+                  : null,
               builder: (context, _) => AnimatedContainer(
                 duration: const Duration(milliseconds: 120),
                 padding: EdgeInsets.symmetric(

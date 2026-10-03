@@ -555,12 +555,25 @@ class _SourceRows extends StatefulWidget {
 class _SourceRowsState extends State<_SourceRows> {
   int _focused = 0;
   final _scroll = ScrollController();
+  // One node per row beyond the first (index 0 always reuses widget.
+  // firstFocus when the caller supplies one) — without this, Up/Down
+  // between source rows fell through to Flutter's implicit directional
+  // traversal, which this app has repeatedly found unreliable on TV (see
+  // watch_button.dart's identical note on the same class of bug, just
+  // horizontal there instead of vertical).
+  final Map<int, FocusNode> _rowFns = {};
+  FocusNode _rowFn(int i) => i == 0 && widget.firstFocus != null
+      ? widget.firstFocus!
+      : _rowFns.putIfAbsent(i, () => FocusNode());
 
   static const _kItemH = 50.0; // approximate height per row (padding + text)
 
   @override
   void dispose() {
     _scroll.dispose();
+    for (final n in _rowFns.values) {
+      n.dispose();
+    }
     super.dispose();
   }
 
@@ -597,7 +610,7 @@ class _SourceRowsState extends State<_SourceRows> {
           return Padding(
             padding: const EdgeInsets.only(bottom: 7),
             child: TvFocusable(
-              focusNode: i == 0 ? widget.firstFocus : null,
+              focusNode: _rowFn(i),
               onFocusChange: (v) {
                 if (v) {
                   setState(() => _focused = i);
@@ -606,7 +619,12 @@ class _SourceRowsState extends State<_SourceRows> {
                 }
               },
               onActivate: () => widget.onPlay(src),
-              onUp: i == 0 ? () => widget.onNavigateUp?.call() : null,
+              onUp: i == 0
+                  ? () => widget.onNavigateUp?.call()
+                  : () => _rowFn(i - 1).requestFocus(),
+              onDown: i < widget.sources.length - 1
+                  ? () => _rowFn(i + 1).requestFocus()
+                  : null,
               builder: (context, _) => AnimatedContainer(
                 duration: const Duration(milliseconds: 110),
                 padding:

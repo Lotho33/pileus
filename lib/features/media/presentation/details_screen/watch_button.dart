@@ -69,6 +69,15 @@ class _WatchButtonState extends State<_WatchButton> {
   final _resumeFn = FocusNode();
   final _watchFn = FocusNode();
   final _retryFn = FocusNode();
+  final _downloadFn = FocusNode();
+  // One node per language/source button beyond the first (index 0 always
+  // reuses _watchFn above — _maybeRequestInitialFocus's target and this
+  // map's index-0 entry must stay the same node). Row count is fixed once
+  // _sourcesLoaded flips true (toggling/playing doesn't change _sources),
+  // same assumption tv_download_options_screen.dart's nodeFor makes.
+  final Map<int, FocusNode> _sourceFns = {};
+  FocusNode _sourceFn(int i) =>
+      i == 0 ? _watchFn : _sourceFns.putIfAbsent(i, () => FocusNode());
   bool _initialFocusRequested = false;
 
   @override
@@ -85,6 +94,10 @@ class _WatchButtonState extends State<_WatchButton> {
     _resumeFn.dispose();
     _watchFn.dispose();
     _retryFn.dispose();
+    _downloadFn.dispose();
+    for (final n in _sourceFns.values) {
+      n.dispose();
+    }
     super.dispose();
   }
 
@@ -291,6 +304,7 @@ class _WatchButtonState extends State<_WatchButton> {
             focusNode: _watchFn,
             autofocus: true,
             onActivate: onActivate,
+            onRight: () => _downloadFn.requestFocus(),
             builder: (context, focused) => _buildSingleButton(
                 focused, 'Guarda', Icons.play_arrow_rounded),
           ),
@@ -305,6 +319,8 @@ class _WatchButtonState extends State<_WatchButton> {
               fanartUrl: widget.fanartUrl,
               posterUrl: widget.posterUrl,
             ),
+            focusNode: _downloadFn,
+            onLeft: () => _watchFn.requestFocus(),
           ),
         ],
       );
@@ -333,9 +349,13 @@ class _WatchButtonState extends State<_WatchButton> {
               PopupPlayButton(
                 label:
                     _sources[i].label.isNotEmpty ? _sources[i].label : 'Guarda',
-                focusNode: i == 0 ? _watchFn : null,
+                focusNode: _sourceFn(i),
                 autofocus: i == 0,
                 onTap: () => _play(context, _sources[i]),
+                onLeft: i > 0 ? () => _sourceFn(i - 1).requestFocus() : null,
+                onRight: i < _sources.length - 1
+                    ? () => _sourceFn(i + 1).requestFocus()
+                    : () => _downloadFn.requestFocus(),
               ),
             _DownloadChip(
               pluginId: widget.pluginId,
@@ -347,6 +367,8 @@ class _WatchButtonState extends State<_WatchButton> {
                 fanartUrl: widget.fanartUrl,
                 posterUrl: widget.posterUrl,
               ),
+              focusNode: _downloadFn,
+              onLeft: () => _sourceFn(_sources.length - 1).requestFocus(),
             ),
           ],
         ),
@@ -399,6 +421,12 @@ class _DownloadChip extends StatefulWidget {
   final String preferredSourceLabel;
   final String itemTitle;
   final String posterUrl;
+  // Optional — lets the caller chain D-pad navigation in from the watch/
+  // language button(s) to its left, since this chip's own visibility is
+  // only known once _check() resolves (see _DownloadChipState), so the
+  // caller can't just assume it's there to traverse past implicitly.
+  final FocusNode? focusNode;
+  final VoidCallback? onLeft;
 
   const _DownloadChip({
     required this.pluginId,
@@ -406,6 +434,8 @@ class _DownloadChip extends StatefulWidget {
     required this.preferredSourceLabel,
     required this.itemTitle,
     required this.posterUrl,
+    this.focusNode,
+    this.onLeft,
   });
 
   @override
@@ -438,6 +468,8 @@ class _DownloadChipState extends State<_DownloadChip> {
   Widget build(BuildContext context) {
     if (_supported != true) return const SizedBox.shrink();
     return TvFocusable(
+      focusNode: widget.focusNode,
+      onLeft: widget.onLeft,
       onActivate: () => pushTvDownloadOptions(
         context,
         pluginId: widget.pluginId,

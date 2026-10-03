@@ -45,8 +45,10 @@
 
   <content_rating type="oars-1.1"/>
 
-  <!-- TODO: add at least one real screenshot before a Flathub submission.
-       Flathub requires the image URL to be reachable at review time. -->
+  <!-- Real screenshot committed at docs/screenshots/desktop-home.png — the
+       raw.githubusercontent.com URL below only resolves once that file is
+       actually pushed to `main` (not before; this is expected to 404 in a
+       local-only check against an unpushed commit). -->
   <screenshots>
     <screenshot type="default">
       <caption>The desktop home screen</caption>
@@ -57,6 +59,6 @@
   <!-- Keep in sync with pubspec.yaml's `version:` and the matching GitHub
        Release date on every tag. -->
   <releases>
-    <release version="1.5.2" date="2026-10-01"/>
+    <release version="1.5.5" date="2026-10-03"/>
   </releases>
 </component>

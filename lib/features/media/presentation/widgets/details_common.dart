@@ -100,9 +100,14 @@ class PopupPlayButton extends StatefulWidget {
   final bool autofocus;
   final VoidCallback onTap;
   // Optional so a caller can wire D-pad navigation to/from this button (e.g.
-  // Up from the first play button lands on the popup's close ✕).
+  // Up from the first play button lands on the popup's close ✕). Left/Right
+  // exist for the same reason as every other row in this app chains them
+  // explicitly instead of relying on implicit directional traversal — see
+  // watch_button.dart's own note on why that's proven unreliable here.
   final FocusNode? focusNode;
   final VoidCallback? onUp;
+  final VoidCallback? onLeft;
+  final VoidCallback? onRight;
   const PopupPlayButton({
     super.key,
     required this.label,
@@ -110,6 +115,8 @@ class PopupPlayButton extends StatefulWidget {
     this.autofocus = false,
     this.focusNode,
     this.onUp,
+    this.onLeft,
+    this.onRight,
   });
 
   @override
@@ -125,6 +132,8 @@ class _PopupPlayButtonState extends State<PopupPlayButton> {
       autofocus: widget.autofocus,
       onActivate: widget.onTap,
       onUp: widget.onUp,
+      onLeft: widget.onLeft,
+      onRight: widget.onRight,
       builder: (context, focused) => AnimatedContainer(
         duration: const Duration(milliseconds: 150),
         padding: EdgeInsets.symmetric(
