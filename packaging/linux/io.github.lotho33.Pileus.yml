@@ -240,8 +240,8 @@ modules:
           /app/share/icons/hicolor/256x256/apps/io.github.lotho33.Pileus.png
     sources:
       - type: archive
-        url: https://github.com/Lotho33/pileus/releases/download/v1.5.6/pileus-1.5.6-linux-x64.tar.gz
-        sha256: 7f4fc4c1eba16e408eb5e5b98b2e4a70afdf27c45ce5f22ea8c82f472591d9bc
+        url: https://github.com/Lotho33/pileus/releases/download/v1.5.7/pileus-1.5.7-linux-x64.tar.gz
+        sha256: 5dafabdb3f86f4430b90619bfbc4c32fa2b969dfef6a0fe8020ec3806cf91101
       - type: file
         path: io.github.lotho33.Pileus.desktop
       - type: file
