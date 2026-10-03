@@ -238,13 +238,23 @@ modules:
           /app/share/metainfo/io.github.lotho33.Pileus.metainfo.xml
       - install -Dm644 icon-256.png
           /app/share/icons/hicolor/256x256/apps/io.github.lotho33.Pileus.png
+    # The three small `type: file` sources below fetch from this repo's own
+    # `main` branch (pinned to a commit, not a floating branch ref) rather
+    # than a local `path:` copy — Flathub's submission guidelines ask that
+    # metadata files stay "integrated in the upstream project" and not be
+    # duplicated into the flathub/flathub submission PR itself. Re-pin the
+    # commit here (and re-verify the sha256s) whenever any of these three
+    # files change.
     sources:
       - type: archive
         url: https://github.com/Lotho33/pileus/releases/download/v1.5.7/pileus-1.5.7-linux-x64.tar.gz
         sha256: 5dafabdb3f86f4430b90619bfbc4c32fa2b969dfef6a0fe8020ec3806cf91101
       - type: file
-        path: io.github.lotho33.Pileus.desktop
+        url: https://raw.githubusercontent.com/Lotho33/pileus/1d4a99d31653109207393af5655ba2d8997825a6/packaging/linux/io.github.lotho33.Pileus.desktop
+        sha256: 70d65ad734cc2661c9328ade960b93087f4975f0e025f994fe4fb506e26f865a
       - type: file
-        path: io.github.lotho33.Pileus.metainfo.xml
+        url: https://raw.githubusercontent.com/Lotho33/pileus/1d4a99d31653109207393af5655ba2d8997825a6/packaging/linux/io.github.lotho33.Pileus.metainfo.xml
+        sha256: d3c56cea76688a49ba3ea8a7ec0d80fba4b1b88a346588e850533143a7462ba2
       - type: file
-        path: icon-256.png
+        url: https://raw.githubusercontent.com/Lotho33/pileus/1d4a99d31653109207393af5655ba2d8997825a6/packaging/linux/icon-256.png
+        sha256: e062cb4334d40d97b788ba6655cb2ffa893c11268eab4a6a75cb7477f0d1ef15

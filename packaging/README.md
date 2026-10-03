@@ -43,6 +43,32 @@ scripts/update-flatpak-manifest.sh <X.Y.Z>
 Rewrites the manifest's `url`/`sha256` and the metainfo's `<release>` tag,
 and runs `flatpak-builder` for you if it's installed. Commit the diff.
 
+**Then, a second manual step** (unavoidable chicken-and-egg with the step
+above): the `pileus` module's three small `type: file` sources
+(`.desktop`/metainfo/icon) are fetched from this repo's own `main` branch
+pinned to a commit — Flathub's guidelines ask that these stay "integrated
+in the upstream project" rather than duplicated into the submission PR.
+`metainfo.xml`'s content just changed (new `<release>` tag) by the step
+above, so its sha256 changed too — but the new commit containing that
+change doesn't exist on GitHub until *after* you push. So: push first,
+then re-pin:
+
+```sh
+commit=$(git rev-parse HEAD)
+for f in io.github.lotho33.Pileus.desktop io.github.lotho33.Pileus.metainfo.xml icon-256.png; do
+  sha256sum "packaging/linux/$f"
+done
+```
+
+and update the three `url`/`sha256` pairs in the `pileus` module by hand
+(the commit hash is the same for all three; `.desktop`/icon rarely
+actually change, only their hash *claim* needs touching when the commit
+hash moves — but a stale one just fails the build loudly, so it's safe to
+always refresh all three). Commit+push that as a tiny follow-up. A future
+cleanup worth doing: have `linux.yml` copy these three files into the
+release tarball itself alongside the binary, so this whole manual step
+goes away — same single already-fetched archive source as the binary.
+
 ### Flathub — one-time remaining work (not per-release)
 
 1. ~~Fill in the **libmpv** module~~ — done (2026-10-03). Trimmed down from
