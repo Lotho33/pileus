@@ -56,6 +56,12 @@ class _ProfileSettingsBodyState extends State<_ProfileSettingsBody> {
   final _forgetDeviceFn = FocusNode();
   final _logoutFn = FocusNode();
   final _deleteFn = FocusNode();
+  // Guards the explicit initial-focus request in the BlocConsumer listener
+  // below — fires once, the first time data is actually ready, not on
+  // every later ProfileMgmtLoaded re-emission (a rename, a PIN change...),
+  // which would otherwise yank focus back to "Nome" out from under
+  // whatever the user has since navigated to.
+  bool _initialFocusRequested = false;
 
   @override
   void dispose() {
@@ -90,6 +96,21 @@ class _ProfileSettingsBodyState extends State<_ProfileSettingsBody> {
             Expanded(
               child: BlocConsumer<ProfileManagementCubit, ProfileMgmtState>(
                 listener: (context, state) {
+                  // PileusLoadingSwitcher holds its spinner up for a 260ms
+                  // minimum even once the real (near-instant, usually
+                  // cached) data is ready — the "Nome" row's own
+                  // autofocus: true, declared on a widget that doesn't
+                  // mount until that delay (plus the switcher's 220ms
+                  // crossfade) elapses, unreliably loses the race to
+                  // actually land focus. Requesting it explicitly, once,
+                  // the moment the data is actually ready sidesteps that
+                  // entirely instead of depending on autofocus timing.
+                  if (state is ProfileMgmtLoaded && !_initialFocusRequested) {
+                    _initialFocusRequested = true;
+                    WidgetsBinding.instance.addPostFrameCallback((_) {
+                      if (mounted) _nameFn.requestFocus();
+                    });
+                  }
                   if (state is ProfileMgmtDeleted) {
                     // Going straight to /profiles left AuthBloc in
                     // AuthenticatedState, so ProfileSelectionScreen (which

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../../core/theme/app_theme.dart';
 import '../on_screen_keyboard.dart';
+import '../on_screen_text_display.dart';
 import '../tv_focusable.dart';
 import 'dialog_action_button.dart';
 
@@ -119,27 +120,25 @@ class _SettingsTextInputState extends State<_SettingsTextInput> {
               canRequestFocus: false,
               onDown: () =>
                   _keyboardKey.currentState?.firstFocusNode.requestFocus(),
-              builder: (context, _) => TextField(
+              builder: (context, _) => OnScreenTextDisplay(
                 controller: _controller,
                 focusNode: _fieldFn,
-                // OnScreenKeyboard below is the only intended input source —
-                // readOnly stops Android's own IME popping up on top of it.
-                readOnly: true,
-                // No blinking caret / theme-default focus glow for real
-                // D-pad focus landing here — see
-                // device_pairing_screen.dart's identical field for why.
-                showCursor: false,
+                hintText: widget.hintText,
+                hintStyle: const TextStyle(color: AppTheme.textLow),
                 style: const TextStyle(color: Colors.white),
-                decoration: InputDecoration(
-                  hintText: widget.hintText,
-                  errorText: _error,
-                  focusedBorder: Theme.of(context)
-                      .inputDecorationTheme
-                      .enabledBorder,
-                ),
-                onSubmitted: (_) => _save(),
+                fillColor: AppTheme.bg,
+                borderColor: AppTheme.border,
+                contentPadding:
+                    const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
               ),
             ),
+            if (_error != null) ...[
+              const SizedBox(height: 6),
+              Text(
+                _error!,
+                style: const TextStyle(color: Colors.red, fontSize: 12),
+              ),
+            ],
             const SizedBox(height: 14),
             OnScreenKeyboard(
               key: _keyboardKey,

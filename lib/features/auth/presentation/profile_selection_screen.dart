@@ -691,31 +691,43 @@ class _AddProfileDialogState extends State<_AddProfileDialog> {
                   canRequestFocus: false,
                   onDown: () =>
                       _keyboardKey.currentState?.firstFocusNode.requestFocus(),
-                  builder: (context, _) => TextField(
-                    controller: _nameCtrl,
+                  // Not OnScreenTextDisplay — this one's an underline +
+                  // floating-label look, not the bordered-box style every
+                  // other display field shares, so it's simpler replicated
+                  // directly than bent into that widget's API. Same reason
+                  // as OnScreenTextDisplay's own doc: a real EditableText
+                  // (what used to be here) creates a DOM input a browser can
+                  // attach an unwanted IME to on web — this is a plain Text,
+                  // nothing for one to attach to.
+                  builder: (context, _) => Focus(
                     focusNode: _nameFn,
-                    // See server_discovery_screen.dart's identical field for
-                    // why — OnScreenKeyboard below is the only intended input
-                    // source.
-                    readOnly: true,
-                    // No blinking caret / color-changing underline for real
-                    // D-pad focus landing here — see
-                    // device_pairing_screen.dart's identical field for why.
-                    showCursor: false,
-                    style: TextStyle(
-                        color: Colors.white,
-                        fontSize: AppScale.caption(context)),
-                    decoration: const InputDecoration(
-                      labelText: 'Nome',
-                      labelStyle: TextStyle(color: Colors.white54),
-                      enabledBorder: UnderlineInputBorder(
-                        borderSide: BorderSide(color: Colors.white24),
-                      ),
-                      focusedBorder: UnderlineInputBorder(
-                        borderSide: BorderSide(color: Colors.white24),
+                    child: ListenableBuilder(
+                      listenable: _nameCtrl,
+                      builder: (context, _) => Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const Text('Nome',
+                              style: TextStyle(
+                                  color: Colors.white54, fontSize: 12)),
+                          const SizedBox(height: 4),
+                          Container(
+                            padding: const EdgeInsets.only(bottom: 6),
+                            decoration: const BoxDecoration(
+                              border: Border(
+                                  bottom:
+                                      BorderSide(color: Colors.white24)),
+                            ),
+                            child: Text(
+                              _nameCtrl.text,
+                              style: TextStyle(
+                                  color: Colors.white,
+                                  fontSize: AppScale.caption(context)),
+                            ),
+                          ),
+                        ],
                       ),
                     ),
-                    onSubmitted: (_) => _submit(),
                   ),
                 ),
                 const SizedBox(height: 14),

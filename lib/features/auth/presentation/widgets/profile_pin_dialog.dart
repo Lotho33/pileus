@@ -6,6 +6,7 @@ import '../../../../core/grpc/clients/auth_client.dart' show SetProfilePinRespon
 import '../../../../core/grpc/grpc_errors.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../../../shared/widgets/on_screen_keyboard.dart';
+import '../../../../shared/widgets/on_screen_text_display.dart';
 import '../../../../shared/widgets/settings/dialog_action_button.dart';
 import '../../../../shared/widgets/tv_focusable.dart';
 import '../../data/auth_repository.dart';
@@ -168,41 +169,45 @@ class _ProfileUnlockDialogState extends State<_ProfileUnlockDialog> {
                   canRequestFocus: false,
                   onDown: () => _keyboardKey.currentState?.firstFocusNode
                       .requestFocus(),
-                  builder: (context, _) => TextField(
+                  builder: (context, _) => OnScreenTextDisplay(
                     controller: _pinController,
                     focusNode: _fieldFn,
-                    // OnScreenKeyboard below is the only intended input
-                    // source, same as every other field in the app.
-                    readOnly: true,
-                    // No blinking caret / theme-default focus glow for real
-                    // D-pad focus landing here — see
-                    // device_pairing_screen.dart's identical field for why.
-                    showCursor: false,
                     obscureText: true,
-                    obscuringCharacter: '•',
                     textAlign: TextAlign.center,
-                    maxLength: 8,
                     style: const TextStyle(
                       color: Colors.white,
                       fontSize: 22,
                       letterSpacing: 8,
                     ),
-                    decoration: InputDecoration(
-                      counterText: '',
-                      errorText: _error,
-                      errorMaxLines: 3,
-                      focusedBorder: Theme.of(context)
-                          .inputDecorationTheme
-                          .enabledBorder,
-                    ),
-                    onSubmitted: (_) => _submit(),
+                    fillColor: AppTheme.bg,
+                    borderColor: AppTheme.border,
+                    contentPadding: const EdgeInsets.symmetric(
+                        horizontal: 16, vertical: 14),
                   ),
                 ),
+                if (_error != null) ...[
+                  const SizedBox(height: 6),
+                  Text(
+                    _error!,
+                    textAlign: TextAlign.center,
+                    maxLines: 3,
+                    style: const TextStyle(color: Colors.red, fontSize: 12),
+                  ),
+                ],
                 const SizedBox(height: 14),
                 OnScreenKeyboard(
                   key: _keyboardKey,
                   controller: _pinController,
                   digitsOnly: true,
+                  // Previously only enforced by the real TextField's own
+                  // maxLength — which, like every other field's maxLength in
+                  // this app, never actually applied to on-screen-keyboard
+                  // input in the first place (it writes straight into the
+                  // controller, bypassing TextField's input formatters
+                  // entirely). _submit() still validates length server-side
+                  // too, so this was never a silent-acceptance bug, just a
+                  // "didn't visually stop you at 8" one.
+                  maxLength: 8,
                   onSubmit: _submit,
                   onNavigateUp: () => _fieldFn.requestFocus(),
                   onNavigateDown: () => _rememberFn.requestFocus(),
@@ -505,39 +510,38 @@ class _PinSetupDialogState extends State<_PinSetupDialog> {
                   canRequestFocus: false,
                   onDown: () => _keyboardKey.currentState?.firstFocusNode
                       .requestFocus(),
-                  builder: (context, _) => TextField(
+                  builder: (context, _) => OnScreenTextDisplay(
                     controller: _pinController,
                     focusNode: _fieldFn,
-                    readOnly: true,
-                    // No blinking caret / theme-default focus glow for real
-                    // D-pad focus landing here — see
-                    // device_pairing_screen.dart's identical field for why.
-                    showCursor: false,
                     obscureText: true,
-                    obscuringCharacter: '•',
                     textAlign: TextAlign.center,
-                    maxLength: 8,
                     style: const TextStyle(
                       color: Colors.white,
                       fontSize: 22,
                       letterSpacing: 8,
                     ),
-                    decoration: InputDecoration(
-                      counterText: '',
-                      errorText: _error,
-                      errorMaxLines: 3,
-                      focusedBorder: Theme.of(context)
-                          .inputDecorationTheme
-                          .enabledBorder,
-                    ),
-                    onSubmitted: (_) => _advance(),
+                    fillColor: AppTheme.bg,
+                    borderColor: AppTheme.border,
+                    contentPadding: const EdgeInsets.symmetric(
+                        horizontal: 16, vertical: 14),
                   ),
                 ),
+                if (_error != null) ...[
+                  const SizedBox(height: 6),
+                  Text(
+                    _error!,
+                    textAlign: TextAlign.center,
+                    maxLines: 3,
+                    style: const TextStyle(color: Colors.red, fontSize: 12),
+                  ),
+                ],
                 const SizedBox(height: 14),
                 OnScreenKeyboard(
                   key: _keyboardKey,
                   controller: _pinController,
                   digitsOnly: true,
+                  // See the first PIN field's identical doc.
+                  maxLength: 8,
                   onSubmit: _advance,
                   onNavigateUp: () => _fieldFn.requestFocus(),
                   onNavigateDown: () => _cancelFn.requestFocus(),

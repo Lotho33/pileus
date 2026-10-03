@@ -12,7 +12,7 @@
   Then either:
     - open build/web/ as a Tizen Web project in Tizen Studio and build/run
       from there (it reads this file directly), or
-    - package from the CLI: `tizen package -t wgt -s <profile> -- build/web`
+    - package from the CLI: `tizen package -t wgt -s <profile> [path to] build/web`
 
   `id`/`tizen:application id`/`package` below are PLACEHOLDERS — Tizen
   requires a real author certificate (Tizen Studio > Certificate Manager)
@@ -27,9 +27,9 @@
         version="1.5.1"
         viewmodes="maximized">
 
-  <tizen:application id="PLACEHOLDERAUTH.PileusTV"
-                      package="PLACEHOLDERAUTH"
-                      required_version="6.0"/>
+  <tizen:application id="pileustv01.PileusTV"
+                      package="pileustv01"
+                      required_version="4.0"/>
 
   <name>Pileus</name>
   <icon src="icon.png"/>
@@ -42,12 +42,12 @@
        of any CORS/CSP configured on the server side. -->
   <tizen:privilege name="http://tizen.org/privilege/internet"/>
 
-  <!-- Matches server_discovery_screen.dart's LAN /24 sweep (see
-       _sweepLan's own doc) — needed only if that ever runs on Tizen; it's
-       a no-op on web today (kIsWeb-gated), kept here for when/if a native
-       Tizen network-info API backs it instead. Harmless to leave declared
-       even if unused. -->
-  <tizen:privilege name="http://tizen.org/privilege/network.get"/>
+  <!-- network.get was declared here defensively for a hypothetical future
+       native Tizen network-info API — never actually reached by any Dart
+       code on this entry point (kIsWeb-gated no-op). Removed: a basic
+       author-only certificate (not a Samsung partner/platform-level one)
+       gets install error 118019 ("restricted privilege") for it, confirmed
+       against a real TV. -->
 
   <feature name="http://tizen.org/feature/screen.size.all"/>
 

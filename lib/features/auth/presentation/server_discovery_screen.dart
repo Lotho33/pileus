@@ -13,6 +13,7 @@ import '../../../core/grpc/remote_server_connect.dart';
 import '../../../core/grpc/server_address.dart';
 import '../../../core/theme/app_scale.dart';
 import '../../../shared/widgets/on_screen_keyboard.dart';
+import '../../../shared/widgets/on_screen_text_display.dart';
 import '../../../shared/widgets/pileus_spinner.dart';
 import '../../../shared/widgets/tv_focusable.dart';
 import '../bloc/auth_bloc.dart';
@@ -520,9 +521,8 @@ class _ServerDiscoveryScreenState extends State<ServerDiscoveryScreen> {
                 fontSize: AppScale.caption(context) * 0.85),
           ),
           SizedBox(height: AppScale.space(context, 10)),
-          // Ancestor-only catcher — EditableText only binds left/right (caret)
-          // itself, so arrowDown is free to bubble up here and hand off to the
-          // on-screen keyboard below. hostAddressOnly (see
+          // Ancestor-only catcher — arrowDown is free to bubble up here and
+          // hand off to the on-screen keyboard below. hostAddressOnly (see
           // on_screen_keyboard.dart) covers both an IP (192.168.1.10) and a
           // hostname — digits, lowercase, '.', '-', no space — where before
           // there was no D-pad-native way to type anything into this field
@@ -532,49 +532,29 @@ class _ServerDiscoveryScreenState extends State<ServerDiscoveryScreen> {
             canRequestFocus: false,
             onDown: () =>
                 _keyboardKey.currentState?.firstFocusNode.requestFocus(),
-            builder: (context, _) => TextField(
+            builder: (context, _) => OnScreenTextDisplay(
               controller: _manualController,
               focusNode: _manualFocusNode,
+              hintText: '192.168.1.10 o https://dominio',
+              hintStyle: TextStyle(
+                  color: Colors.white24, fontSize: AppScale.space(context, 18)),
               style: TextStyle(
                   color: Colors.white, fontSize: AppScale.label(context)),
-              keyboardType: TextInputType.url,
-              // All input here comes from OnScreenKeyboard below, writing
-              // straight into the controller — readOnly keeps focus/caret/
-              // selection working normally while stopping Android from also
-              // popping its own on-screen IME on top of it.
-              readOnly: true,
-              // No blinking caret / glowing border for real D-pad focus
-              // landing here — see device_pairing_screen.dart's identical
-              // field for why.
-              showCursor: false,
-              decoration: InputDecoration(
-                hintText: '192.168.1.10 o https://dominio',
-                hintStyle: TextStyle(
-                    color: Colors.white24,
-                    fontSize: AppScale.space(context, 18)),
-                filled: true,
-                fillColor: const Color(0xFF0D0D1A),
-                contentPadding: EdgeInsets.symmetric(
-                    horizontal: AppScale.space(context, 20),
-                    vertical: AppScale.space(context, 18)),
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
-                  borderSide: const BorderSide(color: Color(0xFF2A2A4A)),
-                ),
-                enabledBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
-                  borderSide: const BorderSide(color: Color(0xFF2A2A4A)),
-                ),
-                focusedBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
-                  borderSide: const BorderSide(color: Color(0xFF2A2A4A)),
-                ),
-                errorText: _error,
-                errorStyle: TextStyle(fontSize: AppScale.caption(context)),
-              ),
-              onSubmitted: (_) => _connectManual(),
+              fillColor: const Color(0xFF0D0D1A),
+              borderColor: const Color(0xFF2A2A4A),
+              contentPadding: EdgeInsets.symmetric(
+                  horizontal: AppScale.space(context, 20),
+                  vertical: AppScale.space(context, 18)),
             ),
           ),
+          if (_error != null) ...[
+            SizedBox(height: AppScale.space(context, 6)),
+            Text(
+              _error!,
+              style: TextStyle(
+                  color: Colors.redAccent, fontSize: AppScale.caption(context)),
+            ),
+          ],
           SizedBox(height: AppScale.space(context, 14)),
           OnScreenKeyboard(
             key: _keyboardKey,

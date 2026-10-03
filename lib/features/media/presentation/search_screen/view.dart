@@ -21,9 +21,6 @@ class _SearchView extends StatefulWidget {
 
 class _SearchViewState extends State<_SearchView> {
   final _controller = TextEditingController();
-  // Attached to the (display-only) search field but never focused — see
-  // initState. Kept only so the TextField has a stable node.
-  final _focusNode = FocusNode();
   // Manual back button in the toolbar — now the screen's initial focus and
   // the top of the D-pad chain.
   final _backBtnFn = FocusNode();
@@ -64,6 +61,14 @@ class _SearchViewState extends State<_SearchView> {
   @override
   void initState() {
     super.initState();
+    // The on-screen keyboard mutates _controller directly (never through a
+    // real IME) — a TextField's own onChanged only fires for IME-driven
+    // edits, so it never actually fired for on-screen-keyboard keystrokes.
+    // Listening to the controller itself (it's a ChangeNotifier) is what
+    // makes live search actually reactive to it, regardless of where a
+    // keystroke came from — this is also why the display field below no
+    // longer needs to be a real TextField/EditableText at all.
+    _controller.addListener(_onControllerChanged);
     _loadFilters();
     // Open with results already on screen: an empty query is a valid
     // request — every plugin answers it with its default (popularity)
@@ -117,12 +122,25 @@ class _SearchViewState extends State<_SearchView> {
   @override
   void dispose() {
     _debounceTimer?.cancel();
+    _controller.removeListener(_onControllerChanged);
     _controller.dispose();
-    _focusNode.dispose();
     _backBtnFn.dispose();
     _filterBtnFn.dispose();
     _filterPanelFirstFn.dispose();
     super.dispose();
+  }
+
+  String _lastControllerText = '';
+
+  // TextEditingController notifies on every change, including a bare
+  // selection/cursor move with no text change — guard against re-running
+  // the debounce for those (there's no real caret here, but cheap safety
+  // regardless of what else ever calls notifyListeners on this controller).
+  void _onControllerChanged() {
+    final text = _controller.text;
+    if (text == _lastControllerText) return;
+    _lastControllerText = text;
+    _onQueryChanged(text);
   }
 
   // Live search — fires ~350ms after the last keystroke (hardware or the
@@ -294,37 +312,39 @@ class _SearchViewState extends State<_SearchView> {
                                           // field's own caret handling. Input
                                           // comes solely from the on-screen
                                           // keyboard, which mutates
-                                          // _controller directly (still fires
-                                          // onChanged for live search).
+                                          // _controller directly — live
+                                          // search is driven by
+                                          // _onControllerChanged listening to
+                                          // it (see initState), not by a real
+                                          // TextField's onChanged (which
+                                          // never fires for a
+                                          // controller-only mutation with no
+                                          // real IME involved — this used to
+                                          // be a real TextField/EditableText,
+                                          // which also meant a DOM input a
+                                          // browser could attach an unwanted
+                                          // IME to on web; a plain reactive
+                                          // Text has nothing for one to
+                                          // attach to).
                                           child: ExcludeFocus(
-                                            child: TextField(
-                                              controller: _controller,
-                                              focusNode: _focusNode,
-                                              // OnScreenKeyboard below is the
-                                              // only intended input source —
-                                              // readOnly stops Android's own
-                                              // IME from also popping up on
-                                              // top of it.
-                                              readOnly: true,
-                                              style: TextStyle(
-                                                  color: Colors.white,
-                                                  fontSize: barH * 0.30),
-                                              cursorColor: Colors.white,
-                                              decoration: InputDecoration(
-                                                border: InputBorder.none,
-                                                hintText:
-                                                    'Cerca in ${widget.pluginName}...',
-                                                hintStyle: TextStyle(
-                                                  color: Colors.white
-                                                      .withValues(alpha: 0.35),
-                                                  fontSize: barH * 0.30,
-                                                ),
-                                                isDense: true,
-                                              ),
-                                              onChanged: _onQueryChanged,
-                                              onSubmitted: _submit,
-                                              textInputAction:
-                                                  TextInputAction.search,
+                                            child: ListenableBuilder(
+                                              listenable: _controller,
+                                              builder: (context, _) {
+                                                final text = _controller.text;
+                                                return Text(
+                                                  text.isEmpty
+                                                      ? 'Cerca in ${widget.pluginName}...'
+                                                      : text,
+                                                  style: TextStyle(
+                                                    color: text.isEmpty
+                                                        ? Colors.white
+                                                            .withValues(
+                                                                alpha: 0.35)
+                                                        : Colors.white,
+                                                    fontSize: barH * 0.30,
+                                                  ),
+                                                );
+                                              },
                                             ),
                                           ),
                                         ),

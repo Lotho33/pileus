@@ -6,13 +6,19 @@
 #
 # Pushing the vX.Y.Z tag triggers .github/workflows/release.yml, which
 # builds the signed Android APKs and the web bundle and attaches them to
-# the GitHub Release (the sideload/Obtainium channel). This script also
-# dispatches linux.yml (the desktop Linux tarball) right after, via `gh` —
-# so "cut a release" covers Android + web + desktop Linux in one run
-# instead of needing a second manual trip to the Actions tab. The store
-# build (signed AAB) and the Windows installer stay separate,
-# manually-triggered workflows — store.yml / windows.yml — a store
-# submission and a Windows build aren't something every release needs.
+# the GitHub Release (the sideload/Obtainium channel). This script then
+# dispatches every other per-platform workflow for the same tag via `gh` —
+# linux.yml (desktop tarball), windows.yml (installer + portable zip), and
+# store.yml (signed AAB + per-ABI APKs for Play/Amazon) — so "cut a
+# release" covers every build target in one run instead of a manual trip
+# to the Actions tab per platform. Each is individually skippable (see
+# env overrides below) for a release that genuinely doesn't need one of
+# them (e.g. no store submission is due this cycle).
+#
+# GitHub Pages (the privacy policy / docs site, lotho33.github.io/pileus)
+# needs nothing here — it's GitHub's own branch-deploy from /docs on
+# main, not a workflow this repo defines; it redeploys on its own the
+# moment the version-bump commit below lands on main.
 #
 # Once linux.yml's run finishes and the tarball is attached to the
 # release, run `scripts/update-flatpak-manifest.sh X.Y.Z` to point the
@@ -21,16 +27,20 @@
 # Flathub submission steps.
 #
 # Override via env:
-#   PILEUS_RELEASE_REMOTE   git remote to push to       (default: origin)
-#   PILEUS_RELEASE_BRANCH   branch to push               (default: main)
-#   PILEUS_ACTIONS_URL      "follow the build" URL printed at the end
-#   PILEUS_SKIP_LINUX_BUILD set to 1 to skip the linux.yml dispatch below
+#   PILEUS_RELEASE_REMOTE      git remote to push to       (default: origin)
+#   PILEUS_RELEASE_BRANCH      branch to push               (default: main)
+#   PILEUS_ACTIONS_URL         "follow the build" URL printed at the end
+#   PILEUS_SKIP_LINUX_BUILD    set to 1 to skip the linux.yml dispatch
+#   PILEUS_SKIP_WINDOWS_BUILD  set to 1 to skip the windows.yml dispatch
+#   PILEUS_SKIP_STORE_BUILD    set to 1 to skip the store.yml dispatch
 set -euo pipefail
 
 REMOTE=${PILEUS_RELEASE_REMOTE:-origin}
 BRANCH=${PILEUS_RELEASE_BRANCH:-main}
 ACTIONS_URL=${PILEUS_ACTIONS_URL:-}
 SKIP_LINUX=${PILEUS_SKIP_LINUX_BUILD:-0}
+SKIP_WINDOWS=${PILEUS_SKIP_WINDOWS_BUILD:-0}
+SKIP_STORE=${PILEUS_SKIP_STORE_BUILD:-0}
 
 ver=${1:-}
 dry=false
@@ -87,20 +97,38 @@ else
   echo "follow the build on the '$REMOTE' remote's Actions page."
 fi
 
-# --- also build the desktop Linux tarball -----------------------------------
-if [[ "$SKIP_LINUX" != "1" ]]; then
-  if command -v gh >/dev/null 2>&1; then
+# --- also dispatch every other per-platform workflow for this tag ----------
+# $1: workflow file (e.g. linux.yml)  $2: skip flag's value  $3: what it
+# produces, for the success message.  $4: the env var that controls $2, for
+# the skip message.
+dispatch_workflow() {
+  local workflow="$1" skip="$2" produces="$3" skip_var="$4"
+  if [[ "$skip" == "1" ]]; then
     echo
-    echo "dispatching linux.yml for $tag …"
-    if gh workflow run linux.yml -f "tag=$tag"; then
-      echo "dispatched — attaches pileus-${ver}-linux-x64.tar.gz to the $tag release once it finishes."
-      echo "once it's done: scripts/update-flatpak-manifest.sh $ver"
-    else
-      echo "gh workflow run failed — trigger linux.yml by hand from the Actions tab instead." >&2
-    fi
-  else
-    echo
-    echo "gh (GitHub CLI) not found — trigger linux.yml by hand from the Actions tab" >&2
-    echo "(Actions -> linux -> Run workflow, tag: $tag) to publish the desktop build." >&2
+    echo "skipping $workflow ($skip_var=1)."
+    return
   fi
-fi
+  if ! command -v gh >/dev/null 2>&1; then
+    echo
+    echo "gh (GitHub CLI) not found — trigger $workflow by hand from the Actions" >&2
+    echo "tab (tag: $tag) to publish $produces." >&2
+    return
+  fi
+  echo
+  echo "dispatching $workflow for $tag …"
+  if gh workflow run "$workflow" -f "tag=$tag"; then
+    echo "dispatched — will produce $produces once it finishes."
+  else
+    echo "gh workflow run failed — trigger $workflow by hand from the Actions tab instead." >&2
+  fi
+}
+
+dispatch_workflow linux.yml "$SKIP_LINUX" \
+  "pileus-${ver}-linux-x64.tar.gz, attached to the $tag release (then: scripts/update-flatpak-manifest.sh $ver)" \
+  PILEUS_SKIP_LINUX_BUILD
+dispatch_workflow windows.yml "$SKIP_WINDOWS" \
+  "the Windows installer + portable zip, attached to the $tag release" \
+  PILEUS_SKIP_WINDOWS_BUILD
+dispatch_workflow store.yml "$SKIP_STORE" \
+  "the signed AAB + per-ABI APKs for Play/Amazon, as a downloadable workflow artifact (pileus-${ver}-store)" \
+  PILEUS_SKIP_STORE_BUILD

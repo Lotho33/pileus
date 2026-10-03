@@ -91,34 +91,35 @@ class _QuickSearchBarState extends State<_QuickSearchBar> {
                       color: AppTheme.textHigh.withValues(alpha: 0.5)),
                   SizedBox(width: barH * 0.2),
                   Expanded(
-                    child: TextField(
-                      controller: widget.controller,
+                    // OnScreenKeyboard below is the only intended input
+                    // source — this used to be a real TextField with
+                    // readOnly+keyboardType.none, which on web still left a
+                    // real EditableText/DOM input behind for a browser to
+                    // attach an unwanted IME to (confirmed on webOS); a
+                    // plain reactive Text has nothing for one to attach to.
+                    // That also drops the real blinking caret this had while
+                    // expanded — no EditableText means no caret to blink —
+                    // the keyboard itself being visible/expanded is left to
+                    // carry the "you're typing here" signal on its own.
+                    child: Focus(
                       focusNode: widget.focusNode,
-                      // OnScreenKeyboard below is the only intended input
-                      // source — readOnly stops Android's own IME from also
-                      // popping up on top of it. widget.focusNode never
-                      // actually gains D-pad focus (canRequestFocus: false,
-                      // see _textFieldFocusNode's own doc), so showCursor is
-                      // forced on explicitly — otherwise the caret would never
-                      // render at all. Only while expanded, though: a blinking
-                      // caret in the collapsed bar (which just shows the
-                      // "Cerca in …" hint) read as the bar being focused.
-                      readOnly: true,
-                      showCursor: widget.expanded,
-                      style: TextStyle(
-                          color: AppTheme.textHigh, fontSize: barH * 0.32),
-                      cursorColor: AppTheme.textHigh,
-                      decoration: InputDecoration(
-                        border: InputBorder.none,
-                        isDense: true,
-                        hintText: 'Cerca in ${widget.pluginName}…',
-                        hintStyle: TextStyle(
-                          color: AppTheme.textHigh.withValues(alpha: 0.4),
-                          fontSize: barH * 0.32,
-                        ),
+                      child: ListenableBuilder(
+                        listenable: widget.controller,
+                        builder: (context, _) {
+                          final text = widget.controller.text;
+                          return Text(
+                            text.isEmpty
+                                ? 'Cerca in ${widget.pluginName}…'
+                                : text,
+                            style: TextStyle(
+                              color: text.isEmpty
+                                  ? AppTheme.textHigh.withValues(alpha: 0.4)
+                                  : AppTheme.textHigh,
+                              fontSize: barH * 0.32,
+                            ),
+                          );
+                        },
                       ),
-                      onSubmitted: (_) => widget.onSubmitted(),
-                      textInputAction: TextInputAction.search,
                     ),
                   ),
                 ],

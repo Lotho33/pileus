@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../../core/theme/app_scale.dart';
 import '../../../shared/widgets/on_screen_keyboard.dart';
+import '../../../shared/widgets/on_screen_text_display.dart';
 import '../../../shared/widgets/pileus_spinner.dart';
 import '../../../shared/widgets/tv_focusable.dart';
 import '../bloc/auth_bloc.dart';
@@ -153,7 +154,6 @@ class _DevicePairingScreenState extends State<DevicePairingScreen> {
                                     _PairingCodeField(
                                       controller: _pinController,
                                       focusNode: _focusNode,
-                                      onSubmitted: () => _submit(context),
                                       onNavigateDown: () => _keyboardKey
                                           .currentState?.firstFocusNode
                                           .requestFocus(),
@@ -251,62 +251,34 @@ class _DevicePairingScreenState extends State<DevicePairingScreen> {
 class _PairingCodeField extends StatelessWidget {
   final TextEditingController controller;
   final FocusNode focusNode;
-  final VoidCallback onSubmitted;
   final VoidCallback onNavigateDown;
   const _PairingCodeField({
     required this.controller,
     required this.focusNode,
-    required this.onSubmitted,
     required this.onNavigateDown,
   });
 
   @override
   Widget build(BuildContext context) {
-    // Ancestor-only catcher — EditableText only binds left/right (caret)
-    // itself, so arrowDown is free to bubble up here and hand off to the
-    // on-screen keyboard below, same idiom used throughout the app
-    // wherever a TextField is paired with one.
+    // Ancestor-only catcher — arrowDown is free to bubble up here and hand
+    // off to the on-screen keyboard below, same idiom used throughout the
+    // app wherever a display field is paired with one.
     return TvFocusable(
       canRequestFocus: false,
       onDown: onNavigateDown,
-      builder: (context, _) => TextField(
+      builder: (context, _) => OnScreenTextDisplay(
         controller: controller,
         focusNode: focusNode,
-        // See server_discovery_screen.dart's identical field for why —
-        // OnScreenKeyboard below is the only intended input source.
-        readOnly: true,
-        // No caret/highlight for real D-pad focus landing here — it never
-        // means "start typing" (that's the on-screen keyboard's job), so a
-        // blinking cursor and a glowing border just read as a dead, confusing
-        // "focused" state. The field's own focus still works for D-pad
-        // navigation (Up from the keyboard lands back here), it just no
-        // longer looks any different than unfocused.
-        showCursor: false,
+        hintText: 'es. 8H7K12',
+        hintStyle: TextStyle(
+            color: Colors.white24, fontSize: AppScale.label(context)),
         style:
             TextStyle(color: Colors.white, fontSize: AppScale.label(context)),
-        decoration: InputDecoration(
-          hintText: 'es. 8H7K12',
-          hintStyle: TextStyle(
-              color: Colors.white24, fontSize: AppScale.label(context)),
-          filled: true,
-          fillColor: const Color(0xFF0D0D1A),
-          contentPadding: EdgeInsets.symmetric(
-              horizontal: AppScale.space(context, 20),
-              vertical: AppScale.space(context, 18)),
-          border: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(12),
-            borderSide: const BorderSide(color: Color(0xFF2A2A4A)),
-          ),
-          enabledBorder: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(12),
-            borderSide: const BorderSide(color: Color(0xFF2A2A4A)),
-          ),
-          focusedBorder: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(12),
-            borderSide: const BorderSide(color: Color(0xFF2A2A4A)),
-          ),
-        ),
-        onSubmitted: (_) => onSubmitted(),
+        fillColor: const Color(0xFF0D0D1A),
+        borderColor: const Color(0xFF2A2A4A),
+        contentPadding: EdgeInsets.symmetric(
+            horizontal: AppScale.space(context, 20),
+            vertical: AppScale.space(context, 18)),
       ),
     );
   }
