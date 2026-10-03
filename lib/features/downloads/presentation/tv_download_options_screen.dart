@@ -249,6 +249,7 @@ class _BodyState extends State<_Body> {
           SettingsHeader(
             title: 'Scarica',
             focusNode: _backFn,
+            autofocus: true,
             onBack: () => context.pop(),
             onFocusDown: () => _nodeFor('first').requestFocus(),
           ),
@@ -405,6 +406,13 @@ class _ReadyList extends StatelessWidget {
       'upgrade',
       'confirm',
     ];
+    // _BodyState's header wires its own onFocusDown to nodeFor('first') —
+    // a key no row here ever otherwise produces, since the real first row
+    // is content-dependent ('variant_<id>', normally). Without this alias
+    // that was a dead end: pressing ↓ from "Scarica" focused a FocusNode
+    // never attached to anything visible. keys[] is just this widget's own
+    // opaque FocusNode-identity map, so overwriting its first entry is safe.
+    if (keys.isNotEmpty) keys[0] = 'first';
     FocusNode? up(int i) => i > 0 ? nodeFor(keys[i - 1]) : backFn;
     FocusNode? down(int i) =>
         i < keys.length - 1 ? nodeFor(keys[i + 1]) : null;

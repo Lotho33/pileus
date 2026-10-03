@@ -71,6 +71,17 @@ class _SettingsPluginsBodyState extends State<_SettingsPluginsBody> {
   // settings, where its visibility can change.
   List<PluginInfo> _hidden = [];
 
+  // Guards the explicit initial-focus request below — PluginBloc is a
+  // long-lived singleton, so this screen *might* open straight onto an
+  // already-loaded state (safe, genuinely the first real build) or might
+  // transition loading→loaded under it (the same race fixed elsewhere in
+  // this app — see watch_button.dart/episode_detail_screen.dart's identical
+  // notes: autofocus declared on a widget that only mounts once state
+  // arrives doesn't reliably win against that same-frame rebuild). One-shot
+  // so a later reload (the bloc polls) never yanks focus back to "Riordina
+  // plugin" out from under wherever the user has since moved.
+  bool _initialFocusRequested = false;
+
   @override
   void initState() {
     super.initState();
@@ -125,7 +136,20 @@ class _SettingsPluginsBodyState extends State<_SettingsPluginsBody> {
               onFocusDown: () => _reorderFn.requestFocus(),
             ),
             Expanded(
-              child: BlocBuilder<PluginBloc, PluginState>(
+              child: BlocConsumer<PluginBloc, PluginState>(
+                listener: (context, state) {
+                  if (state is! PluginsLoaded || _initialFocusRequested) {
+                    return;
+                  }
+                  _initialFocusRequested = true;
+                  // Matches build()'s own unconditional autofocus: true on
+                  // "Riordina plugin" — it's still a valid (if disabled)
+                  // focus target with a single plugin, same as the row
+                  // itself stays visible either way.
+                  WidgetsBinding.instance.addPostFrameCallback((_) {
+                    if (mounted) _reorderFn.requestFocus();
+                  });
+                },
                 builder: (context, state) {
                   if (state is PluginLoading || state is PluginInitial) {
                     return Center(

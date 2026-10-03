@@ -106,6 +106,10 @@ class _EpisodeDetailScreenState extends State<EpisodeDetailScreen> {
           _sources = streamsRes.sources;
           _loading = false;
         });
+        // _EpisodeBodyState's own initState handles the initial-focus
+        // request (its _backFn/_sourceFn aren't in scope here — this class
+        // only loads the data, _EpisodeBody owns the UI/focus once it's
+        // ready).
       }
       // Episode's own details never carry genres/series-level plot/poster —
       // those live on the parent show. Non-blocking: continue-watching
@@ -118,6 +122,8 @@ class _EpisodeDetailScreenState extends State<EpisodeDetailScreen> {
           _error = e.toString();
           _loading = false;
         });
+        // The error branch renders ErrorRetryView instead — see its own
+        // initState for its identical fix.
       }
     }
   }
@@ -258,6 +264,17 @@ class _EpisodeBodyState extends State<_EpisodeBody> {
   void initState() {
     super.initState();
     _syncSourceNodes();
+    // _EpisodeBody only ever gets constructed once the parent's load
+    // actually finishes (the loading spinner is a different widget
+    // entirely), so declarative autofocus on the buttons below races that
+    // same-frame mount — unreliable, per every other note of this shape in
+    // this app (watch_button.dart, error_retry_view.dart...). This
+    // initState firing is itself the real "ready" signal; mirrors build()'s
+    // own autofocus: sources.isEmpty choice at the back button.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      (widget.sources.isEmpty ? _backFn : _sourceFn[0]).requestFocus();
+    });
   }
 
   @override

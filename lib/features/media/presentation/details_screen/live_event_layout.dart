@@ -23,11 +23,25 @@ class _LiveEventLayoutState extends State<_LiveEventLayout> {
   bool _loaded = false;
   String? _error;
   bool _launched = false;
+  // Only the error branch ever really needs this: the success path
+  // auto-navigates to the player (_launch below) almost immediately, so
+  // _SourceList's own autofocus races a screen that's already on its way
+  // out — not worth chasing. An error, though, leaves the user parked here
+  // with "Riprova" as the only way forward, same unreliable-autofocus-on-a
+  // -widget-that-only-mounts-after-an-async-load pattern fixed elsewhere
+  // in this app (see watch_button.dart's identical note).
+  final _retryFn = FocusNode();
 
   @override
   void initState() {
     super.initState();
     _loadAndLaunch();
+  }
+
+  @override
+  void dispose() {
+    _retryFn.dispose();
+    super.dispose();
   }
 
   Future<void> _loadAndLaunch() async {
@@ -41,6 +55,7 @@ class _LiveEventLayoutState extends State<_LiveEventLayout> {
           _loaded = true;
           _error = 'Nessuna sorgente disponibile';
         });
+        _requestRetryFocus();
         return;
       }
       setState(() {
@@ -56,8 +71,15 @@ class _LiveEventLayoutState extends State<_LiveEventLayout> {
           _loaded = true;
           _error = e.toString();
         });
+        _requestRetryFocus();
       }
     }
+  }
+
+  void _requestRetryFocus() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _retryFn.requestFocus();
+    });
   }
 
   void _launch(StreamSource src) {
@@ -246,6 +268,7 @@ class _LiveEventLayoutState extends State<_LiveEventLayout> {
                         else if (_error != null)
                           _ErrorWithRetry(
                               error: _error!,
+                              focusNode: _retryFn,
                               onRetry: () {
                                 setState(() {
                                   _loaded = false;
@@ -372,7 +395,9 @@ class _SourceListState extends State<_SourceList> {
 class _ErrorWithRetry extends StatelessWidget {
   final String error;
   final VoidCallback onRetry;
-  const _ErrorWithRetry({required this.error, required this.onRetry});
+  final FocusNode? focusNode;
+  const _ErrorWithRetry(
+      {required this.error, required this.onRetry, this.focusNode});
 
   @override
   Widget build(BuildContext context) {
@@ -386,6 +411,7 @@ class _ErrorWithRetry extends StatelessWidget {
             overflow: TextOverflow.ellipsis),
         SizedBox(height: sh * (12.0 / 1080.0)),
         TvFocusable(
+          focusNode: focusNode,
           autofocus: true,
           onActivate: onRetry,
           builder: (context, focused) => AnimatedContainer(

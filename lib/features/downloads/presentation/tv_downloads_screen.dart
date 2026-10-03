@@ -80,6 +80,7 @@ class _ViewState extends State<_View> {
                 SettingsHeader(
                   title: 'Download',
                   focusNode: _backFn,
+                  autofocus: true,
                   onBack: () => context.pop(),
                   onFocusDown: () => _nodeFor('row_0').requestFocus(),
                 ),

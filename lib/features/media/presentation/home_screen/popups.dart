@@ -235,6 +235,7 @@ class _MediaDetailsPopup extends StatefulWidget {
 
 class _MediaDetailsPopupState extends State<_MediaDetailsPopup> {
   final _scrollCtrl = ScrollController();
+  final _closeFn = FocusNode();
   DetailsResponse? _details;
   bool _loading = true;
   String? _error;
@@ -248,6 +249,7 @@ class _MediaDetailsPopupState extends State<_MediaDetailsPopup> {
   @override
   void dispose() {
     _scrollCtrl.dispose();
+    _closeFn.dispose();
     super.dispose();
   }
 
@@ -260,6 +262,7 @@ class _MediaDetailsPopupState extends State<_MediaDetailsPopup> {
           _details = res;
           _loading = false;
         });
+        _requestCloseFocus();
       }
     } catch (e) {
       if (mounted) {
@@ -267,8 +270,21 @@ class _MediaDetailsPopupState extends State<_MediaDetailsPopup> {
           _error = e.toString();
           _loading = false;
         });
+        _requestCloseFocus();
       }
     }
+  }
+
+  // Both the loaded and error branches only mount _TvCloseBar on the same
+  // frame _loading flips false — the same declarative-autofocus-vs-async
+  // race already fixed elsewhere (watch_button.dart, error_retry_view.dart
+  // etc.), made worse here by showDialog's own fade/scale route transition
+  // racing it too. An explicit post-frame request, fired exactly once from
+  // the real data-arrival point, is the established fix.
+  void _requestCloseFocus() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _closeFn.requestFocus();
+    });
   }
 
   void _scrollBy(double delta) {
@@ -305,12 +321,27 @@ class _MediaDetailsPopupState extends State<_MediaDetailsPopup> {
                             color: AppTheme.primary)),
                   )
                 : _error != null
-                    ? SizedBox(
-                        height: 200,
-                        child: Center(
-                          child: Text(_error!,
-                              style: TextStyle(color: Colors.red[300])),
-                        ),
+                    ? Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          SizedBox(
+                            height: 200,
+                            child: Center(
+                              child: Text(_error!,
+                                  style: TextStyle(color: Colors.red[300])),
+                            ),
+                          ),
+                          // Without this, an error here was a genuine focus
+                          // dead-end: nothing in the whole dialog could ever
+                          // hold focus, so the D-pad (including Back) did
+                          // nothing and the only way out was killing the app.
+                          _TvCloseBar(
+                            focusNode: _closeFn,
+                            onClose: () => Navigator.of(context).pop(),
+                            onScrollUp: () {},
+                            onScrollDown: () {},
+                          ),
+                        ],
                       )
                     : Column(
                         mainAxisSize: MainAxisSize.min,
@@ -331,6 +362,7 @@ class _MediaDetailsPopupState extends State<_MediaDetailsPopup> {
                             ),
                           ),
                           _TvCloseBar(
+                            focusNode: _closeFn,
                             onClose: () => Navigator.of(context).pop(),
                             onScrollUp: () => _scrollBy(-140),
                             onScrollDown: () => _scrollBy(140),
@@ -567,10 +599,17 @@ class _TvCloseBar extends StatefulWidget {
   final VoidCallback onScrollUp;
   final VoidCallback onScrollDown;
 
+  /// Lets the caller drive focus explicitly (see _MediaDetailsPopupState's
+  /// _requestCloseFocus) instead of relying on this widget's own declarative
+  /// autofocus, which races the loading/error branch it only mounts on.
+  /// Falls back to an owned node + autofocus when omitted.
+  final FocusNode? focusNode;
+
   const _TvCloseBar({
     required this.onClose,
     required this.onScrollUp,
     required this.onScrollDown,
+    this.focusNode,
   });
 
   @override
@@ -579,11 +618,13 @@ class _TvCloseBar extends StatefulWidget {
 
 class _TvCloseBarState extends State<_TvCloseBar> {
   bool _focused = false;
-  final _fn = FocusNode();
+  FocusNode? _ownFn;
+
+  FocusNode get _fn => widget.focusNode ?? (_ownFn ??= FocusNode());
 
   @override
   void dispose() {
-    _fn.dispose();
+    _ownFn?.dispose();
     super.dispose();
   }
 
@@ -591,7 +632,7 @@ class _TvCloseBarState extends State<_TvCloseBar> {
   Widget build(BuildContext context) {
     return Focus(
       focusNode: _fn,
-      autofocus: true,
+      autofocus: widget.focusNode == null,
       onFocusChange: (v) => setState(() => _focused = v),
       onKeyEvent: (_, event) {
         if (event is! KeyDownEvent && event is! KeyRepeatEvent) {

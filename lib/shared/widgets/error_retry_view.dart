@@ -52,6 +52,31 @@ class _ErrorRetryViewState extends State<ErrorRetryView> {
   final _secondaryFn = FocusNode();
 
   @override
+  void initState() {
+    super.initState();
+    // Declarative autofocus on the action buttons below has repeatedly
+    // proven unreliable here: ErrorRetryView almost always mounts as the
+    // "error" branch of some parent's loading/error/content switch (an
+    // AnimatedSwitcher, a PileusLoadingSwitcher...), i.e. on a rebuild
+    // triggered the same frame the error itself arrives — not this app's
+    // very first frame — and racing that switch has caused dead "nothing
+    // is focused" screens elsewhere too (see watch_button.dart and
+    // episode_detail_screen.dart's identical notes). This widget's own
+    // initState always fires exactly once, on its own real first mount,
+    // regardless of what the parent is mid-transitioning through, so it's
+    // what the explicit request below rides on instead.
+    if (!widget.autofocus) return;
+    final hasRetry = widget.onRetry != null;
+    final hasSecondary =
+        widget.onSecondary != null && widget.secondaryLabel != null;
+    if (!hasRetry && !hasSecondary) return;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      (hasRetry ? _retryFn : _secondaryFn).requestFocus();
+    });
+  }
+
+  @override
   void dispose() {
     _retryFn.dispose();
     _secondaryFn.dispose();

@@ -421,6 +421,13 @@ class _PosterGridView extends StatelessWidget {
                 posterUrl: item.posterUrl,
                 width: actualCardW,
                 height: actualCardH,
+                // Unlike _EpisodeListView's tiles, this never set autofocus
+                // on anything — _BackButton above only claims it when
+                // `items.isEmpty` (impossible here; that case short-circuits
+                // to the "Niente da mostrare" ErrorRetryView one level up in
+                // _BrowseView), so the grid branch left the whole screen
+                // with no focus target at all and a dead D-pad.
+                autofocus: i == 0,
                 onTap: () {
                   if (item.isDir) {
                     context.push(

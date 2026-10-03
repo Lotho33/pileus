@@ -56,6 +56,21 @@ class _WatchButtonState extends State<_WatchButton> {
   ContinueWatchingItem? _resume;
   bool _resumeChecked = false;
 
+  // Explicit FocusNodes for every branch build() can land on, instead of
+  // letting each TvFocusable manage its own internal one — needed so the
+  // one-shot focus request below (see _maybeRequestInitialFocus) has a
+  // stable target to call .requestFocus() on. autofocus: true alone isn't
+  // reliable here: every one of these branches first mounts on a REBUILD
+  // triggered by _checkResume/_loadSources finishing (the spinner was a
+  // completely different widget), and autofocus racing that rebuild's own
+  // frame has repeatedly proven unreliable elsewhere in this app (see
+  // home_view.dart's identical note on _notReadyFocusNodes) — confirmed
+  // broken in practice on the webOS build, this screen specifically.
+  final _resumeFn = FocusNode();
+  final _watchFn = FocusNode();
+  final _retryFn = FocusNode();
+  bool _initialFocusRequested = false;
+
   @override
   void initState() {
     super.initState();
@@ -63,6 +78,36 @@ class _WatchButtonState extends State<_WatchButton> {
       _checkResume();
       _loadSources();
     }
+  }
+
+  @override
+  void dispose() {
+    _resumeFn.dispose();
+    _watchFn.dispose();
+    _retryFn.dispose();
+    super.dispose();
+  }
+
+  // Mirrors build()'s own branch order so the right node gets the request —
+  // called once both async checks have actually settled (not on every
+  // rebuild after: a source reload via "Riprova", for instance, must not
+  // yank focus back here if the user has since moved on).
+  void _maybeRequestInitialFocus() {
+    if (_initialFocusRequested || !_sourcesLoaded || !_resumeChecked) return;
+    _initialFocusRequested = true;
+    final FocusNode target;
+    if (_resume != null) {
+      target = _resumeFn;
+    } else if (_sourcesError) {
+      target = _retryFn;
+    } else {
+      // Covers both the single-button case and the first popup button in
+      // the multi-source case — same node, see its wiring in build() below.
+      target = _watchFn;
+    }
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) target.requestFocus();
+    });
   }
 
   Future<void> _checkResume() async {
@@ -82,7 +127,10 @@ class _WatchButtonState extends State<_WatchButton> {
     } catch (_) {
       // best-effort — falls back to "Guarda"
     } finally {
-      if (mounted) setState(() => _resumeChecked = true);
+      if (mounted) {
+        setState(() => _resumeChecked = true);
+        _maybeRequestInitialFocus();
+      }
     }
   }
 
@@ -127,6 +175,7 @@ class _WatchButtonState extends State<_WatchButton> {
           _sources = res.sources;
           _sourcesLoaded = true;
         });
+        _maybeRequestInitialFocus();
       }
     } catch (_) {
       if (mounted) {
@@ -134,6 +183,7 @@ class _WatchButtonState extends State<_WatchButton> {
           _sourcesLoaded = true;
           _sourcesError = true;
         });
+        _maybeRequestInitialFocus();
       }
     }
   }
@@ -206,6 +256,7 @@ class _WatchButtonState extends State<_WatchButton> {
     final resume = _resume;
     if (resume != null) {
       return TvFocusable(
+        focusNode: _resumeFn,
         autofocus: true,
         onActivate: () => _playResume(context, resume),
         builder: (context, focused) => _buildSingleButton(
@@ -218,6 +269,7 @@ class _WatchButtonState extends State<_WatchButton> {
     // stream) mascherando il vero problema (rete/sessione scaduta).
     if (_sourcesError) {
       return TvFocusable(
+        focusNode: _retryFn,
         autofocus: true,
         onActivate: _loadSources,
         builder: (context, focused) =>
@@ -236,6 +288,7 @@ class _WatchButtonState extends State<_WatchButton> {
         crossAxisAlignment: WrapCrossAlignment.center,
         children: [
           TvFocusable(
+            focusNode: _watchFn,
             autofocus: true,
             onActivate: onActivate,
             builder: (context, focused) => _buildSingleButton(
@@ -280,6 +333,7 @@ class _WatchButtonState extends State<_WatchButton> {
               PopupPlayButton(
                 label:
                     _sources[i].label.isNotEmpty ? _sources[i].label : 'Guarda',
+                focusNode: i == 0 ? _watchFn : null,
                 autofocus: i == 0,
                 onTap: () => _play(context, _sources[i]),
               ),
