@@ -51,13 +51,26 @@ echo "sha256: $sha256"
 # both the pristine <TARBALL_URL>/<TARBALL_SHA256> template and a prior
 # run's already-filled-in values, so this is safe to re-run on every
 # release.
+#
+# Scoped to the `pileus` module specifically, found via its `- name:
+# pileus` anchor, with the first url:/sha256: *after* it replaced — NOT
+# just "the first url:/sha256: in the whole file". The manifest now has
+# several OTHER modules (libass/ffmpeg/libplacebo/mpv/...) each with their
+# own url:/sha256: lines before this one; an unscoped count=1 replace
+# silently corrupted the wrong module's source on the 1.5.6 release (wrote
+# the pileus tarball URL into libass's git source instead), a real bug
+# caught by flatpak-builder refusing to fetch "module libass" from a
+# release-asset URL.
 python3 - "$manifest" "$url" "$sha256" <<'PY'
 import re, sys
 path, url, sha256 = sys.argv[1:4]
 text = open(path, encoding="utf-8").read()
-text = re.sub(r"url: .*", f"url: {url}", text, count=1)
-text = re.sub(r"sha256: .*", f"sha256: {sha256}", text, count=1)
-open(path, "w", encoding="utf-8").write(text)
+anchor = "- name: pileus"
+i = text.index(anchor)
+head, tail = text[:i], text[i:]
+tail = re.sub(r"url: .*", f"url: {url}", tail, count=1)
+tail = re.sub(r"sha256: .*", f"sha256: {sha256}", tail, count=1)
+open(path, "w", encoding="utf-8").write(head + tail)
 PY
 
 today="$(date -u +%Y-%m-%d)"
