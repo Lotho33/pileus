@@ -67,8 +67,13 @@ class _ProfileUnlockDialogState extends State<_ProfileUnlockDialog> {
   @override
   void initState() {
     super.initState();
+    // Was _fieldFn (the PIN display field) — read-only, same reasoning as
+    // settings_text_dialog.dart's own field: a remote has no physical
+    // keyboard, typing only ever happens through OnScreenKeyboard below.
+    // Landing initial focus there wasted the first D-pad press just to go
+    // Down and reach the keyboard.
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted) _fieldFn.requestFocus();
+      if (mounted) _keyboardKey.currentState?.firstFocusNode.requestFocus();
     });
   }
 
@@ -390,8 +395,10 @@ class _PinSetupDialogState extends State<_PinSetupDialog> {
   @override
   void initState() {
     super.initState();
+    // Same fix as _ProfileUnlockDialogState above — focus the keyboard's
+    // first key, not the read-only PIN display field.
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted) _fieldFn.requestFocus();
+      if (mounted) _keyboardKey.currentState?.firstFocusNode.requestFocus();
     });
   }
 

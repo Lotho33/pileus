@@ -276,9 +276,18 @@ class _CatalogSection extends StatelessWidget {
                   kFeaturedCarouselResizeEnabled);
         }
         if (state is DiscoveryError) {
+          // errorCode is actually the raw e.toString() from
+          // DiscoveryBloc (GrpcError and friends) despite the name —
+          // this row sat it straight into the home feed, in small red
+          // text, with no explanation and no retry. Same class of bug
+          // friendly_error.dart already fixes elsewhere; this row still
+          // has no retry affordance of its own (the 30s PluginBloc poll
+          // is the only thing that un-sticks it), so at least the text
+          // itself should read as something a non-technical user can
+          // make sense of.
           return Padding(
             padding: const EdgeInsets.symmetric(horizontal: 56, vertical: 20),
-            child: Text(state.errorCode,
+            child: Text(friendlyOperationErrorMessage(state.errorCode),
                 style: TextStyle(
                     color: Colors.red.withValues(alpha: 0.6),
                     fontSize: AppScale.space(context, 13))),

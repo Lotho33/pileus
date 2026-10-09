@@ -150,8 +150,11 @@ class _ServerDiscoveryScreenState extends State<ServerDiscoveryScreen> {
     } else {
       setState(() {
         _scanState = _ScanState.notFound;
+        // Was _manualFocusNode (the address display field) — read-only,
+        // same reasoning as settings_text_dialog.dart's own field: typing
+        // only happens through OnScreenKeyboard below.
         WidgetsBinding.instance.addPostFrameCallback((_) {
-          if (mounted) _manualFocusNode.requestFocus();
+          if (mounted) _keyboardKey.currentState?.firstFocusNode.requestFocus();
         });
       });
     }
@@ -304,8 +307,10 @@ class _ServerDiscoveryScreenState extends State<ServerDiscoveryScreen> {
       _scanState = _ScanState.notFound;
       _error = null;
     });
+    // Same fix as _scan()'s own notFound branch above — focus the
+    // keyboard's first key, not the read-only address display field.
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted) _manualFocusNode.requestFocus();
+      if (mounted) _keyboardKey.currentState?.firstFocusNode.requestFocus();
     });
   }
 

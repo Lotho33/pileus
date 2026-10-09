@@ -29,8 +29,16 @@ class _DevicePairingScreenState extends State<DevicePairingScreen> {
   @override
   void initState() {
     super.initState();
-    WidgetsBinding.instance
-        .addPostFrameCallback((_) => _focusNode.requestFocus());
+    // Was _focusNode (the pairing-code display field) — but that field is
+    // read-only, exactly like settings_text_dialog.dart's own field: a
+    // remote has no physical keyboard, so typing only ever happens through
+    // OnScreenKeyboard below. Landing initial focus on the display field
+    // wasted the user's very first D-pad press just to go Down and reach
+    // the keyboard, on what is often the first screen a new device ever
+    // shows. Same idiom as settings_text_dialog.dart/quick_search_area's
+    // own initial focus.
+    WidgetsBinding.instance.addPostFrameCallback(
+        (_) => _keyboardKey.currentState?.firstFocusNode.requestFocus());
   }
 
   @override

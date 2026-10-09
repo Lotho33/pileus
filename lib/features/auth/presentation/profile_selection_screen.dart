@@ -635,8 +635,11 @@ class _AddProfileDialogState extends State<_AddProfileDialog> {
   @override
   void initState() {
     super.initState();
+    // Was _nameFn (the name display field) — read-only, same reasoning as
+    // settings_text_dialog.dart's own field: a remote has no physical
+    // keyboard, typing only happens through OnScreenKeyboard below.
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted) _nameFn.requestFocus();
+      if (mounted) _keyboardKey.currentState?.firstFocusNode.requestFocus();
     });
   }
 
@@ -652,7 +655,9 @@ class _AddProfileDialogState extends State<_AddProfileDialog> {
   void _submit() {
     final name = _nameCtrl.text.trim();
     if (name.isEmpty) {
-      _nameFn.requestFocus();
+      // Same reasoning as initState: send the user back to the keyboard,
+      // not the inert display field, so they can actually fix it.
+      _keyboardKey.currentState?.firstFocusNode.requestFocus();
       return;
     }
     Navigator.pop(context, name);

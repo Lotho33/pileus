@@ -356,10 +356,17 @@ class _ExoPlayerEngine extends PlayerEngine {
         final msg =
             e.parameters?['exception']?.toString() ?? 'Errore sconosciuto';
         perf('exo: exception: $msg');
+        // An exception very often arrives mid-bufferingStart (the stall that
+        // precedes it) — without clearing the flag here it stays stuck true
+        // until a later open() cycles through a fresh bufferingStart/End
+        // pair, reading as "the spinner never went away" even once the
+        // screen's own error handling has moved on.
+        _buffering = false;
         if (msg != _lastError) {
           _lastError = msg;
           onError?.call(msg);
         }
+        _emit();
       case BetterPlayerEventType.changedResolution:
         perf('exo: changedResolution pos=${position.inMilliseconds}ms');
         _emit();

@@ -483,14 +483,23 @@ class _DownloadChipState extends State<_DownloadChip> {
       ),
       builder: (context, focused) {
         final sh = MediaQuery.sizeOf(context).height;
+        // A secondary action next to "Guarda"/the language buttons, not a
+        // second one of equal weight — it used to be sized and bolded
+        // identically to _buildSingleButton's primary "Guarda" (same
+        // padding/icon/font constants), reading as competing for attention
+        // rather than offering an extra option. Unfocused state is now a
+        // plain ghost outline (no fill, dimmer icon/text) instead of a solid
+        // block; focused still gets the same primary-color treatment as
+        // every other focusable here, just scaled down, so it doesn't lose
+        // visibility as a D-pad target.
         return AnimatedContainer(
           duration: const Duration(milliseconds: 150),
           padding: EdgeInsets.symmetric(
-              horizontal: sh * (40.0 / 1080.0),
-              vertical: sh * (18.0 / 1080.0)),
+              horizontal: sh * (20.0 / 1080.0),
+              vertical: sh * (10.0 / 1080.0)),
           decoration: BoxDecoration(
-            color: focused ? AppTheme.primary : Colors.white24,
-            borderRadius: BorderRadius.circular(8),
+            color: focused ? AppTheme.primary : Colors.transparent,
+            borderRadius: BorderRadius.circular(6),
             border: Border.all(
               color: focused ? AppTheme.primary : AppTheme.textLow,
               width: focused ? 0 : 1,
@@ -498,9 +507,9 @@ class _DownloadChipState extends State<_DownloadChip> {
             boxShadow: focused
                 ? [
                     BoxShadow(
-                        color: AppTheme.primary.withValues(alpha: 0.45),
-                        blurRadius: 20,
-                        spreadRadius: 2)
+                        color: AppTheme.primary.withValues(alpha: 0.4),
+                        blurRadius: 12,
+                        spreadRadius: 1)
                   ]
                 : null,
           ),
@@ -508,14 +517,15 @@ class _DownloadChipState extends State<_DownloadChip> {
             mainAxisSize: MainAxisSize.min,
             children: [
               Icon(Icons.download_rounded,
-                  size: sh * (20.0 / 1080.0), color: AppTheme.textHigh),
-              SizedBox(width: sh * (8.0 / 1080.0)),
+                  size: sh * (14.0 / 1080.0),
+                  color: focused ? AppTheme.textHigh : AppTheme.textMid),
+              SizedBox(width: sh * (6.0 / 1080.0)),
               Text(
                 'Scarica',
                 style: TextStyle(
-                  color: AppTheme.textHigh,
-                  fontSize: sh * (20.0 / 1080.0),
-                  fontWeight: FontWeight.bold,
+                  color: focused ? AppTheme.textHigh : AppTheme.textMid,
+                  fontSize: sh * (14.0 / 1080.0),
+                  fontWeight: FontWeight.w600,
                 ),
               ),
             ],

@@ -69,7 +69,11 @@ class _LiveEventLayoutState extends State<_LiveEventLayout> {
       if (mounted) {
         setState(() {
           _loaded = true;
-          _error = e.toString();
+          // Was the raw e.toString() — same class of bug friendly_error.dart
+          // was written to fix for pairing/profile management (this card
+          // has no friendly headline of its own, unlike ErrorRetryView
+          // elsewhere, so the raw text was the *entire* message shown).
+          _error = friendlyOperationErrorMessage(e.toString());
         });
         _requestRetryFocus();
       }

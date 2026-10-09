@@ -267,7 +267,12 @@ class _MediaDetailsPopupState extends State<_MediaDetailsPopup> {
     } catch (e) {
       if (mounted) {
         setState(() {
-          _error = e.toString();
+          // Was the raw e.toString() — this popup has no friendly headline
+          // of its own (unlike ErrorRetryView elsewhere), so the raw text
+          // was the *entire* message shown. Same class of bug
+          // friendly_error.dart was written to fix for pairing/profile
+          // management.
+          _error = friendlyOperationErrorMessage(e.toString());
           _loading = false;
         });
         _requestCloseFocus();

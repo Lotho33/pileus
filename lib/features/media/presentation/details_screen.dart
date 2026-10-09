@@ -11,6 +11,7 @@ import '../../../core/theme/app_scale.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/image_sizing.dart';
 import '../../../core/utils/media_type.dart';
+import '../../auth/friendly_error.dart';
 import '../../../shared/sdui/sport_theme.dart'
     show sportAccentColor, isLiveNow, liveStartTimeLabel;
 import '../../../shared/widgets/error_retry_view.dart';

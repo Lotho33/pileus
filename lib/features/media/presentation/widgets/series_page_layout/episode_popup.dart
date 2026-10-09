@@ -57,6 +57,13 @@ class _EpisodePopupState extends State<_EpisodePopup> {
   bool _loading = true;
   List<StreamSource> _sources = [];
   EpisodeDetails? _details;
+  // Set only by the Future.wait timeout fallback below (the still-
+  // unexplained getStreams/getDetails stall this file's own trace logging
+  // was added to chase) — "Nessuna fonte disponibile" alone would read as a
+  // confirmed, final answer on *that* path too, when it's really "we gave
+  // up waiting", so this path alone gets a Riprova instead of the plain
+  // empty-state text.
+  bool _timedOut = false;
   final _scrollCtrl = ScrollController();
   // Close ✕ (top-right) ↔ first play button — Up from the first source lands
   // on the ✕, Down from the ✕ goes back to it. The ✕ also autofocuses
@@ -64,6 +71,7 @@ class _EpisodePopupState extends State<_EpisodePopup> {
   // no sources at all), so the popup is never left with a dead D-pad.
   final _closeFn = FocusNode();
   final _firstPlayFn = FocusNode();
+  final _retryFn = FocusNode();
   // One node per source button beyond the first (index 0 always reuses
   // _firstPlayFn above) — lets Left/Right be chained explicitly between
   // them instead of relying on implicit directional traversal, which has
@@ -78,6 +86,7 @@ class _EpisodePopupState extends State<_EpisodePopup> {
     _scrollCtrl.dispose();
     _closeFn.dispose();
     _firstPlayFn.dispose();
+    _retryFn.dispose();
     for (final n in _playFns.values) {
       n.dispose();
     }
@@ -107,6 +116,7 @@ class _EpisodePopupState extends State<_EpisodePopup> {
     // popup with no sign the session had actually expired.
     perf('episode_popup: _loadAll start '
         '${widget.pluginId}/${widget.item.id}');
+    if (_timedOut) setState(() => _timedOut = false); // a retry, not the first load
     final repo = getIt<MediaRepository>();
     var sessionExpired = false;
     var profileLocked = false;
@@ -166,12 +176,13 @@ class _EpisodePopupState extends State<_EpisodePopup> {
         'sessionExpired=$sessionExpired timedOut=${results == null}');
     if (!mounted) return;
     if (results == null) {
-      setState(() => _loading = false);
-      if (_sources.isEmpty) {
-        WidgetsBinding.instance.addPostFrameCallback((_) {
-          if (mounted) _closeFn.requestFocus();
-        });
-      }
+      setState(() {
+        _loading = false;
+        _timedOut = true;
+      });
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _retryFn.requestFocus();
+      });
       return;
     }
     if (sessionExpired || profileLocked) {
@@ -462,10 +473,54 @@ class _EpisodePopupState extends State<_EpisodePopup> {
                                       ),
                                     )
                                   else if (_sources.isEmpty)
-                                    Text('Nessuna fonte disponibile.',
-                                        style: TextStyle(
-                                            color: AppTheme.textLow,
-                                            fontSize: sh * (15.0 / 1080.0)))
+                                    Column(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        Text(
+                                          // _timedOut: this popup gave up
+                                          // waiting on the still-unexplained
+                                          // getStreams/getDetails stall (see
+                                          // _loadAll's own trace comments) —
+                                          // not a confirmed "really nothing
+                                          // here", so it gets a Riprova
+                                          // instead of a flat dead end.
+                                          _timedOut
+                                              ? 'Caricamento troppo lento.'
+                                              : 'Nessuna fonte disponibile.',
+                                          style: TextStyle(
+                                              color: AppTheme.textLow,
+                                              fontSize: sh * (15.0 / 1080.0)),
+                                        ),
+                                        if (_timedOut) ...[
+                                          SizedBox(height: sh * (8.0 / 1080.0)),
+                                          TvFocusable(
+                                            focusNode: _retryFn,
+                                            onActivate: () {
+                                              setState(() => _loading = true);
+                                              _loadAll();
+                                            },
+                                            onUp: () =>
+                                                _closeFn.requestFocus(),
+                                            builder: (context, focused) => Text(
+                                              'Riprova',
+                                              style: TextStyle(
+                                                color: focused
+                                                    ? Colors.white
+                                                    : Colors.white70,
+                                                fontSize: sh * (15.0 / 1080.0),
+                                                fontWeight: focused
+                                                    ? FontWeight.w700
+                                                    : FontWeight.normal,
+                                                decoration:
+                                                    TextDecoration.underline,
+                                              ),
+                                            ),
+                                          ),
+                                        ],
+                                      ],
+                                    )
                                   else
                                     Center(
                                       child: Wrap(
@@ -589,7 +644,7 @@ class _EpisodePopupState extends State<_EpisodePopup> {
                         onClose: () => Navigator.of(context).pop(),
                         onDown: _sources.isNotEmpty
                             ? () => _firstPlayFn.requestFocus()
-                            : null,
+                            : (_timedOut ? () => _retryFn.requestFocus() : null),
                       ),
                     ),
                   ],

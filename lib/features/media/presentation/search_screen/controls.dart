@@ -187,34 +187,65 @@ class _FilterBtnState extends State<_FilterBtn> {
 class _ActiveFilterChip extends StatelessWidget {
   final String label;
   final VoidCallback onRemove;
-  const _ActiveFilterChip({required this.label, required this.onRemove});
+  // Was a bare GestureDetector around just the ✕ — touch/mouse only, no
+  // FocusNode at all. A TV remote had no way to remove a single active
+  // filter here (only "Rimuovi filtri" below the panel, or reopening the
+  // panel to toggle it off there). Now the whole chip is the D-pad target —
+  // select removes it, same as a filter_panel.dart chip's own OK — chained
+  // left/right among the chips, up to the filter button, down to the
+  // keyboard (see _SearchViewState's own wiring).
+  final FocusNode? focusNode;
+  final VoidCallback? onNavigateLeft;
+  final VoidCallback? onNavigateRight;
+  final VoidCallback? onNavigateUp;
+  final VoidCallback? onNavigateDown;
+  const _ActiveFilterChip({
+    required this.label,
+    required this.onRemove,
+    this.focusNode,
+    this.onNavigateLeft,
+    this.onNavigateRight,
+    this.onNavigateUp,
+    this.onNavigateDown,
+  });
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      padding: EdgeInsets.symmetric(
-          horizontal: AppScale.space(context, 12),
-          vertical: AppScale.space(context, 6)),
-      decoration: BoxDecoration(
-        color: _kFocusColor.withValues(alpha: 0.22),
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: _kFocusColor.withValues(alpha: 0.55)),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Text(label,
-              style: TextStyle(
-                  color: AppTheme.textHigh,
-                  fontSize: AppScale.caption(context),
-                  fontWeight: FontWeight.w500)),
-          SizedBox(width: AppScale.space(context, 6)),
-          GestureDetector(
-            onTap: onRemove,
-            child: Icon(Icons.close_rounded,
-                size: AppScale.caption(context), color: AppTheme.textMid),
+    return TvFocusable(
+      focusNode: focusNode,
+      onActivate: onRemove,
+      onLeft: onNavigateLeft,
+      onRight: onNavigateRight,
+      onUp: onNavigateUp,
+      onDown: onNavigateDown,
+      builder: (context, focused) => Container(
+        padding: EdgeInsets.symmetric(
+            horizontal: AppScale.space(context, 12),
+            vertical: AppScale.space(context, 6)),
+        decoration: BoxDecoration(
+          color: _kFocusColor.withValues(alpha: focused ? 0.4 : 0.22),
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(
+            color: _kFocusColor.withValues(alpha: focused ? 1.0 : 0.55),
+            width: focused ? 2 : 1,
           ),
-        ],
+          boxShadow:
+              focused ? AppScale.focusGlow(_kFocusColor, blur: 10) : const [],
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(label,
+                style: TextStyle(
+                    color: AppTheme.textHigh,
+                    fontSize: AppScale.caption(context),
+                    fontWeight: FontWeight.w500)),
+            SizedBox(width: AppScale.space(context, 6)),
+            Icon(Icons.close_rounded,
+                size: AppScale.caption(context),
+                color: focused ? AppTheme.textHigh : AppTheme.textMid),
+          ],
+        ),
       ),
     );
   }

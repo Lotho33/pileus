@@ -15,6 +15,7 @@ import 'details_screen.dart' show logoUrlOnly, logoDark, logoRenderSize;
 
 import '../../auth/bloc/auth_bloc.dart';
 import '../../auth/bloc/auth_event.dart';
+import '../../auth/friendly_error.dart';
 import '../../../core/di/injection.dart';
 import '../../../core/grpc/auth_interceptor.dart';
 import '../../../core/grpc/clients/media_client.dart' hide ContinueWatchingItem;

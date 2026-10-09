@@ -82,13 +82,16 @@ class _PlaybackViewState extends State<_PlaybackView> {
   // longer than kBackgroundReleaseTimeout.
   Timer? _backgroundReleaseTimer;
   Timer? _errorGraceTimer;
-  // Live-only: catches the case a plain error/buffering event never covers —
-  // ExoPlayer (or mpv) reporting playing=true with no error at all while the
-  // position has genuinely stopped advancing (e.g. an HLS live edge blip
-  // that lands ExoPlayer in STATE_IDLE without ever surfacing an exception.
-  // See _armLiveStallWatchdog for the recovery this drives.
-  Timer? _liveStallWatchdog;
-  int _liveStallStrikes = 0;
+  // Catches the case a plain error/buffering event never covers — ExoPlayer
+  // (or mpv) reporting playing=true with no error at all while the position
+  // has genuinely stopped advancing (e.g. an HLS live edge blip that lands
+  // ExoPlayer in STATE_IDLE without ever surfacing an exception), or stuck
+  // buffering indefinitely. Was live-only (2026-09) until an audit found
+  // VOD had the identical failure mode with *no* recovery at all — "often a
+  // buffer, then it just freezes, forcing a manual resume" was that gap, not
+  // a one-off. See _armStallWatchdog for the recovery this drives.
+  Timer? _stallWatchdog;
+  int _stallStrikes = 0;
   // Last resolved stream (url/headers), kept only so _restartPlayerInPlace
   // can reopen the same source after rebuilding the engine — nothing else
   // reads these.
@@ -272,7 +275,7 @@ class _PlaybackViewState extends State<_PlaybackView> {
     // heartbeat tick with nothing to catch it — audit finding.
     // Same pattern already in production on the other 3 platforms.
     AppLifecycleReactor.instance.state.addListener(_onAppLifecycle);
-    if (args.isLive) _armLiveStallWatchdog();
+    _armStallWatchdog();
 
     _resolveSeriesMetaIfMissing().whenComplete(() {
       if (mounted) _resolveEpisodeListIfMissing();
@@ -391,7 +394,7 @@ class _PlaybackViewState extends State<_PlaybackView> {
   void _onPlaybackTakenOver(String playingOn) {
     if (!mounted || _takeoverPrompt != null) return; // already showing
     _errorGraceTimer?.cancel();
-    _liveStallWatchdog?.cancel();
+    _stallWatchdog?.cancel();
     _pendingErrorText = null;
     final resumePos = _engine.position;
     _engine.pause();
@@ -435,75 +438,106 @@ class _PlaybackViewState extends State<_PlaybackView> {
     });
   }
 
-  // ── Live stall watchdog ─────────────────────────────────────────────────
+  // ── Stall watchdog (live + VOD) ──────────────────────────────────────────
   //
   // Neither better_player_plus (ExoPlayer) nor libmpv is guaranteed to tell
-  // us when a live stream dies: a brief network blip at an HLS live edge can
-  // land ExoPlayer in STATE_IDLE without ever emitting bufferingStart or a
-  // catchable exception (BehindLiveWindowException goes unhandled upstream).
-  // `playing` then keeps reading true and `position` simply stops
-  // advancing — nothing above this ever
-  // notices on its own, which is exactly the "no buffering shown, video just
-  // freezes" symptom reported for live sport. Wall-clock time since the last
-  // real position tick (_onPosition, only ever called when the position
-  // actually changed) is the one signal that can't be silently skipped.
+  // us when a stream dies: a brief network blip (at an HLS live edge, or
+  // just a slow mycelium/CDN segment fetch on a film) can land ExoPlayer in
+  // STATE_IDLE without ever emitting bufferingStart or a catchable exception
+  // (BehindLiveWindowException goes unhandled upstream), or simply leave it
+  // sitting in STATE_BUFFERING forever with nothing to time it out. `playing`
+  // then keeps reading true (or buffering keeps reading true) and `position`
+  // simply stops advancing — nothing above this ever notices on its own,
+  // which is exactly the "no buffering shown, video just freezes" symptom
+  // reported for live sport, AND (2026-10 audit) the "often a buffer, then
+  // it just stops, forcing a manual resume" reported for ordinary
+  // films/series — this watchdog only ever armed for live until then, so
+  // VOD had zero automatic recovery for the identical failure. Wall-clock
+  // time since the last real position tick (_onPosition, only ever called
+  // when the position actually changed) is the one signal that can't be
+  // silently skipped.
   //
   // Two escalating tiers, both already-existing recovery paths (nothing new
   // to get subtly wrong): a cheap pause/play nudge first — fixes a renderer
   // merely stuck on a stale internal state — then, if that didn't bring
   // progress back, the same fresh-URL reopen the "Riprova" button triggers
-  // by hand. This does *not* cover a frozen picture with audio/position
-  // still advancing (the Amlogic-style dead-Surface freeze) — there is no
-  // engine-agnostic signal here to detect that case; see
-  // _restartPlayerInPlace for the manual fallback.
-  void _armLiveStallWatchdog() {
-    _liveStallWatchdog?.cancel();
-    _liveStallWatchdog = Timer.periodic(const Duration(seconds: 4), (_) {
+  // by hand (for VOD, at the last known position — see onRetry's own doc on
+  // why that must never be widget.args.seekTo). This does *not* cover a
+  // frozen picture with audio/position still advancing (the Amlogic-style
+  // dead-Surface freeze) — there is no engine-agnostic signal here to detect
+  // that case; see _restartPlayerInPlace for the manual fallback.
+  void _armStallWatchdog() {
+    _stallWatchdog?.cancel();
+    _stallWatchdog = Timer.periodic(const Duration(seconds: 4), (_) {
       if (!mounted || !_videoStarted) return;
       if (_playbackError != null || _pendingErrorText != null) return;
       // Used to also bail out on `_engine.buffering` here — which meant a
-      // live stream stuck buffering forever (a dead upstream feed, or an HLS
-      // live edge the player fell behind) was NEVER recovered: `playing`
-      // stays true and buffering stays true, so this watchdog never even
-      // looked at how long it had been that way. `playing` alone is still
-      // the right gate (a user-paused live stream shouldn't trip this).
+      // stream stuck buffering forever (a dead upstream feed, or an HLS live
+      // edge the player fell behind) was NEVER recovered: `playing` stays
+      // true and buffering stays true, so this watchdog never even looked at
+      // how long it had been that way. `playing` alone is still the right
+      // gate (a user-paused stream shouldn't trip this).
       if (!_engine.playing) return;
       final last = _lastProgressAt;
       if (last == null) return;
       final stalledFor = DateTime.now().difference(last);
       final buffering = _engine.buffering;
+      final isLive = widget.args.isLive;
       // Buffering forever gets a longer leash than "playing but frozen"
-      // before acting — a normal live rebuffer can legitimately take a few
+      // before acting — a normal rebuffer can legitimately take a few
       // seconds — but once past it, skip straight to tier 2: a pause/play
       // nudge doesn't do anything useful mid-buffer, and won't fix a
-      // genuinely dead feed either.
-      final threshold =
-          buffering ? const Duration(seconds: 18) : const Duration(seconds: 9);
+      // genuinely dead feed either. VOD gets a touch more patience than
+      // live on both counts: there's no live edge to fall further behind,
+      // so it's worth waiting a little longer before reopening the stream
+      // (which, unlike live, means a real seek back to the resume point —
+      // cheap to avoid doing twice).
+      final threshold = isLive
+          ? (buffering ? const Duration(seconds: 18) : const Duration(seconds: 9))
+          : (buffering ? const Duration(seconds: 25) : const Duration(seconds: 15));
       if (stalledFor < threshold) return;
 
-      if (buffering) {
-        _liveStallStrikes = 0;
-        perf('screen: live stall watchdog — stuck buffering '
-            '${stalledFor.inSeconds}s → reinitializing');
-        context.read<PlaybackBloc>().add(InitializeVideoEvent(
-              pluginId: widget.args.epPluginId,
-              mediaId: _currentMediaId,
-              preferredLabel: _currentSourceLabel,
-            ));
-      } else {
-        _liveStallStrikes++;
-        perf('screen: live stall watchdog — playing=true, no progress in '
-            '${stalledFor.inSeconds}s (strike #$_liveStallStrikes)');
-        if (_liveStallStrikes <= 1) {
-          _engine.pause();
-          _engine.play();
+      // VOD's reopen must land back where playback actually stalled, same
+      // reasoning (and same retrySec logic) as the "Riprova" button's own
+      // onRetry — the stream genuinely dies here more often on a flaky
+      // connection than an explicit error ever fires, so this is the common
+      // path, not a rare fallback. Live has no resume-position concept.
+      void reinitialize() {
+        if (!isLive) {
+          final retrySec =
+              _lastEnginePos > Duration.zero ? _lastEnginePos.inSeconds : 0;
+          _resumeSeek = ResumeSeekController(targetSec: retrySec, isLive: false);
+          context.read<PlaybackBloc>().add(InitializeVideoEvent(
+                pluginId: widget.args.epPluginId,
+                mediaId: _currentMediaId,
+                preferredLabel: _currentSourceLabel,
+                startPositionSec:
+                    resolveStartPositionSec(isLive: false, seekTo: retrySec),
+              ));
         } else {
-          _liveStallStrikes = 0;
           context.read<PlaybackBloc>().add(InitializeVideoEvent(
                 pluginId: widget.args.epPluginId,
                 mediaId: _currentMediaId,
                 preferredLabel: _currentSourceLabel,
               ));
+        }
+      }
+
+      if (buffering) {
+        _stallStrikes = 0;
+        perf('screen: stall watchdog — stuck buffering '
+            '${stalledFor.inSeconds}s → reinitializing (live=$isLive)');
+        reinitialize();
+      } else {
+        _stallStrikes++;
+        perf('screen: stall watchdog — playing=true, no progress in '
+            '${stalledFor.inSeconds}s (strike #$_stallStrikes, live=$isLive)');
+        if (_stallStrikes <= 1) {
+          _engine.pause();
+          _engine.play();
+        } else {
+          _stallStrikes = 0;
+          reinitialize();
         }
       }
       // Give the recovery attempt a full interval to show progress instead
@@ -537,7 +571,7 @@ class _PlaybackViewState extends State<_PlaybackView> {
     final url = _lastStreamUrl;
     if (url == null) return; // nothing resolved yet — nothing to reopen
     perf('screen: manual player restart in place');
-    _liveStallStrikes = 0;
+    _stallStrikes = 0;
     _errorGraceTimer?.cancel();
     setState(() {
       _playbackError = null;
@@ -777,7 +811,7 @@ class _PlaybackViewState extends State<_PlaybackView> {
     _heartbeatTimer?.cancel();
     _backgroundReleaseTimer?.cancel();
     _errorGraceTimer?.cancel();
-    _liveStallWatchdog?.cancel();
+    _stallWatchdog?.cancel();
     _optimisticSeekClearTimer?.cancel();
     _resumeCoverSafetyTimer?.cancel();
     AppLifecycleReactor.instance.state.removeListener(_onAppLifecycle);
@@ -875,16 +909,34 @@ class _PlaybackViewState extends State<_PlaybackView> {
   }
 
   /// Writes a continue-watching row the instant the stream opens, even at
-  /// position 0 — mycelium no longer gates Continue Watching on a minimum
-  /// position, so a title should appear there as soon as it's opened rather
-  /// than waiting for the first 15s heartbeat.
+  /// position 0 for a title with no resume point yet — mycelium no longer
+  /// gates Continue Watching on a minimum position, so a title should
+  /// appear there as soon as it's opened rather than waiting for the first
+  /// 15s heartbeat.
+  ///
+  /// Deliberately NOT `_engine.position`: this runs synchronously right
+  /// after `_engine.open()`, before the engine has decoded a single frame
+  /// — the getter still reads 0 at this point even when opening a title
+  /// that already has real Continue Watching progress, and
+  /// ResumeSeekController's own seek only lands a tick or more later. That
+  /// used to send `position: 0` straight to mycelium the instant *every*
+  /// resume was opened, not just a fresh one — harmless if playback then
+  /// continues (later heartbeats/`_onPosition` overwrite it with the real,
+  /// advancing position), but if the user backs out while the stream is
+  /// still loading/buffering (before any of those land), that 0 is the
+  /// last thing saved: the CW entry is zeroed for a title the user never
+  /// actually rewound. `_resumeSeek.targetSec` is the position this same
+  /// open() call already asked the engine to resume at — known
+  /// synchronously, no race — so this now reports *that* (still 0 for a
+  /// title with nothing to resume) instead of guessing from an engine that
+  /// hasn't caught up yet.
   Future<void> _markOpened() async {
     if (_progressCleared) return;
     final resp = await getIt<MediaRepository>().updateProgress(
       pluginId: widget.args.epPluginId,
       mediaId: _currentMediaId,
       parentId: _parentId,
-      position: _engine.position,
+      position: Duration(seconds: _resumeSeek.targetSec),
       totalDuration: _engine.duration,
       title: (_currentTitle?.isNotEmpty ?? false) ? _currentTitle! : _showTitle,
       showTitle: _showTitle,
@@ -951,7 +1003,7 @@ class _PlaybackViewState extends State<_PlaybackView> {
     _lastProgressAt = DateTime.now();
     // Real forward progress — whatever the stall watchdog was escalating
     // toward, drop it back to the first (gentlest) tier.
-    _liveStallStrikes = 0;
+    _stallStrikes = 0;
     // Position updates only arrive while the player is actively decoding — a
     // stream that's still advancing has recovered from whatever transient
     // error triggered _playbackError, even mid-playback (not just on the
@@ -2008,6 +2060,30 @@ class _PlaybackViewState extends State<_PlaybackView> {
                       onRetry: () {
                         setState(() => _playbackError = null);
                         final sameTitle = _currentMediaId == widget.mediaId;
+                        // Resume from wherever playback actually got to
+                        // before the error, not widget.args.seekTo — that's
+                        // immutable, the resume point this SCREEN was first
+                        // opened with. A stall well into an episode used to
+                        // retry straight back to that original open-time
+                        // position (or, once an in-session episode switch
+                        // had made `sameTitle` false, straight to 0),
+                        // throwing away everything watched since. Only falls
+                        // back to the old logic when nothing has actually
+                        // ticked yet for this stream (a failure before the
+                        // very first frame) — there's nothing more recent to
+                        // resume to.
+                        final retrySec = _lastEnginePos > Duration.zero
+                            ? _lastEnginePos.inSeconds
+                            : (sameTitle ? widget.args.seekTo : 0);
+                        // Re-arm with the same target, same pattern as
+                        // _onPlaybackTakenOver's "Riprendi qui" above —
+                        // otherwise _startPlayback's engine.open() call would
+                        // still honour whatever stale target this controller
+                        // was built with (possibly already _confirmed from
+                        // earlier in the session, which skips seeking
+                        // entirely).
+                        _resumeSeek = ResumeSeekController(
+                            targetSec: retrySec, isLive: widget.args.isLive);
                         final direct =
                             sameTitle ? widget.args.directUrl : null;
                         if (direct != null && direct.isNotEmpty) {
@@ -2019,11 +2095,9 @@ class _PlaybackViewState extends State<_PlaybackView> {
                                 pluginId: widget.args.epPluginId,
                                 mediaId: _currentMediaId,
                                 preferredLabel: _currentSourceLabel,
-                                startPositionSec: sameTitle
-                                    ? resolveStartPositionSec(
-                                        isLive: widget.args.isLive,
-                                        seekTo: widget.args.seekTo)
-                                    : 0,
+                                startPositionSec: resolveStartPositionSec(
+                                    isLive: widget.args.isLive,
+                                    seekTo: retrySec),
                               ));
                         }
                       },

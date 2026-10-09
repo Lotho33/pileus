@@ -6,6 +6,7 @@ import '../../core/di/injection.dart';
 import '../../core/grpc/clients/media_client.dart';
 import '../../core/theme/app_scale.dart';
 import '../../core/utils/image_sizing.dart';
+import '../../features/auth/friendly_error.dart';
 import '../../features/media/data/media_repository.dart';
 import '../sdui/sport_theme.dart'
     show sportIcon, sportAccentColor, isLiveNow, liveStartTimeLabel;
@@ -75,7 +76,12 @@ class _LiveEventPopupState extends State<_LiveEventPopup> {
     } catch (e) {
       if (mounted) {
         setState(() {
-          _error = e.toString();
+          // Was the raw e.toString() (e.g. "GrpcError: 14, UNAVAILABLE:
+          // ...") — the same class of bug friendly_error.dart was written
+          // to fix for pairing/profile management, just never ported here.
+          // The network-unreachable case this rewrites is also the single
+          // most common way getStreams fails.
+          _error = friendlyOperationErrorMessage(e.toString());
           _loaded = true;
         });
         // Same reasoning as the success path above: without this, a failed

@@ -190,6 +190,25 @@ class _QuickSearchAreaState extends State<QuickSearchArea> {
     }
     _bloc.add(const ClearSearchEvent());
     widget.onDismiss();
+    // widget.onDismiss() above only *requests* focus (FocusNode.requestFocus
+    // marks it pending — FocusManager doesn't actually move primaryFocus
+    // until a microtask runs, see FocusManager.applyFocusChangesIfNeeded's
+    // own doc). Both callers that reach _dismiss() right before pushing a
+    // new route (onItemTap below, _openFullSearch) call Navigator/GoRouter
+    // synchronously straight after this returns — before that microtask
+    // ever gets a turn. Navigator captures "what had focus" for this route
+    // at push time, so without forcing it here it still saw the *old*
+    // focus, somewhere inside this panel's about-to-be-torn-down results
+    // carousel. Popping back later then tried to restore focus to that
+    // (often already-disposed) node, which is exactly what read as "open a
+    // result from quick search, press Back, the keyboard is stuck — closing
+    // it just reopens it": the restore landed back inside this subtree,
+    // _scopeFocusNode.onFocusChange flipped _expanded true again, and
+    // nothing outside ever claimed focus for _onGlobalFocusChange's own
+    // self-heal to notice. Forcing the pending change to apply right now
+    // means Navigator always captures the *restored* target (a home card),
+    // not this panel.
+    FocusManager.instance.applyFocusChangesIfNeeded();
     // Last-resort: if onDismiss's focus restore didn't move focus out of
     // this subtree (its target was stale — e.g. search was entered by a
     // stray focus drift rather than the deliberate trigger, so

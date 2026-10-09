@@ -438,8 +438,32 @@ class _PosterGridView extends StatelessWidget {
                     if (item.mediaType == 'live') {
                       showLiveEventPopup(context, pluginId, item);
                     } else {
+                      // Was a bare push with no `extra` at all — unlike
+                      // _EpisodeTile.navigate() right above (same file, same
+                      // "item vs directory" branch), which carries title/
+                      // poster/rating/year/genres/plot specifically so the
+                      // continue-watching entry this play creates isn't
+                      // blank. A plugin that routes real movies/files
+                      // through this grid (not every item here is a
+                      // directory) got a titleless, posterless CW card.
+                      final genreList = (item.extra['genres'] ?? '')
+                          .split(',')
+                          .map((g) => g.trim())
+                          .where((g) => g.isNotEmpty)
+                          .toList();
                       context.push(
-                          '/player/$pluginId/${Uri.encodeComponent(item.id)}');
+                        '/player/$pluginId/${Uri.encodeComponent(item.id)}',
+                        extra: <String, dynamic>{
+                          if (item.title.isNotEmpty) 'title': item.title,
+                          if (item.posterUrl.isNotEmpty)
+                            'poster': item.posterUrl,
+                          if (item.rating > 0) 'rating': item.rating,
+                          if (item.year > 0) 'year': item.year,
+                          if (genreList.isNotEmpty) 'genres': genreList,
+                          if ((item.extra['plot'] ?? '').isNotEmpty)
+                            'plot': item.extra['plot'],
+                        },
+                      );
                     }
                   }
                 },

@@ -40,6 +40,13 @@ class _SearchViewState extends State<_SearchView> {
   // stays behind on the button that opened it, leaving every filter chip
   // inside completely unreachable by remote.
   final _filterPanelFirstFn = FocusNode();
+  // One per active-filter chip, keyed by filter id — the chip's own "✕" used
+  // to be a bare GestureDetector, reachable only by touch/mouse. On TV the
+  // remote had no way to remove a single filter here at all (only "Rimuovi
+  // filtri" below the panel, or reopening the panel itself); see
+  // _buildActiveFilterChips.
+  final Map<String, FocusNode> _chipFns = {};
+  FocusNode _chipFn(String id) => _chipFns.putIfAbsent(id, () => FocusNode());
   String _lastQuery = '';
   Timer? _debounceTimer;
   // True from the moment a keystroke changes the query until the debounced
@@ -127,6 +134,9 @@ class _SearchViewState extends State<_SearchView> {
     _backBtnFn.dispose();
     _filterBtnFn.dispose();
     _filterPanelFirstFn.dispose();
+    for (final n in _chipFns.values) {
+      n.dispose();
+    }
     super.dispose();
   }
 
@@ -362,7 +372,10 @@ class _SearchViewState extends State<_SearchView> {
                                   focusNode: _filterBtnFn,
                                   onNavigateLeft: () =>
                                       _backBtnFn.requestFocus(),
-                                  onNavigateDown: _focusKeyboard,
+                                  onNavigateDown: () => _activeFilters.isEmpty
+                                      ? _focusKeyboard()
+                                      : _chipFn(_activeFilters.keys.first)
+                                          .requestFocus(),
                                 ),
                               ],
                             ),
@@ -373,23 +386,64 @@ class _SearchViewState extends State<_SearchView> {
                                 child: SingleChildScrollView(
                                   scrollDirection: Axis.horizontal,
                                   child: Row(
-                                    children: _activeFilters.entries.map((e) {
-                                      final filter = _availableFilters
-                                          .where((f) => f.id == e.key)
-                                          .firstOrNull;
-                                      final label = filter != null
-                                          ? '${filter.label}: ${_optionLabel(filter, e.value)}'
-                                          : '${e.key}: ${e.value}';
-                                      return Padding(
-                                        padding:
-                                            const EdgeInsets.only(right: 8),
-                                        child: _ActiveFilterChip(
-                                          label: label,
-                                          onRemove: () =>
-                                              _applyFilter(e.key, ''),
-                                        ),
-                                      );
-                                    }).toList(),
+                                    children: () {
+                                      final entries =
+                                          _activeFilters.entries.toList();
+                                      return [
+                                        for (var i = 0;
+                                            i < entries.length;
+                                            i++)
+                                          Builder(builder: (context) {
+                                            final e = entries[i];
+                                            final filter = _availableFilters
+                                                .where((f) => f.id == e.key)
+                                                .firstOrNull;
+                                            final label = filter != null
+                                                ? '${filter.label}: ${_optionLabel(filter, e.value)}'
+                                                : '${e.key}: ${e.value}';
+                                            return Padding(
+                                              padding: const EdgeInsets.only(
+                                                  right: 8),
+                                              child: _ActiveFilterChip(
+                                                label: label,
+                                                focusNode: _chipFn(e.key),
+                                                // Park focus on the filter
+                                                // button BEFORE _applyFilter's
+                                                // setState — removing the
+                                                // last (or only) chip tears
+                                                // this chip's own FocusNode
+                                                // out of the tree, and
+                                                // nothing else here claims
+                                                // focus afterward, which is
+                                                // exactly the "focus lands
+                                                // nowhere, D-pad goes dead"
+                                                // bug this app has hit
+                                                // before elsewhere (see
+                                                // quick_search_area's
+                                                // _onGlobalFocusChange doc).
+                                                onRemove: () {
+                                                  _filterBtnFn.requestFocus();
+                                                  _applyFilter(e.key, '');
+                                                },
+                                                onNavigateLeft: i > 0
+                                                    ? () => _chipFn(
+                                                            entries[i - 1].key)
+                                                        .requestFocus()
+                                                    : null,
+                                                onNavigateRight: i <
+                                                        entries.length - 1
+                                                    ? () => _chipFn(
+                                                            entries[i + 1].key)
+                                                        .requestFocus()
+                                                    : null,
+                                                onNavigateUp: () =>
+                                                    _filterBtnFn.requestFocus(),
+                                                onNavigateDown: _focusKeyboard,
+                                              ),
+                                            );
+                                          }),
+                                      ];
+                                    }(),
                                   ),
                                 ),
                               ),
@@ -427,8 +481,21 @@ class _SearchViewState extends State<_SearchView> {
                                   forceUppercase: true,
                                   onNavigateUp: () => _backBtnFn.requestFocus(),
                                   onNavigateDown: () {
-                                    setState(() => _keyboardVisible = false);
-                                    _firstResultFocus.requestFocus();
+                                    // _firstResultFocus is cleared (isSet
+                                    // false) whenever results are empty/
+                                    // loading/erroring — requestFocus()
+                                    // returning false there used to still
+                                    // hide the keyboard anyway (the
+                                    // unconditional setState below used to
+                                    // run first), leaving nothing focused at
+                                    // all: not just Down, but Escape/Back
+                                    // too, per SafeFocusRef's own doc on why
+                                    // that matters. Only recede the keyboard
+                                    // once there's actually something to
+                                    // reveal.
+                                    if (_firstResultFocus.requestFocus()) {
+                                      setState(() => _keyboardVisible = false);
+                                    }
                                   },
                                 ),
                               ),
