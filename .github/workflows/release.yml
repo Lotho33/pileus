@@ -20,6 +20,17 @@
 # and, optionally, repo variable PILEUS_MYCELIUM_HOST (baked in via
 # --dart-define for TVs where `mycelium.local` won't resolve). The web job
 # needs none of the above — no signing, no native toolchain.
+#
+# A fourth job, amazon-submit, builds the TV flavor again with store.yml's
+# own flags (NOT the sideload APKs the android job above produces — those
+# keep the GitHub update-checker compiled in, which must never ship to
+# Amazon) and uploads it to a new Amazon Appstore edit via the App
+# Submission API — see scripts/amazon-upload-edit.sh for the actual calls
+# and why it deliberately stops short of submitting that edit for review.
+# Needs repo secrets AMAZON_CLIENT_ID / AMAZON_CLIENT_SECRET
+# (scripts/set-amazon-secrets.sh) and repo variable AMAZON_APP_ID; runs
+# independently of the other two jobs (no shared GitHub Release to race)
+# and is best-effort — a failure here never blocks the sideload release.
 
 name: release
 
@@ -209,3 +220,81 @@ jobs:
         with:
           tag_name: ${{ github.event.inputs.tag || github.ref_name }}
           files: dist/*
+
+  # Draft-uploads the TV store build to Amazon on every tag — see the file
+  # header above and scripts/amazon-upload-edit.sh. Independent of
+  # `android`/`web`: it touches no GitHub Release, so there's nothing to
+  # race, and a problem here (a missing/expired Amazon credential, an API
+  # change) shouldn't hold up the sideload release those two jobs publish.
+  # continue-on-error at the job level would hide a real failure from the
+  # Actions UI entirely (green check regardless) — this is left to fail
+  # loud instead, same as every other job here, since "Amazon upload
+  # silently didn't happen" is exactly the failure mode worth noticing.
+  amazon-submit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ github.event.inputs.tag || github.ref }}
+
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: Derive version
+        id: v
+        run: |
+          ref="${{ github.event.inputs.tag || github.ref_name }}"
+          echo "name=${ref#v}" >> "$GITHUB_OUTPUT"
+          echo "build=${{ github.run_number }}" >> "$GITHUB_OUTPUT"
+
+      - run: flutter pub get
+
+      - name: Android signing config (mandatory — same secrets as store.yml)
+        env:
+          KS_B64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          KS_PASS: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          KEY_PASS: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          set -eu
+          if [ -z "${KS_B64:-}" ] || [ -z "${KS_PASS:-}" ] || [ -z "${KEY_ALIAS:-}" ] || [ -z "${KEY_PASS:-}" ]; then
+            echo "::error::amazon-submit requires the same ANDROID_KEYSTORE_* secrets as store.yml — refusing to upload a debug-signed APK to Amazon."
+            exit 1
+          fi
+          echo "$KS_B64" | base64 -d > android/app/release.jks
+          keytool -list -keystore android/app/release.jks -storepass "$KS_PASS" -alias "$KEY_ALIAS" >/dev/null
+          {
+            echo "storeFile=release.jks"
+            echo "storePassword=$KS_PASS"
+            echo "keyAlias=$KEY_ALIAS"
+            echo "keyPassword=$KEY_PASS"
+          } > android/key.properties
+
+      - name: Build TV (store-ready, per-ABI — keep in sync with store.yml's own "Build TV" step)
+        run: |
+          set -eu
+          V="${{ steps.v.outputs.name }}"
+          flutter build apk --release --flavor tv --split-per-abi \
+            --target-platform android-arm,android-arm64 \
+            -PpileusRequireSigning=true -PpileusExcludeMpv=true -PpileusR8=true \
+            --obfuscate --split-debug-info=build/symbols-tv \
+            --dart-define=PILEUS_STORE_BUILD=true \
+            --build-name="$V" --build-number="${{ steps.v.outputs.build }}"
+          mkdir -p amazon-apks
+          cp build/app/outputs/flutter-apk/app-*-tv-release.apk amazon-apks/
+          ls -la amazon-apks
+
+      - name: Upload to a new Amazon Appstore edit (draft — never submitted automatically)
+        env:
+          AMAZON_CLIENT_ID: ${{ secrets.AMAZON_CLIENT_ID }}
+          AMAZON_CLIENT_SECRET: ${{ secrets.AMAZON_CLIENT_SECRET }}
+          AMAZON_APP_ID: ${{ vars.AMAZON_APP_ID }}
+        run: |
+          set -eu
+          if [ -z "${AMAZON_CLIENT_ID:-}" ] || [ -z "${AMAZON_CLIENT_SECRET:-}" ] || [ -z "${AMAZON_APP_ID:-}" ]; then
+            echo "::error::set secrets AMAZON_CLIENT_ID / AMAZON_CLIENT_SECRET (scripts/set-amazon-secrets.sh) and repo variable AMAZON_APP_ID first."
+            exit 1
+          fi
+          scripts/amazon-upload-edit.sh amazon-apks/*.apk

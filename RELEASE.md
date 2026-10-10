@@ -6,7 +6,7 @@ self-hosted infrastructure.
 
 | Workflow | Trigger | Produces |
 |---|---|---|
-| `release.yml` | push of tag `vX.Y.Z` (or manual, with a tag input) | Android APKs (per-ABI, both flavors) + the web bundle, attached to the GitHub Release |
+| `release.yml` | push of tag `vX.Y.Z` (or manual, with a tag input) | Android APKs (per-ABI, both flavors) + the web bundle, attached to the GitHub Release; **also** draft-uploads the TV store build to a new Amazon Appstore edit (see below) |
 | `store.yml` | manual, tag input | signed AAB + signed per-ABI APKs for Play Store / Amazon Appstore, as a downloadable workflow artifact |
 | `linux.yml` | manual, tag input | a Linux x64 tarball, attached to the GitHub Release |
 | `windows.yml` | manual, tag input | a Windows installer + portable zip, attached to the GitHub Release |
@@ -88,6 +88,43 @@ for the reviewer to connect to — see `docs/PRIVACY.md` and the admin
 dashboard's own docs for setting up a reviewer-facing demo instance; its
 address is never checked into this repo).
 
+### Amazon Appstore auto-upload (`release.yml`)
+
+Every `vX.Y.Z` tag also builds the TV flavor with `store.yml`'s own flags
+(`PILEUS_STORE_BUILD=true`, signing required, R8 + `--obfuscate`, no
+`libmpv.so`) and pushes the resulting per-ABI APKs to a **new** Amazon
+Appstore edit via the
+[App Submission API](https://developer.amazon.com/docs/app-submission-api/)
+— see `scripts/amazon-upload-edit.sh` for the actual HTTP calls. This is the
+`amazon-submit` job, independent of the sideload `android`/`web` jobs (a
+failure here never blocks the GitHub Release).
+
+**It only uploads — it never submits the edit for review.** The job stops
+with the edit `IN_PROGRESS` in the Developer Console; open *Apps & Games →
+your app → App Submission*, review the uploaded build, and submit it by
+hand. "L'ultima release è sempre pronta ad essere pubblicata su Amazon" —
+not "si pubblica da sola" — is the deliberate contract here, so a bad build
+never reaches Amazon's review queue unattended.
+
+One-time setup, beyond the signing secrets this job also reuses:
+
+1. Amazon Developer Console → *Settings → API Access* → create a security
+   profile associated with the App Submission API → note its Client ID /
+   Client Secret.
+2. `scripts/set-amazon-secrets.sh` uploads both as repo secrets
+   (`AMAZON_CLIENT_ID` / `AMAZON_CLIENT_SECRET`) — needs `gh` authenticated
+   with admin access to the repo.
+3. Add repo variable `AMAZON_APP_ID` (Settings → Secrets and variables →
+   Actions → **Variables** tab, not Secrets — it's not sensitive, it's
+   visible in the Console's own URLs) = this app's id, from the Console's
+   *Additional information* panel for the Pileus TV listing.
+
+Confidence note: the API call sequence in `amazon-upload-edit.sh` is written
+against Amazon's current published docs, not against a live test run — its
+own header comment explains why every call dumps Amazon's raw response on
+failure. Sanity-check the first real run's Actions log before trusting it
+unattended.
+
 ### Mobile flavor
 
 The phone/tablet app is the same repo, `--flavor mobile -t
@@ -123,6 +160,8 @@ Result: arm64 mobile release APK ≈ 23.5 MB (vs ~36 MB unoptimised).
 | `ANDROID_KEYSTORE_PASSWORD` | keystore password |
 | `ANDROID_KEY_ALIAS` | key alias (e.g. `pileus`) |
 | `ANDROID_KEY_PASSWORD` | key password |
+| `AMAZON_CLIENT_ID` | App Submission API client id (Console → Settings → API Access) — set via `scripts/set-amazon-secrets.sh`, not by hand |
+| `AMAZON_CLIENT_SECRET` | App Submission API client secret — same script |
 
 No extra token needed — the builtin `GITHUB_TOKEN` (`contents: write`,
 already set in each workflow) covers creating the release and uploading
@@ -133,6 +172,7 @@ assets.
 | Variable | What |
 |---|---|
 | `PILEUS_MYCELIUM_HOST` | a default Mycelium host baked into beta builds via `--dart-define` (useful for a TV with no other way to find the server on first launch). Read by `release.yml` and `linux.yml`/`windows.yml`. Leave unset for store builds. |
+| `AMAZON_APP_ID` | the TV listing's app id (Console → your app → Additional information) — read by `release.yml`'s `amazon-submit` job. Not sensitive (visible in Console URLs), hence a variable, not a secret. |
 
 > `release.yml` and `store.yml` both **fail** (`exit 1`) if
 > `ANDROID_KEYSTORE_BASE64` is unset — neither ever publishes a
