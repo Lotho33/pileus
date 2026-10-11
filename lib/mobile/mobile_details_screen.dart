@@ -7,6 +7,7 @@ import 'package:go_router/go_router.dart';
 
 import '../core/di/injection.dart';
 import '../core/grpc/clients/media_client.dart' hide ContinueWatchingItem;
+import '../core/grpc/grpc_errors.dart' show grpcMessage;
 import '../core/theme/app_theme.dart';
 import '../core/utils/image_sizing.dart';
 import '../features/auth/bloc/auth_bloc.dart';
@@ -19,11 +20,14 @@ import '../features/media/bloc/details_event.dart';
 import '../features/media/bloc/details_state.dart';
 import '../features/media/data/continue_watching_item.dart';
 import '../features/media/data/media_repository.dart';
+import '../features/player/continue_watching_launch.dart';
 import '../features/player/episode_poster.dart';
 import '../features/player/resolve_and_play.dart';
+import '../features/player/resume_lookup.dart';
 import '../shared/widgets/error_retry_view.dart';
 import 'package:cached_network_image_platform_interface/cached_network_image_platform_interface.dart'
     show ImageRenderMethodForWeb;
+import '../shared/utils/tap_guard.dart';
 
 class MobileDetailsScreen extends StatelessWidget {
   final String pluginId;
@@ -153,7 +157,12 @@ class _Body extends StatelessWidget {
           padding: const EdgeInsets.all(4),
           child: IconButton.filledTonal(
             icon: const Icon(Icons.arrow_back),
-            onPressed: () => context.pop(),
+            // maybePop, once: see GuardedBackButton for the double-tap
+            // double-pop this avoids.
+            onPressed: () {
+              if (!TapGuard.acquire()) return;
+              Navigator.maybePop(context);
+            },
           ),
         ),
       ),
@@ -430,6 +439,9 @@ class _PlayButton extends StatefulWidget {
 
 class _PlayButtonState extends State<_PlayButton> {
   ContinueWatchingItem? _resume;
+  // Re-check on return from the player — see _onNav.
+  GoRouter? _router;
+  bool _playerWasActive = false;
 
   @override
   void initState() {
@@ -437,26 +449,52 @@ class _PlayButtonState extends State<_PlayButton> {
     _checkResume();
   }
 
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final router = GoRouter.of(context);
+    if (_router != router) {
+      _router?.routerDelegate.removeListener(_onNav);
+      _router = router;
+      router.routerDelegate.addListener(_onNav);
+    }
+  }
+
+  @override
+  void dispose() {
+    _router?.routerDelegate.removeListener(_onNav);
+    super.dispose();
+  }
+
+  // Coming back from the player: the button used to keep offering whatever
+  // it found when the page first opened ("Riproduci 1ª puntata" after
+  // watching episodes 1-3). Re-read Continue Watching — twice, the second
+  // after the player's fire-and-forget dispose save has had time to commit
+  // (same pattern as the home screen's CW reload).
+  void _onNav() {
+    final router = _router;
+    if (!mounted || router == null) return;
+    final path = router.routeInformationProvider.value.uri.path;
+    if (path.startsWith('/player')) {
+      _playerWasActive = true;
+    } else if (_playerWasActive) {
+      _playerWasActive = false;
+      _checkResume();
+      Future<void>.delayed(const Duration(milliseconds: 1500), () {
+        if (mounted) _checkResume();
+      });
+    }
+  }
+
   Future<void> _checkResume() async {
     try {
-      final repo = getIt<MediaRepository>();
-      final items = widget.isSeries
-          ? await repo.getContinueWatching(
-              pluginId: widget.pluginId, parentId: widget.item.id)
-          : await repo.getContinueWatching(pluginId: widget.pluginId);
-      if (!mounted) return;
-      final match = widget.isSeries
-          ? items.firstOrNull
-          : items
-              .where(
-                  (i) => i.parentID.isEmpty && i.playableID == widget.item.id)
-              .firstOrNull;
-      // A "next episode" row parked at ~31s just to clear mycelium's
-      // progress_time>=30 filter (see PlaybackProgress.maybeClear) isn't a
-      // real resume point — same guard the home Continue Watching card uses.
-      final isRealProgress =
-          match != null && !(match.totalTime <= 0 && match.progressTime <= 35);
-      if (isRealProgress && mounted) setState(() => _resume = match);
+      // Shared with the TV details page and the long-press sheet — see
+      // resume_lookup.dart (movie rows are keyed by the stream id now).
+      final match = await findResumeEntry(getIt<MediaRepository>(),
+          pluginId: widget.pluginId,
+          itemId: widget.item.id,
+          isSeries: widget.isSeries);
+      if (mounted) setState(() => _resume = match);
     } catch (_) {
       // best-effort — falls back to the default "play from start" button
     }
@@ -469,17 +507,11 @@ class _PlayButtonState extends State<_PlayButton> {
       // playableID is an already-resolved stream id, passed as streamId so
       // the player calls ResolveStream directly instead of re-running
       // GetStreams on a stream id.
-      context.push(
+      PlayerLaunchGuard.push(
+        GoRouter.of(context),
         '/player/${widget.pluginId}/${Uri.encodeComponent(resume.playableID)}',
-        extra: <String, dynamic>{
-          'streamId': resume.playableID,
-          'title': resume.title,
-          'showTitle': resume.showTitle,
-          'poster':
-              resume.poster.isNotEmpty ? resume.poster : widget.item.posterUrl,
-          'parentId': resume.parentID,
-          'seekTo': resume.progressTime.toInt(),
-        },
+        extra: continueWatchingPlayerExtra(resume,
+            posterFallback: widget.item.posterUrl),
       );
       return;
     }
@@ -490,8 +522,20 @@ class _PlayButtonState extends State<_PlayButton> {
       if (seasons.isNotEmpty) {
         final season = seasons.firstWhere((s) => s.episodeCount > 0,
             orElse: () => seasons.first);
-        final browse = await getIt<MediaRepository>()
-            .browse(widget.pluginId, season.directoryId, '');
+        final messenger = ScaffoldMessenger.of(context);
+        final BrowseResponse browse;
+        try {
+          browse = await getIt<MediaRepository>()
+              .browse(widget.pluginId, season.directoryId, '');
+        } catch (e) {
+          // Used to be unguarded: a network error left the tap doing nothing
+          // at all (and an uncaught async error behind it).
+          messenger.showSnackBar(SnackBar(
+            content: Text('Impossibile caricare gli episodi: ${grpcMessage(e)}'),
+            behavior: SnackBarBehavior.floating,
+          ));
+          return;
+        }
         if (!context.mounted) return;
         if (browse.episodes.isNotEmpty) {
           final eps = browse.episodes;
@@ -561,8 +605,13 @@ class _PlayButtonState extends State<_PlayButton> {
   @override
   Widget build(BuildContext context) {
     final resume = _resume;
+    // A series needs its season list (from GetDetails) to know what
+    // "1ª puntata" is — tapped before that landed, the item id went to the
+    // player as if it were a movie. Wait for it unless there's a resume.
+    final waitingDetails =
+        widget.isSeries && widget.details == null && resume == null;
     final playButton = FilledButton.icon(
-      onPressed: () => _play(context),
+      onPressed: waitingDetails ? null : () => _play(context),
       icon: const Icon(Icons.play_arrow_rounded),
       label: Text(
         resume != null
@@ -624,6 +673,10 @@ class _SeasonsState extends State<_Seasons> {
   int _sel = 0;
   int _shown = _pageSize;
   final _cache = <String, List<EpisodeInfo>>{};
+  // Seasons whose browse failed — not cached as "no episodes" any more (that
+  // left the season empty for good, with no message, until the page was
+  // reopened); shown with a retry instead.
+  final _failed = <String>{};
   bool _busy = false;
   ScrollPosition? _scrollPos;
 
@@ -725,13 +778,16 @@ class _SeasonsState extends State<_Seasons> {
 
   Future<void> _load(SeasonInfo s) async {
     if (_cache.containsKey(s.directoryId)) return;
-    setState(() => _busy = true);
+    setState(() {
+      _busy = true;
+      _failed.remove(s.directoryId);
+    });
     try {
       final b = await getIt<MediaRepository>()
           .browse(widget.pluginId, s.directoryId, '');
       _cache[s.directoryId] = b.episodes;
     } catch (_) {
-      _cache[s.directoryId] = const [];
+      _failed.add(s.directoryId);
     } finally {
       if (mounted) {
         setState(() => _busy = false);
@@ -776,6 +832,23 @@ class _SeasonsState extends State<_Seasons> {
           const Padding(
             padding: EdgeInsets.all(16),
             child: Center(child: CircularProgressIndicator()),
+          )
+        else if (_failed.contains(season.directoryId))
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: 12),
+            child: Row(
+              children: [
+                const Expanded(
+                  child: Text('Impossibile caricare gli episodi.',
+                      style: TextStyle(color: AppTheme.textMid)),
+                ),
+                TextButton.icon(
+                  onPressed: () => _load(season),
+                  icon: const Icon(Icons.refresh_rounded),
+                  label: const Text('Riprova'),
+                ),
+              ],
+            ),
           )
         else ...[
           for (var i = 0; i < eps.length && i < _shown; i++)
@@ -918,7 +991,7 @@ class _RelatedRow extends StatelessWidget {
                         child: InkWell(
                           onTap: id.isEmpty
                               ? null
-                              : () => context.push(
+                              : () => context.pushGuarded(
                                   '/details/$pluginId/${Uri.encodeComponent(id)}'),
                           child: Stack(
                             children: [
@@ -1002,7 +1075,8 @@ class _Error extends StatelessWidget {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: AppTheme.bg,
-      appBar: AppBar(backgroundColor: AppTheme.bg),
+      appBar: AppBar(
+          backgroundColor: AppTheme.bg, leading: const GuardedBackButton()),
       body: ErrorRetryView(
         title: 'Impossibile caricare il contenuto',
         detail: message,

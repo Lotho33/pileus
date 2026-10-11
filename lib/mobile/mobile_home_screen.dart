@@ -24,13 +24,16 @@ import '../features/media/bloc/plugin_event.dart';
 import '../features/media/bloc/plugin_state.dart';
 import '../features/media/data/continue_watching_item.dart';
 import '../features/media/data/media_repository.dart';
+import '../features/player/continue_watching_launch.dart';
 import '../features/player/episode_poster.dart' show episodeBadge;
+import '../features/player/resolve_and_play.dart' show PlayerLaunchGuard;
 import 'widgets/mobile_hero.dart';
 import 'widgets/mobile_poster_card.dart';
 import 'widgets/plugin_switcher_pill.dart';
 import 'widgets/press_scale.dart';
 import 'package:cached_network_image_platform_interface/cached_network_image_platform_interface.dart'
     show ImageRenderMethodForWeb;
+import '../shared/utils/tap_guard.dart';
 
 class MobileHomeScreen extends StatelessWidget {
   const MobileHomeScreen({super.key});
@@ -159,6 +162,7 @@ class _MobileHomeViewState extends State<_MobileHomeView> {
   }
 
   void _profileSheet() {
+    if (!TapGuard.acquire()) return; // double tap — see tap_guard.dart
     showModalBottomSheet<void>(
       context: context,
       backgroundColor: AppTheme.surface,
@@ -177,7 +181,7 @@ class _MobileHomeViewState extends State<_MobileHomeView> {
               title: const Text('Cambia profilo',
                   style: TextStyle(color: AppTheme.textHigh)),
               onTap: () {
-                Navigator.of(ctx).pop();
+                if (!popIfCurrent(ctx)) return;
                 getIt<AuthBloc>().add(const SwitchProfileEvent());
               },
             ),
@@ -186,7 +190,7 @@ class _MobileHomeViewState extends State<_MobileHomeView> {
               title: const Text('Esci',
                   style: TextStyle(color: Color(0xFFFF6B6B))),
               onTap: () {
-                Navigator.of(ctx).pop();
+                if (!popIfCurrent(ctx)) return;
                 getIt<AuthBloc>().add(const LogoutEvent());
               },
             ),
@@ -641,26 +645,14 @@ class _CwCard extends StatelessWidget {
   final ContinueWatchingItem item;
   const _CwCard({required this.item});
 
-  void _resume(BuildContext context) => context.push(
+  void _resume(BuildContext context) => PlayerLaunchGuard.push(
+        GoRouter.of(context),
         '/player/${item.providerID}/${Uri.encodeComponent(item.playableID)}',
-        extra: <String, dynamic>{
-          // playableID is an already-resolved stream id — pass it as
-          // streamId so the player calls ResolveStream directly instead of
-          // re-running GetStreams on a stream id (which some plugins reject).
-          'streamId': item.playableID,
-          'title': item.title,
-          'showTitle': item.showTitle,
-          'poster': item.poster,
-          'parentId': item.parentID,
-          // A "next episode" CW row parked at ~31s (just to clear mycelium's
-          // progress_time >= 30 filter) is not a real resume point.
-          'seekTo': (item.totalTime <= 0 && item.progressTime <= 35)
-              ? 0
-              : item.progressTime.toInt(),
-        },
+        extra: continueWatchingPlayerExtra(item),
       );
 
   void _sheet(BuildContext context) {
+    if (!TapGuard.acquire()) return; // double tap — see tap_guard.dart
     final cwBloc = context.read<ContinueWatchingBloc>();
     showModalBottomSheet<void>(
       context: context,
@@ -692,7 +684,7 @@ class _CwCard extends StatelessWidget {
               title: const Text('Riprendi',
                   style: TextStyle(color: AppTheme.textHigh)),
               onTap: () {
-                Navigator.of(sheetCtx).pop();
+                if (!popIfCurrent(sheetCtx)) return;
                 _resume(context);
               },
             ),
@@ -702,13 +694,13 @@ class _CwCard extends StatelessWidget {
               title: const Text('Dettagli',
                   style: TextStyle(color: AppTheme.textHigh)),
               onTap: () {
-                Navigator.of(sheetCtx).pop();
+                if (!popIfCurrent(sheetCtx)) return;
                 // For an episode, parentID is the season/show directory —
                 // that's what getDetails resolves to the series page (with
                 // its season picker). Movies have no parent → the item id.
                 final target =
                     item.parentID.isNotEmpty ? item.parentID : item.playableID;
-                context.push(
+                context.pushGuarded(
                     '/details/${item.providerID}/${Uri.encodeComponent(target)}');
               },
             ),
@@ -718,7 +710,7 @@ class _CwCard extends StatelessWidget {
               title: const Text('Rimuovi da Continua a guardare',
                   style: TextStyle(color: Color(0xFFFF6B6B))),
               onTap: () {
-                Navigator.of(sheetCtx).pop();
+                if (!popIfCurrent(sheetCtx)) return;
                 cwBloc.add(RemoveContinueWatchingEvent(
                     item.providerID, item.playableID));
                 ScaffoldMessenger.of(context).showSnackBar(const SnackBar(

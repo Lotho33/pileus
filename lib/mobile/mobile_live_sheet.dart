@@ -7,15 +7,19 @@ import '../core/grpc/clients/media_client.dart' hide ContinueWatchingItem;
 import '../core/theme/app_theme.dart';
 import '../core/utils/image_sizing.dart';
 import '../features/media/data/media_repository.dart';
+import '../features/player/resolve_and_play.dart' show PlayerLaunchGuard;
 import '../shared/sdui/sport_theme.dart' show isLiveNow, liveStartTimeLabel;
 import 'package:cached_network_image_platform_interface/cached_network_image_platform_interface.dart'
     show ImageRenderMethodForWeb;
+import '../shared/utils/tap_guard.dart';
 
 /// Mobile live-event sheet — replaces the TV `showLiveEventPopup` (D-pad,
 /// AppScale) for phones. Event header + the list of stream sources
 /// (`GetStreams`); tap a source to play it.
 Future<void> showLiveSheet(
     BuildContext context, String pluginId, CatalogItem item) {
+  // Double tap / long-press twice: one sheet, not two stacked.
+  if (!TapGuard.acquire()) return Future.value();
   return showModalBottomSheet<void>(
     context: context,
     backgroundColor: AppTheme.surface,
@@ -68,11 +72,19 @@ class _LiveSheetState extends State<_LiveSheet> {
     }
   }
 
+  // One pick per sheet — two quick taps on the source list used to pop the
+  // sheet and then the page underneath it.
+  bool _picked = false;
+
   void _play(StreamSource src) {
+    if (_picked) return;
+    _picked = true;
     final ids = _sources.map((s) => s.id).toList();
     final labels = _sources.map((s) => s.label).toList();
-    Navigator.of(context).pop();
-    context.push(
+    final router = GoRouter.of(context);
+    if (!popIfCurrent(context)) return;
+    PlayerLaunchGuard.push(
+      router,
       '/player/${widget.pluginId}/${Uri.encodeComponent(src.id)}',
       extra: <String, dynamic>{
         'streamId': src.id,

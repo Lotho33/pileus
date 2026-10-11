@@ -53,6 +53,8 @@ import '../bloc/plugin_bloc.dart';
 import '../bloc/plugin_event.dart';
 import '../bloc/plugin_state.dart';
 import '../data/continue_watching_item.dart';
+import '../../player/continue_watching_launch.dart';
+import '../../player/resolve_and_play.dart' show PlayerLaunchGuard;
 import 'package:cached_network_image_platform_interface/cached_network_image_platform_interface.dart'
     show ImageRenderMethodForWeb;
 

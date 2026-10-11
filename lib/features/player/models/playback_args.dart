@@ -160,6 +160,60 @@ class PlaybackArgs {
   /// (posterForEpisode) of the same "one clear source, no fallback chain"
   /// call. A caller that used to pass a per-episode plot through here was
   /// the bug, not a feature to preserve.
+  /// Series-level metadata backfilled by the player when the launch route
+  /// didn't carry it (search/direct-play of an episode, an older Continue
+  /// Watching row) — same lookup the TV player does in
+  /// _resolveSeriesMetaIfMissing. [plot] here is the *series'* synopsis (see
+  /// [copyWith]'s doc on why a per-episode plot never goes through args).
+  /// Empty/zero values keep the current one.
+  PlaybackArgs withSeriesMeta({
+    String parentId = '',
+    String showTitle = '',
+    String plot = '',
+    List<String> genres = const [],
+    double rating = 0,
+    int year = 0,
+  }) {
+    final base = copyWith(
+      rating: this.rating > 0 || rating <= 0 ? null : rating,
+      year: this.year > 0 || year <= 0 ? null : year,
+    );
+    return PlaybackArgs(
+      isAudio: base.isAudio,
+      isLive: base.isLive,
+      directStreamId: base.directStreamId,
+      directUrl: base.directUrl,
+      directUrlHeaders: base.directUrlHeaders,
+      epPluginId: base.epPluginId,
+      livePluginId: base.livePluginId,
+      liveMediaId: base.liveMediaId,
+      title: base.title,
+      episodeList: base.episodeList,
+      episodeTitles: base.episodeTitles,
+      episodeThumbs: base.episodeThumbs,
+      episodeNumbers: base.episodeNumbers,
+      seasonNumbers: base.seasonNumbers,
+      episodeIndex: base.episodeIndex,
+      sourceLabel: base.sourceLabel,
+      allSeasonIds: base.allSeasonIds,
+      allSeasonLabels: base.allSeasonLabels,
+      seasonIndex: base.seasonIndex,
+      liveSources: base.liveSources,
+      liveSourceLabels: base.liveSourceLabels,
+      poster: base.poster,
+      seriesPoster: base.seriesPoster,
+      seriesCoverUrl: base.seriesCoverUrl,
+      parentId: base.parentId.isNotEmpty ? base.parentId : parentId,
+      seekTo: base.seekTo,
+      showTitle: base.showTitle.isNotEmpty ? base.showTitle : showTitle,
+      plot: base.plot.isNotEmpty ? base.plot : plot,
+      rating: base.rating,
+      durationSeconds: base.durationSeconds,
+      genres: base.genres.isNotEmpty ? base.genres : genres,
+      year: base.year,
+    );
+  }
+
   PlaybackArgs copyWith({
     String? title,
     List<String>? episodeList,

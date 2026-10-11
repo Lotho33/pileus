@@ -4,6 +4,7 @@ import '../core/di/injection.dart';
 import '../core/theme/app_theme.dart';
 import '../features/media/data/media_repository.dart';
 import '../features/settings/data/settings_repository.dart';
+import '../shared/utils/tap_guard.dart';
 
 class MobilePreferencesScreen extends StatefulWidget {
   const MobilePreferencesScreen({super.key});
@@ -36,6 +37,7 @@ class _MobilePreferencesScreenState extends State<MobilePreferencesScreen> {
     return Scaffold(
       backgroundColor: AppTheme.bg,
       appBar: AppBar(
+        leading: const GuardedBackButton(),
         backgroundColor: AppTheme.bg,
         title: const Text('Preferenze'),
       ),
@@ -149,11 +151,17 @@ class _MobilePreferencesScreenState extends State<MobilePreferencesScreen> {
             title: const Text('Svuota cache catalogo',
                 style: TextStyle(color: AppTheme.textHigh)),
             onTap: () async {
-              await getIt<MediaRepository>().clearCatalogCache();
-              if (context.mounted) {
-                ScaffoldMessenger.of(context).showSnackBar(
+              final messenger = ScaffoldMessenger.of(context);
+              try {
+                await getIt<MediaRepository>().clearCatalogCache();
+                messenger.showSnackBar(
                   const SnackBar(content: Text('Cache svuotata')),
                 );
+              } catch (e) {
+                // Same feedback as the TV settings screen — this used to
+                // fail silently (and leave an uncaught async error).
+                messenger.showSnackBar(SnackBar(
+                    content: Text('Impossibile svuotare la cache: $e')));
               }
             },
           ),

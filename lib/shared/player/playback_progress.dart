@@ -1,13 +1,14 @@
-import 'package:shared_preferences/shared_preferences.dart';
-
 import '../../core/di/injection.dart';
 import '../../core/grpc/clients/media_client.dart' show ProgressResponse;
 import '../../features/media/data/media_repository.dart';
+import '../../features/player/audio_lang_pref.dart';
 import '../../features/player/engine/player_engine.dart';
 import '../../features/player/episode_poster.dart';
+import '../../features/player/episode_prefetch.dart';
 import '../../features/player/models/playback_args.dart';
 import '../../features/player/player_tuning.dart';
 import '../../features/player/resume_seek.dart';
+import '../../features/player/source_continuity.dart';
 
 /// Watch-progress bookkeeping shared by the touch (mobile) and desktop
 /// players — both drive a [PlayerEngine] and take their continue-watching
@@ -52,8 +53,19 @@ class PlaybackProgress {
   }) : _resumeSeek =
             ResumeSeekController(targetSec: args.seekTo, isLive: args.isLive);
 
-  final PlaybackArgs args;
-  final String mediaId;
+  /// Not final: refreshed in place when the screen learns more mid-session
+  /// without starting a new stream — e.g. the episode list backfilled after
+  /// a Continue Watching launch (without it, [maybeClear] never saw a "next
+  /// episode" and dropped the whole series from Continue Watching instead of
+  /// rolling it forward). Replacing it never touches the resume seek, which
+  /// is fixed at construction.
+  PlaybackArgs args;
+
+  /// The Continue Watching playable id — the stream id once known (see
+  /// PlaybackReady.streamId / source_continuity.dart), the bare media id
+  /// otherwise. Not final for the same reason as [args]: the stream id often
+  /// only becomes known once the resolve lands.
+  String mediaId;
 
   /// Fired (at most once per instance) the moment a [save]/[markStarted]
   /// call's own UpdateProgress reveals this device no longer holds the
@@ -64,11 +76,9 @@ class PlaybackProgress {
   /// retried automatically here).
   final void Function(String playingOn)? onPlaybackElsewhere;
 
-  static const _audioLangKey = 'player.preferredAudioLang';
-
   final ResumeSeekController _resumeSeek;
 
-  bool _audioPrefApplied = false;
+  final AudioLangPref _audioPref = AudioLangPref();
   bool _elsewhereReported = false;
 
   // Once [maybeClear] has cleared the continue-watching entry (≥95% watched,
@@ -78,7 +88,7 @@ class PlaybackProgress {
 
   /// A fresh stream URL was opened — re-arm the one-shot audio-pref apply.
   void onStreamOpened() {
-    _audioPrefApplied = false;
+    _audioPref.reset();
   }
 
   /// Retrying the same media (bloc re-dispatch): allow the CW entry to be
@@ -87,7 +97,7 @@ class PlaybackProgress {
   /// instance (see each screen's own take-over handling): this device can
   /// legitimately lose the lease again later in the same session.
   void resetForRetry() {
-    _audioPrefApplied = false;
+    _audioPref.reset();
     _progressCleared = false;
     _elsewhereReported = false;
   }
@@ -95,24 +105,28 @@ class PlaybackProgress {
   /// The user explicitly picked an audio track — remember it for a later
   /// resume / next episode and stop auto-applying the stored preference this
   /// session.
-  void rememberAudioTrack(String label) {
-    _audioPrefApplied = true;
-    getIt<SharedPreferences>().setString(_audioLangKey, label);
-  }
+  void rememberAudioTrack(String label) => _audioPref.remember(label);
 
   /// Writes a continue-watching row the instant the stream opens, even at
   /// position 0 — mycelium no longer gates Continue Watching on a minimum
   /// position, so a title should appear there as soon as it's opened rather
   /// than waiting for the first 15s heartbeat (or dispose, if the user backs
   /// out before that).
+  ///
+  /// Reports the resume *target*, not `engine.position`: this runs right
+  /// after open(), while the engine still reads ~0 and the resume seek is in
+  /// flight — sending that 0 zeroed the Continue Watching entry whenever the
+  /// user backed out before the first heartbeat (the dispose save skips a 0
+  /// position). Same fix the TV player's _markOpened already carries.
   Future<void> markStarted(PlayerEngine engine) async {
     if (_progressCleared || args.isLive) return;
     final a = args;
+    final target = Duration(seconds: _resumeSeek.targetSec);
     final resp = await getIt<MediaRepository>().updateProgress(
       pluginId: a.epPluginId,
       mediaId: mediaId,
       parentId: a.parentId,
-      position: engine.position,
+      position: engine.position > target ? engine.position : target,
       totalDuration: engine.duration,
       title: (a.title?.isNotEmpty ?? false) ? a.title! : a.showTitle,
       showTitle: a.showTitle,
@@ -162,9 +176,13 @@ class PlaybackProgress {
   /// End-of-title continue-watching handling, mirroring the TV player: an
   /// episode ~90% in with a known next episode rolls the CW entry forward to
   /// it; a movie or last episode ~95% in is dropped so it doesn't linger at
-  /// ~100% forever. With no episode list (the common mobile launch) only the
-  /// 95% drop applies.
-  void maybeClear(PlayerEngine engine) {
+  /// ~100% forever. With no episode list (yet) only the 95% drop applies.
+  ///
+  /// The roll-forward row stores the next episode's *stream id* for the
+  /// source playing now ([prefetched] when it already covers it) — see
+  /// source_continuity.dart: a bare episode id would resume in the plugin's
+  /// default language.
+  void maybeClear(PlayerEngine engine, {PrefetchedEpisode? prefetched}) {
     if (_progressCleared || args.isLive) return;
     final dur = engine.duration;
     if (dur.inSeconds <= 0) return;
@@ -179,9 +197,33 @@ class PlaybackProgress {
       final nextTitle = a.episodeIndex + 1 < a.episodeTitles.length
           ? a.episodeTitles[a.episodeIndex + 1]
           : '';
-      repo.updateProgress(
+      final currentId = mediaId;
+      _rollForward(repo, a, nextId, nextTitle, currentId, prefetched);
+    } else if (!hasSameSeasonNext && frac >= kCwDropThreshold) {
+      _progressCleared = true;
+      repo.deleteProgress(providerID: a.epPluginId, playableID: mediaId);
+    }
+  }
+
+  Future<void> _rollForward(
+    MediaRepository repo,
+    PlaybackArgs a,
+    String nextId,
+    String nextTitle,
+    String currentId,
+    PrefetchedEpisode? prefetched,
+  ) async {
+    final nextStreamId = await streamIdForNextEpisode(
+      repo,
+      pluginId: a.epPluginId,
+      nextEpisodeId: nextId,
+      sourceLabel: a.sourceLabel,
+      prefetched: prefetched,
+    );
+    try {
+      await repo.updateProgress(
         pluginId: a.epPluginId,
-        mediaId: nextId,
+        mediaId: nextStreamId,
         parentId: a.parentId,
         position: const Duration(seconds: 31),
         title: nextTitle.isNotEmpty ? nextTitle : a.showTitle,
@@ -207,11 +249,8 @@ class PlaybackProgress {
         seasonNumber: numberForEpisode(a.seasonNumbers, a.episodeIndex + 1),
         episodeNumber: numberForEpisode(a.episodeNumbers, a.episodeIndex + 1),
       );
-      repo.deleteProgress(providerID: a.epPluginId, playableID: mediaId);
-    } else if (!hasSameSeasonNext && frac >= kCwDropThreshold) {
-      _progressCleared = true;
-      repo.deleteProgress(providerID: a.epPluginId, playableID: mediaId);
-    }
+    } catch (_) {}
+    repo.deleteProgress(providerID: a.epPluginId, playableID: currentId);
   }
 
   /// What to pass as this title's own [PlayerEngine.open] call — see
@@ -234,42 +273,6 @@ class PlaybackProgress {
     _resumeSeek.onPosition(engine.position, engine.seek);
   }
 
-  /// Once tracks are known, if the user has a remembered audio language and
-  /// the auto-picked track isn't it, switch. Fixes "started in Japanese on
-  /// the TV, resumed in Italian on the phone" — the engine otherwise picks
-  /// audio by the device locale.
-  void maybeApplyAudioPref(PlayerEngine engine) {
-    if (_audioPrefApplied) return;
-    final tracks = engine.audioTracks;
-    if (tracks.length < 2) return;
-    _audioPrefApplied = true;
-    final prefs = getIt<SharedPreferences>();
-    final want = prefs.getString(_audioLangKey);
-    if (want == null || want.isEmpty) {
-      // No sticky preference yet — anchor on whatever the engine auto-picked
-      // for this first stream, so every later episode/movie keeps the same
-      // language instead of drifting with each file's own track order (the
-      // "anime audio language keeps flipping between episodes" report —
-      // without this, only an *explicit* pick via rememberAudioTrack stuck,
-      // so a run of episodes nobody ever manually touched the tracks sheet
-      // on just followed each file's own default).
-      final active = engine.activeAudioTrack;
-      if (active != null) prefs.setString(_audioLangKey, active.label);
-      return;
-    }
-    final w = want.toLowerCase().trim();
-    // Exact label match only — the pref is a stored `t.label`, so on the
-    // same stream it matches exactly. A loose `contains` picked "Slovenian"
-    // for a stored "en", etc.
-    MediaTrack? match;
-    for (final t in tracks) {
-      if (t.label.toLowerCase().trim() == w) {
-        match = t;
-        break;
-      }
-    }
-    if (match != null && match.id != engine.activeAudioTrack?.id) {
-      engine.selectAudioTrack(match);
-    }
-  }
+  /// See [AudioLangPref.maybeApply] (shared with the TV player).
+  void maybeApplyAudioPref(PlayerEngine engine) => _audioPref.maybeApply(engine);
 }

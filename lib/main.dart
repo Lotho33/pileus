@@ -20,6 +20,7 @@ import 'features/settings/data/settings_repository.dart';
 import 'core/grpc/auth_interceptor.dart';
 import 'core/device_profile.dart';
 import 'core/perf_profile.dart';
+import 'core/utils/error_hooks.dart';
 import 'core/utils/perf_log.dart';
 import 'shared/widgets/pileus_spinner.dart';
 
@@ -85,6 +86,7 @@ void main() async {
   // shed CPU/GPU load per frame — Pileus honours it rather than forcing its
   // own motion back on top.
   WidgetsFlutterBinding.ensureInitialized();
+  installErrorHooks();
   // Bound decoded-image memory: TV boxes (Fire Stick & co.) have ~1 GB of RAM
   // and Flutter's default cache is 100 MB of decoded bitmaps. Also cap the
   // entry count (default 1000): the carousels window their rendering so only

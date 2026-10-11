@@ -8,6 +8,10 @@ import 'player_tuning.dart';
 /// forward into the currently-tracked episode info once it becomes current.
 class PrefetchedEpisode {
   final String mediaId;
+  // The source picked for [mediaId] (GetStreams id, carries the language) —
+  // what Continue Watching should store for this episode, see
+  // PlaybackReady.streamId.
+  final String streamId;
   final String resolvedUrl;
   final Map<String, String> httpHeaders;
   final String sourceLabel;
@@ -19,6 +23,7 @@ class PrefetchedEpisode {
 
   const PrefetchedEpisode({
     required this.mediaId,
+    required this.streamId,
     required this.resolvedUrl,
     required this.httpHeaders,
     required this.sourceLabel,
@@ -139,6 +144,7 @@ class EpisodePrefetcher {
           (details != null && details.hasEpisode()) ? details.episode : null;
       _cached = PrefetchedEpisode(
         mediaId: nextId,
+        streamId: match.id,
         resolvedUrl: resolvedUrl,
         httpHeaders: httpHeaders,
         sourceLabel: match.label,

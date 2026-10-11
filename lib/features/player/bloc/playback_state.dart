@@ -35,13 +35,21 @@ class PlaybackReady extends PlaybackState {
   final String resolvedUrl;
   final Map<String, String> httpHeaders;
   final Map<String, String> extra;
+
+  /// The stream id this URL was resolved from (empty for a direct URL, e.g.
+  /// an offline download). It's the per-source/per-language id GetStreams
+  /// handed out — the screens use it as the Continue Watching playable id so
+  /// a later resume re-resolves this exact source (and so this language)
+  /// instead of the plugin's default for the bare episode id.
+  final String streamId;
   const PlaybackReady({
     required this.resolvedUrl,
     required this.httpHeaders,
     this.extra = const {},
+    this.streamId = '',
   });
   @override
-  List<Object?> get props => [resolvedUrl, httpHeaders, extra];
+  List<Object?> get props => [resolvedUrl, httpHeaders, extra, streamId];
 }
 
 class PlaybackRetrying extends PlaybackState {

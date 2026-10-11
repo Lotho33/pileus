@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
-import 'package:go_router/go_router.dart';
 
 import '../core/di/injection.dart';
 import '../core/grpc/clients/media_client.dart' hide ContinueWatchingItem;
@@ -9,6 +8,7 @@ import '../features/media/bloc/plugin_bloc.dart';
 import '../features/media/bloc/plugin_event.dart';
 import '../features/media/bloc/plugin_state.dart';
 import '../features/media/data/media_repository.dart';
+import '../shared/utils/tap_guard.dart';
 
 /// Plugin ordering / visibility. Renders from **local state**, seeded once
 /// from [PluginBloc] and only re-seeded if the plugin *set* changes — so a
@@ -134,6 +134,7 @@ class _MobilePluginsScreenState extends State<MobilePluginsScreen> {
     return Scaffold(
       backgroundColor: AppTheme.bg,
       appBar: AppBar(
+        leading: const GuardedBackButton(),
         backgroundColor: AppTheme.bg,
         title: const Text('Plugin'),
       ),
@@ -187,7 +188,7 @@ class _MobilePluginsScreenState extends State<MobilePluginsScreen> {
                                       color: AppTheme.textLow),
                                 ],
                               ),
-                              onTap: () => context.push(
+                              onTap: () => context.pushGuarded(
                                 '/plugin-settings/${p.pluginId}',
                                 extra: {'pluginName': p.name},
                               ),
@@ -208,7 +209,7 @@ class _MobilePluginsScreenState extends State<MobilePluginsScreen> {
                               tooltip: 'Mostra sulla home',
                               onPressed: () => _unhide(p),
                             ),
-                            onTap: () => context.push(
+                            onTap: () => context.pushGuarded(
                               '/plugin-settings/${p.pluginId}',
                               extra: {'pluginName': p.name},
                             ),

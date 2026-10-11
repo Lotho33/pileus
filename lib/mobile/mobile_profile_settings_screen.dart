@@ -13,6 +13,7 @@ import '../shared/widgets/default_avatars.dart';
 import '../shared/widgets/native_pin_dialogs.dart';
 import 'mobile_router.dart';
 import '../shared/widgets/text_prompt_dialog.dart';
+import '../shared/utils/tap_guard.dart';
 
 class MobileProfileSettingsScreen extends StatelessWidget {
   const MobileProfileSettingsScreen({super.key});
@@ -38,6 +39,7 @@ class _Body extends StatelessWidget {
     return Scaffold(
       backgroundColor: AppTheme.bg,
       appBar: AppBar(
+        leading: const GuardedBackButton(),
         backgroundColor: AppTheme.bg,
         title: const Text('Profilo'),
       ),
@@ -164,6 +166,7 @@ class _Body extends StatelessWidget {
 
   Future<void> _rename(BuildContext context, ProfileManagementCubit cubit,
       String current) async {
+    if (!TapGuard.acquire()) return; // double tap — see tap_guard.dart
     final name = await showTextPrompt(
       context,
       title: 'Rinomina profilo',
@@ -177,6 +180,7 @@ class _Body extends StatelessWidget {
 
   Future<void> _pickAvatar(
       BuildContext context, ProfileManagementCubit cubit) async {
+    if (!TapGuard.acquire()) return; // double tap — see tap_guard.dart
     final idx = await showDialog<int>(
       context: context,
       builder: (ctx) => AlertDialog(
@@ -192,7 +196,7 @@ class _Body extends StatelessWidget {
             children: [
               for (var i = 0; i < kDefaultAvatars.length; i++)
                 GestureDetector(
-                  onTap: () => Navigator.of(ctx).pop(i),
+                  onTap: () => popIfCurrent(ctx, i),
                   child: ClipOval(child: DefaultAvatarView(index: i, size: 60)),
                 ),
             ],
@@ -205,6 +209,7 @@ class _Body extends StatelessWidget {
 
   Future<void> _confirmDelete(
       BuildContext context, ProfileManagementCubit cubit) async {
+    if (!TapGuard.acquire()) return; // double tap — see tap_guard.dart
     final yes = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
@@ -213,12 +218,12 @@ class _Body extends StatelessWidget {
         content: const Text('L\'operazione non è reversibile.'),
         actions: [
           TextButton(
-              onPressed: () => Navigator.of(ctx).pop(false),
+              onPressed: () => popIfCurrent(ctx, false),
               child: const Text('Annulla')),
           FilledButton(
             style: FilledButton.styleFrom(
                 backgroundColor: const Color(0xFFFF6B6B)),
-            onPressed: () => Navigator.of(ctx).pop(true),
+            onPressed: () => popIfCurrent(ctx, true),
             child: const Text('Elimina'),
           ),
         ],
@@ -229,6 +234,7 @@ class _Body extends StatelessWidget {
 
   Future<void> _managePin(BuildContext context, ProfileManagementCubit cubit,
       LocalProfile profile) async {
+    if (!TapGuard.acquire()) return; // double tap — see tap_guard.dart
     final response = await showNativePinSetupDialog(context,
         profileId: profile.profileId, hasExistingPin: profile.pinProtected);
     if (response == null) return;
@@ -245,6 +251,7 @@ class _Body extends StatelessWidget {
 
   Future<void> _removePin(BuildContext context, ProfileManagementCubit cubit,
       LocalProfile profile) async {
+    if (!TapGuard.acquire()) return; // double tap — see tap_guard.dart
     final removed =
         await showNativePinRemoveDialog(context, profileId: profile.profileId);
     if (removed) await cubit.refresh();
@@ -252,6 +259,7 @@ class _Body extends StatelessWidget {
 
   Future<void> _confirmForgetDevice(
       BuildContext context, ProfileManagementCubit cubit) async {
+    if (!TapGuard.acquire()) return; // double tap — see tap_guard.dart
     final yes = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
@@ -261,10 +269,10 @@ class _Body extends StatelessWidget {
             'PIN per usare questo profilo su questo dispositivo.'),
         actions: [
           TextButton(
-              onPressed: () => Navigator.of(ctx).pop(false),
+              onPressed: () => popIfCurrent(ctx, false),
               child: const Text('Annulla')),
           FilledButton(
-            onPressed: () => Navigator.of(ctx).pop(true),
+            onPressed: () => popIfCurrent(ctx, true),
             child: const Text('Dimentica'),
           ),
         ],

@@ -42,8 +42,9 @@ android {
         // deliberately if a dependency needs it, don't let a Flutter
         // upgrade decide.
         minSdk = flutter.minSdkVersion
-        // Pinned explicit: Google Play requires targetSdk 35 for apps
-        // submitted from Aug 2025 on. Bump in lockstep with a Play deadline,
+        // Pinned explicit. This is the TV flavor's value (Android TV only
+        // needs 34+ on Play); the mobile flavor overrides it to 36 below
+        // (productFlavors → mobile), Play's phone/tablet floor. Bump in lockstep with a Play deadline,
         // not silently via the Flutter SDK. Must stay <= compileSdk (36).
         targetSdk = 35
         versionCode = flutter.versionCode
@@ -76,6 +77,14 @@ android {
             dimension = "target"
             applicationIdSuffix = ".mobile"
             versionNameSuffix = "-mobile"
+            // Play requires new phone/tablet apps and updates to target
+            // Android 16 (API 36) from 2026-08-31; Android TV only needs 34+,
+            // so the TV flavor keeps the defaultConfig value above (no
+            // behaviour change on the Amlogic boxes). Side effects of 36 on
+            // the phone build: on large screens (smallest width >= 600dp)
+            // the OS ignores the portrait/landscape locks set from Dart, and
+            // predictive back is on by default — both handled in lib/mobile/.
+            targetSdk = 36
         }
     }
 

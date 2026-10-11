@@ -13,6 +13,7 @@ import '../shared/widgets/native_pin_dialogs.dart';
 import '../shared/widgets/text_prompt_dialog.dart';
 import 'package:cached_network_image_platform_interface/cached_network_image_platform_interface.dart'
     show ImageRenderMethodForWeb;
+import '../shared/utils/tap_guard.dart';
 
 /// Mobile profile picker: tap an avatar to enter, "+" to create one (system
 /// keyboard dialog).
@@ -28,6 +29,9 @@ class _MobileProfilesScreenState extends State<MobileProfilesScreen> {
   // Dedupes _maybeOpenPinDialog between initState and the BlocListener below
   // — see initState's doc for why both exist.
   String? _handledPinProfileId;
+  // Entering a profile (prefs/profile sync) can take a moment on a slow
+  // link — show it, instead of a screen that looks like it ignored the tap.
+  bool _entering = false;
 
   @override
   void initState() {
@@ -48,6 +52,7 @@ class _MobileProfilesScreenState extends State<MobileProfilesScreen> {
   }
 
   Future<void> _create() async {
+    if (!TapGuard.acquire()) return; // double tap — see tap_guard.dart
     final name = await showTextPrompt(
       context,
       title: 'Nuovo profilo',
@@ -67,6 +72,7 @@ class _MobileProfilesScreenState extends State<MobileProfilesScreen> {
           profileId: profile.profileId, profileName: profile.profileName);
       if (!unlocked || !mounted) return;
     }
+    setState(() => _entering = true);
     getIt<AuthBloc>().add(SelectProfileEvent(profile.profileId));
   }
 
@@ -93,6 +99,9 @@ class _MobileProfilesScreenState extends State<MobileProfilesScreen> {
     return BlocListener<AuthBloc, AuthState>(
       bloc: getIt<AuthBloc>(),
       listener: (context, state) {
+        if (state is! AuthLoading && _entering) {
+          setState(() => _entering = false);
+        }
         if (state is ProfileSelectionRequired) {
           setState(() => _profiles = state.profiles);
           _maybeOpenPinDialog(state);
@@ -121,8 +130,24 @@ class _MobileProfilesScreenState extends State<MobileProfilesScreen> {
           ],
         ),
         body: SafeArea(
-          child: GridView.count(
-            crossAxisCount: 3,
+          child: Column(
+            children: [
+              if (_entering) const LinearProgressIndicator(minHeight: 2),
+              Expanded(child: _grid()),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _grid() => GridView.extent(
+            // Max tile width, not a fixed column count: 3 per row on a
+            // phone as before, more on a tablet / landscape instead of
+            // three giant tiles (with targetSdk 36 the OS no longer honours
+            // the portrait lock on large screens).
+            maxCrossAxisExtent: 150,
+            childAspectRatio: 0.82,
             padding: const EdgeInsets.all(20),
             mainAxisSpacing: 20,
             crossAxisSpacing: 20,
@@ -134,11 +159,7 @@ class _MobileProfilesScreenState extends State<MobileProfilesScreen> {
                 ),
               _AddTile(onTap: _create),
             ],
-          ),
-        ),
-      ),
-    );
-  }
+          );
 }
 
 class _ProfileTile extends StatelessWidget {

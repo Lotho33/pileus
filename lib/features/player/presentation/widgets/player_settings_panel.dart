@@ -26,12 +26,17 @@ class PlayerSettingsPanel extends StatefulWidget {
   final VoidCallback onClose;
   final ValueChanged<double> onVolumeChanged;
 
+  /// The user picked an audio track — the screen remembers it (see
+  /// audio_lang_pref.dart) so the next episode / a later resume keeps it.
+  final ValueChanged<MediaTrack>? onAudioTrackSelected;
+
   const PlayerSettingsPanel({
     super.key,
     required this.engine,
     required this.volume,
     required this.onClose,
     required this.onVolumeChanged,
+    this.onAudioTrackSelected,
   });
 
   @override
@@ -303,7 +308,10 @@ class PlayerSettingsPanelState extends State<PlayerSettingsPanel> {
               _TrackTile(
                 label: tracks[i].label,
                 selected: active == tracks[i],
-                onTap: () => widget.engine.selectAudioTrack(tracks[i]),
+                onTap: () {
+                  widget.engine.selectAudioTrack(tracks[i]);
+                  widget.onAudioTrackSelected?.call(tracks[i]);
+                },
                 focusNode: i == 0 ? _audioFirstFn : null,
                 onBack: _returnToMaster,
               ),

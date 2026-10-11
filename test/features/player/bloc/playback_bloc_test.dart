@@ -272,6 +272,9 @@ void main() {
       final ready =
           await bloc.stream.firstWhere((s) => s is PlaybackReady) as PlaybackReady;
       expect(ready.resolvedUrl, 'https://example/stream.m3u8');
+      // The source it came from — what the screens store in Continue
+      // Watching so a resume re-resolves the same language.
+      expect(ready.streamId, 's1');
       expect(repo.callCount, 1);
     });
 

@@ -8,11 +8,17 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
 import '../../../core/di/injection.dart';
+import '../../../core/grpc/clients/media_client.dart' show StreamsResponse;
+import '../../../core/grpc/grpc_errors.dart' show grpcMessage;
 import '../../../core/theme/app_theme.dart';
 import '../../media/data/media_repository.dart';
 import '../bloc/download_options_cubit.dart';
 import '../bloc/download_options_state.dart';
 import '../download_format.dart';
+import '../../../shared/utils/tap_guard.dart';
+
+// True while the GetStreams lookup before the sheet is in flight.
+bool _opening = false;
 
 /// Opens the sheet, resolves a download-worthy stream itself (GetStreams +
 /// same default-source pick the "Riproduci" button uses), then walks the
@@ -31,8 +37,22 @@ Future<void> showDownloadOptionsSheet(
   required DownloadTarget target,
   List<DownloadBatchGroup> batchGroups = const [],
 }) async {
+  // Double tap on the download button used to fetch twice and stack two
+  // sheets; a failed fetch threw out of here with no feedback at all.
+  if (_opening || !TapGuard.acquire()) return;
+  _opening = true;
   final repo = getIt<MediaRepository>();
-  final streamsRes = await repo.getStreams(pluginId, target.mediaId);
+  final messenger = ScaffoldMessenger.of(context);
+  final StreamsResponse streamsRes;
+  try {
+    streamsRes = await repo.getStreams(pluginId, target.mediaId);
+  } catch (e) {
+    messenger.showSnackBar(SnackBar(
+        content: Text('Impossibile recuperare le sorgenti: ${grpcMessage(e)}')));
+    return;
+  } finally {
+    _opening = false;
+  }
   if (!context.mounted) return;
   if (streamsRes.sources.isEmpty) {
     ScaffoldMessenger.of(context).showSnackBar(

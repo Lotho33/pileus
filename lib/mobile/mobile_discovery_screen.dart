@@ -86,7 +86,21 @@ class _MobileDiscoveryScreenState extends State<MobileDiscoveryScreen> {
       _busy = true;
       _error = null;
     });
-    final host = await resolveGrpcHost();
+    final String host;
+    try {
+      host = await resolveGrpcHost();
+    } catch (_) {
+      // Without this a failing scan left the buttons disabled behind a
+      // spinner forever (_busy never reset).
+      if (mounted) {
+        setState(() {
+          _busy = false;
+          _error = 'Nessun server Mycelium trovato sulla rete locale.';
+        });
+      }
+      return;
+    }
+    if (!mounted) return;
     await _connectTo(host);
   }
 

@@ -20,6 +20,7 @@ import '../features/media/presentation/widgets/plugin_nav.dart'
     show pluginLabel;
 import '../shared/widgets/filter_sheet.dart';
 import 'widgets/mobile_poster_card.dart';
+import '../shared/utils/tap_guard.dart';
 
 /// Shortest query the search will dispatch, unless a filter is carrying it.
 const _kMinLen = 2;
@@ -239,6 +240,7 @@ class _MobileSearchScreenState extends State<MobileSearchScreen> {
   /// them, not just if that one early attempt happened to land after
   /// everything else was ready.
   Future<void> _openFilters() async {
+    if (!TapGuard.acquire()) return; // double tap — see tap_guard.dart
     final id = _pluginId;
     if (id == null) return;
     await _loadFilters(id);
@@ -394,16 +396,20 @@ class _MobileSearchScreenState extends State<MobileSearchScreen> {
                         icon: Icons.search_rounded,
                         text: hasFilters
                             ? 'Scrivi un titolo o imposta un filtro.'
-                            : 'Scrivi e premi Cerca.',
+                            : 'Scrivi un titolo da cercare.',
                       );
                     }
                     if (s is DiscoveryLoading) {
                       return const Center(child: CircularProgressIndicator());
                     }
                     if (s is DiscoveryError) {
-                      return const _Hint(
+                      // Retryable in place — a dropped connection used to
+                      // leave a dead-end message until the query was edited.
+                      return _Hint(
                         icon: Icons.error_outline_rounded,
                         text: 'Ricerca non riuscita.',
+                        actionLabel: 'Riprova',
+                        onAction: _run,
                       );
                     }
                     if (s is DiscoveryLoaded) {
@@ -569,7 +575,10 @@ class _LoadMoreFooter extends StatelessWidget {
 class _Hint extends StatelessWidget {
   final IconData icon;
   final String text;
-  const _Hint({required this.icon, required this.text});
+  final String? actionLabel;
+  final VoidCallback? onAction;
+  const _Hint(
+      {required this.icon, required this.text, this.actionLabel, this.onAction});
 
   @override
   Widget build(BuildContext context) {
@@ -584,6 +593,14 @@ class _Hint extends StatelessWidget {
             Text(text,
                 textAlign: TextAlign.center,
                 style: const TextStyle(color: AppTheme.textMid)),
+            if (actionLabel != null && onAction != null) ...[
+              const SizedBox(height: 12),
+              OutlinedButton.icon(
+                onPressed: onAction,
+                icon: const Icon(Icons.refresh_rounded),
+                label: Text(actionLabel!),
+              ),
+            ],
           ],
         ),
       ),

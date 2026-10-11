@@ -26,7 +26,10 @@ import '../../downloads/bloc/download_options_cubit.dart' show DownloadTarget;
 import '../../downloads/download_format.dart' show pluginSupportsDownload;
 import '../../downloads/presentation/tv_download_options_screen.dart'
     show pushTvDownloadOptions;
+import '../../player/continue_watching_launch.dart';
 import '../../player/episode_poster.dart';
+import '../../player/resolve_and_play.dart' show PlayerLaunchGuard;
+import '../../player/resume_lookup.dart';
 import 'widgets/details_common.dart';
 import 'widgets/series_page_layout.dart';
 import 'package:cached_network_image_platform_interface/cached_network_image_platform_interface.dart'

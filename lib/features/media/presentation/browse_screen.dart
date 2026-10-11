@@ -13,6 +13,7 @@ import '../../../shared/widgets/tv_focusable.dart';
 import '../bloc/discovery_bloc.dart';
 import '../bloc/discovery_event.dart';
 import '../bloc/discovery_state.dart';
+import '../../../shared/utils/tap_guard.dart';
 
 // Ratios — 1920×1080 baseline
 const double _rBrHPad = 48 / 1920;
@@ -271,12 +272,12 @@ class _EpisodeTile extends StatelessWidget {
       final isAnime = (item.extra['anilist_id'] ?? '').isNotEmpty ||
           (item.extra['mal_id'] ?? '').isNotEmpty;
       if (isAnime) {
-        context.push(
+        context.pushGuarded(
           '/episode/$pluginId/${Uri.encodeComponent(item.id)}',
           extra: {'showTitle': showTitle},
         );
       } else if (item.isDir) {
-        context.push(
+        context.pushGuarded(
           '/browse/$pluginId/${Uri.encodeComponent(item.id)}',
           extra: item.title,
         );
@@ -293,7 +294,7 @@ class _EpisodeTile extends StatelessWidget {
             .map((g) => g.trim())
             .where((g) => g.isNotEmpty)
             .toList();
-        context.push(
+        context.pushGuarded(
           '/player/$pluginId/${Uri.encodeComponent(item.id)}',
           extra: <String, dynamic>{
             if (item.title.isNotEmpty) 'title': item.title,
@@ -430,7 +431,7 @@ class _PosterGridView extends StatelessWidget {
                 autofocus: i == 0,
                 onTap: () {
                   if (item.isDir) {
-                    context.push(
+                    context.pushGuarded(
                       '/browse/$pluginId/${Uri.encodeComponent(item.id)}',
                       extra: item.title,
                     );
@@ -451,7 +452,7 @@ class _PosterGridView extends StatelessWidget {
                           .map((g) => g.trim())
                           .where((g) => g.isNotEmpty)
                           .toList();
-                      context.push(
+                      context.pushGuarded(
                         '/player/$pluginId/${Uri.encodeComponent(item.id)}',
                         extra: <String, dynamic>{
                           if (item.title.isNotEmpty) 'title': item.title,

@@ -7,6 +7,7 @@ import '../../core/grpc/clients/auth_client.dart' show SetProfilePinResponse;
 import '../../core/grpc/grpc_errors.dart';
 import '../../core/theme/app_theme.dart';
 import '../../features/auth/data/auth_repository.dart';
+import '../utils/tap_guard.dart';
 
 /// Native-widget counterpart of
 /// features/auth/presentation/widgets/profile_pin_dialog.dart, for the three
@@ -105,7 +106,7 @@ class _NativePinUnlockDialogState extends State<_NativePinUnlockDialog> {
         }
       }
       if (!mounted) return;
-      Navigator.of(context).pop(true);
+      popIfCurrent(context, true);
     } catch (e) {
       if (!mounted) return;
       setState(() {
@@ -141,7 +142,7 @@ class _NativePinUnlockDialogState extends State<_NativePinUnlockDialog> {
       ),
       actions: [
         TextButton(
-          onPressed: _submitting ? null : () => Navigator.of(context).pop(),
+          onPressed: _submitting ? null : () => popIfCurrent(context),
           child: const Text('Annulla'),
         ),
         FilledButton(
@@ -277,7 +278,7 @@ class _NativePinSetupDialogState extends State<_NativePinSetupDialog> {
         newPin: widget.removeMode ? '' : _newPin,
       );
       if (!mounted) return;
-      Navigator.of(context).pop(response);
+      popIfCurrent(context, response);
     } catch (e) {
       if (!mounted) return;
       setState(() {
@@ -300,7 +301,7 @@ class _NativePinSetupDialogState extends State<_NativePinSetupDialog> {
       content: _pinField(_ctrl, errorText: _error, onSubmitted: _advance),
       actions: [
         TextButton(
-          onPressed: _submitting ? null : () => Navigator.of(context).pop(),
+          onPressed: _submitting ? null : () => popIfCurrent(context),
           child: const Text('Annulla'),
         ),
         FilledButton(

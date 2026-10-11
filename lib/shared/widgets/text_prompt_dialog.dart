@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../core/theme/app_theme.dart';
+import '../utils/tap_guard.dart';
 
 /// A single-field text prompt dialog. Returns the trimmed text, or `null` if
 /// dismissed. The `TextEditingController` lives on a `State` (disposed in
@@ -76,7 +77,7 @@ class _TextPromptDialogState extends State<_TextPromptDialog> {
       setState(() => _error = 'Inserisci un testo.');
       return;
     }
-    Navigator.of(context).pop(v);
+    popIfCurrent(context, v);
   }
 
   @override
@@ -96,7 +97,7 @@ class _TextPromptDialogState extends State<_TextPromptDialog> {
       ),
       actions: [
         TextButton(
-          onPressed: () => Navigator.of(context).pop(),
+          onPressed: () => popIfCurrent(context),
           child: const Text('Annulla'),
         ),
         FilledButton(onPressed: _submit, child: Text(widget.confirmLabel)),

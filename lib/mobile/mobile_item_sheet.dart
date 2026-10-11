@@ -1,5 +1,6 @@
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 
 import '../core/di/injection.dart';
 import '../core/grpc/clients/media_client.dart' hide ContinueWatchingItem;
@@ -8,15 +9,20 @@ import '../core/utils/image_sizing.dart';
 import '../features/media/data/media_repository.dart';
 import '../shared/widgets/open_catalog_item.dart';
 import '../features/player/episode_poster.dart';
+import '../features/player/continue_watching_launch.dart';
 import '../features/player/resolve_and_play.dart';
+import '../features/player/resume_lookup.dart';
 import 'package:cached_network_image_platform_interface/cached_network_image_platform_interface.dart'
     show ImageRenderMethodForWeb;
+import '../shared/utils/tap_guard.dart';
 
 /// Long-press context sheet for a catalog item (home cards, search results):
 /// poster + quick metadata + Info / Riproduci. The mobile equivalent of the
 /// TV hover popup.
 Future<void> showItemSheet(
     BuildContext context, String pluginId, CatalogItem item) {
+  // Double tap / long-press twice: one sheet, not two stacked.
+  if (!TapGuard.acquire()) return Future.value();
   return showModalBottomSheet<void>(
     context: context,
     backgroundColor: AppTheme.surface,
@@ -45,6 +51,7 @@ class _ItemSheetState extends State<_ItemSheet> {
   // sheet itself.
   String _movieFanart = '';
   bool _preparing = false;
+  bool _closed = false;
 
   @override
   void initState() {
@@ -70,16 +77,47 @@ class _ItemSheetState extends State<_ItemSheet> {
     } catch (_) {}
   }
 
-  void _info() {
+  /// Pops this sheet at most once — "Info" and a "Riproduci" still
+  /// resolving in the background (or a double tap on either) used to pop
+  /// the sheet and then the page underneath it. False means the sheet is
+  /// already gone: don't launch anything either.
+  bool _closeOnce() {
+    if (_closed || !mounted) return false;
+    _closed = true;
     Navigator.of(context).pop();
+    return true;
+  }
+
+  void _info() {
+    // Double tap on "Info" used to pop the sheet *and* the page under it.
+    if (!_closeOnce()) return;
     openCatalogItem(context, widget.pluginId, widget.item);
   }
 
   Future<void> _play() async {
     final it = widget.item;
-    if (it.mediaType == 'series') {
-      setState(() => _preparing = true);
-      final repo = getIt<MediaRepository>();
+    final isSeries = it.mediaType == 'series';
+    final router = GoRouter.of(context);
+    setState(() => _preparing = true);
+    final repo = getIt<MediaRepository>();
+
+    // Something already in Continue Watching for this title → resume it, same
+    // as the details page's main button. Used to always start a movie from 0
+    // and a series from S1E1 even mid-binge.
+    final resume = await findResumeEntry(repo,
+        pluginId: widget.pluginId, itemId: it.id, isSeries: isSeries);
+    if (!mounted) return;
+    if (resume != null) {
+      if (!_closeOnce()) return;
+      PlayerLaunchGuard.push(
+        router,
+        '/player/${widget.pluginId}/${Uri.encodeComponent(resume.playableID)}',
+        extra: continueWatchingPlayerExtra(resume, posterFallback: it.posterUrl),
+      );
+      return;
+    }
+
+    if (isSeries) {
       try {
         final d = await repo.getDetails(widget.pluginId, it.id);
         final List<SeasonInfo> seasons =
@@ -90,7 +128,8 @@ class _ItemSheetState extends State<_ItemSheet> {
           final b = await repo.browse(widget.pluginId, s.directoryId, '');
           if (mounted && b.episodes.isNotEmpty) {
             final eps = b.episodes;
-            Navigator.of(context).pop();
+            final series = d.series;
+            if (!_closeOnce()) return;
             await resolveAndPlay(
               context,
               widget.pluginId,
@@ -116,6 +155,16 @@ class _ItemSheetState extends State<_ItemSheet> {
                 'episodeNumbers': eps.map((e) => e.episodeNumber).toList(),
                 'seasonNumbers': eps.map((e) => e.seasonNumber).toList(),
                 'episodeIndex': 0,
+                // Same as the details page: without these, auto-advance
+                // across a season boundary silently no-ops and the Continue
+                // Watching row has no synopsis/genres.
+                'allSeasonIds': seasons.map((x) => x.directoryId).toList(),
+                'allSeasonLabels': seasons.map((x) => x.label).toList(),
+                'seasonIndex': seasons.indexOf(s),
+                'plot': series.plot,
+                'rating': it.rating,
+                'year': series.year > 0 ? series.year : it.year,
+                'genres': series.genres.toList(),
               },
             );
             return;
@@ -125,7 +174,7 @@ class _ItemSheetState extends State<_ItemSheet> {
       if (mounted) _info();
       return;
     }
-    Navigator.of(context).pop();
+    if (!_closeOnce()) return;
     await resolveAndPlay(
       context,
       widget.pluginId,
@@ -138,6 +187,10 @@ class _ItemSheetState extends State<_ItemSheet> {
           posterUrl: it.posterUrl,
         ),
         'mediaType': it.mediaType,
+        'plot': _plot,
+        'genres': _genres,
+        'rating': it.rating,
+        'year': it.year,
       },
     );
   }

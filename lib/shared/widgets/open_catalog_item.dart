@@ -1,8 +1,8 @@
 import 'package:flutter/widgets.dart';
-import 'package:go_router/go_router.dart';
 
 import '../../core/grpc/clients/media_client.dart';
 import 'live_event_popup.dart';
+import '../utils/tap_guard.dart';
 
 /// Tap routing for a catalog item, shared by every horizontal carousel
 /// (home screen catalog rows, search results) — previously duplicated
@@ -15,6 +15,7 @@ import 'live_event_popup.dart';
 void openCatalogItem(BuildContext ctx, String pluginId, CatalogItem item) {
   final mt = item.mediaType;
   if (mt == 'live') {
+    if (!TapGuard.acquire()) return; // see tap_guard.dart
     showLiveEventPopup(ctx, pluginId, item);
   } else if (mt == 'series' || mt == 'movie' || mt == 'episode') {
     // extra: item — the catalog item is already fully loaded and its
@@ -22,9 +23,9 @@ void openCatalogItem(BuildContext ctx, String pluginId, CatalogItem item) {
     // it (a hero background, a card). DetailsScreen uses this as a preview
     // so the same image renders continuously instead of the screen going
     // blank behind a spinner until GetDetails round-trips.
-    ctx.push('/details/$pluginId/${Uri.encodeComponent(item.id)}', extra: item);
+    ctx.pushGuarded('/details/$pluginId/${Uri.encodeComponent(item.id)}', extra: item);
   } else if (item.isDir) {
-    ctx.push('/browse/$pluginId/${Uri.encodeComponent(item.id)}',
+    ctx.pushGuarded('/browse/$pluginId/${Uri.encodeComponent(item.id)}',
         extra: item.title);
   } else {
     // extra: item — the catalog item is already fully loaded and its
@@ -32,6 +33,6 @@ void openCatalogItem(BuildContext ctx, String pluginId, CatalogItem item) {
     // it (a hero background, a card). DetailsScreen uses this as a preview
     // so the same image renders continuously instead of the screen going
     // blank behind a spinner until GetDetails round-trips.
-    ctx.push('/details/$pluginId/${Uri.encodeComponent(item.id)}', extra: item);
+    ctx.pushGuarded('/details/$pluginId/${Uri.encodeComponent(item.id)}', extra: item);
   }
 }

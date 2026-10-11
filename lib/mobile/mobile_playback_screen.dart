@@ -11,6 +11,7 @@ import '../core/di/injection.dart';
 import '../core/grpc/clients/media_client.dart' show DetailsResponse;
 import '../core/perf_profile.dart';
 import '../core/theme/app_theme.dart';
+import '../features/media/bloc/plugin_bloc.dart';
 import '../features/media/data/media_repository.dart';
 import '../features/player/bloc/playback_bloc.dart';
 import '../features/player/bloc/playback_event.dart';
@@ -24,11 +25,14 @@ import '../features/player/models/skip_interval.dart';
 import '../features/player/player_tuning.dart';
 import '../features/player/resume_seek.dart' show resolveStartPositionSec;
 import '../features/player/playback_episode_cache.dart';
+import '../features/player/presentation/widgets/player_audio_artwork.dart';
 import '../features/player/presentation/widgets/player_seek_bar.dart';
 import '../features/player/presentation/widgets/pointer_skip_button.dart';
 import '../features/player/profile_lease_conflict.dart';
+import '../features/player/source_continuity.dart';
 import '../features/settings/data/settings_repository.dart';
 import '../shared/player/playback_progress.dart';
+import '../shared/utils/tap_guard.dart';
 
 /// Touch player for the mobile flavor. Landscape-locked while mounted;
 /// reuses [PlaybackBloc] (stream fetch + resolve) and [PlayerEngine]
@@ -101,6 +105,11 @@ class _MobilePlayerViewState extends State<_MobilePlayerView> {
   // around the new episode's mediaId/args (see _resolveEpisodeAt) instead
   // of tearing down and recreating the whole screen.
   late PlaybackProgress _progress;
+  // widget.args plus whatever series metadata the screen backfills itself
+  // (_resolveSeriesMetaIfMissing) — the base every _currentArgs() is built
+  // from, so Continue Watching gets the series' id/name/plot even from a
+  // launch path that didn't carry them.
+  late PlaybackArgs _baseArgs = widget.args;
 
   bool _controlsVisible = true;
   bool _opened = false;
@@ -135,6 +144,12 @@ class _MobilePlayerViewState extends State<_MobilePlayerView> {
   late int _curEpisodeIndex;
   late int _curSeasonIndex;
   late String _curMediaId;
+  // The stream (source) id actually playing — GetStreams' per-source id,
+  // which carries the language. Continue Watching stores this, not the bare
+  // _curMediaId, so a resume re-resolves the same source/language (see
+  // source_continuity.dart). Null until known (a launch that only had a
+  // media id learns it from PlaybackReady.streamId).
+  String? _curStreamId;
   late String _curSourceLabel;
   late String? _curTitle;
   late List<String> _curEpisodeList;
@@ -190,13 +205,26 @@ class _MobilePlayerViewState extends State<_MobilePlayerView> {
   bool _engineInitialized = false;
   late final int _bufMiB;
 
-  // Live-only: TV/desktop/web all catch a live stream reporting playing=true
-  // (or stuck buffering) with no genuine position advance — ExoPlayer can
-  // land there too (e.g. an HLS live-edge blip with no exception ever
-  // surfacing) — mobile is the one platform of the four that needs this
-  // watchdog wired up explicitly. See live_stall_watchdog.dart for the
-  // two-tier recovery this drives.
-  LiveStallWatchdog? _liveWatchdog;
+  // Last real (non-zero) position of the stream playing now — where "Riprova"
+  // and the stall watchdog's reopen resume to. Reset on every episode switch.
+  // Mirrors the TV player's _lastEnginePos: retrying used to fall back to the
+  // screen's *launch* resume point (or 0 after an episode switch), so an
+  // error at minute 40 restarted the film from the top.
+  Duration _lastPos = Duration.zero;
+
+  // Same reasoning as the TV player's _optimisticSeekTarget: the reported
+  // position lags a seek() call, so two quick taps on ±10 would both read the
+  // same stale position and collapse into a single step.
+  Duration? _optimisticSeekTarget;
+  Timer? _optimisticSeekClearTimer;
+
+  // Live AND on-demand, like the TV player since its 2026-10 audit: ExoPlayer
+  // can report playing=true (or sit buffering forever) with the position
+  // frozen and no exception at all — an HLS live-edge blip, or just a slow
+  // segment fetch on a film. Without this, VOD had no automatic recovery:
+  // "it buffers, then freezes until I resume by hand". See
+  // live_stall_watchdog.dart for the two tiers; VOD gets a longer leash.
+  LiveStallWatchdog? _stallWatchdog;
 
   // ── Next-episode prefetch ──────────────────────────────────────────────────
   // Warmed at kPrefetchThreshold through the current episode (see
@@ -213,9 +241,16 @@ class _MobilePlayerViewState extends State<_MobilePlayerView> {
   void initState() {
     super.initState();
     _settings = getIt<SettingsRepository>();
+    // Silence the home's 30s plugin-status poll for the whole playback
+    // session (battery + mobile data) — same as the TV player.
+    getIt<PluginBloc>().pausePolling();
+    final launchStream = widget.args.directStreamId;
+    if (launchStream != null && launchStream.isNotEmpty) {
+      _curStreamId = launchStream;
+    }
     _progress = PlaybackProgress(
         args: widget.args,
-        mediaId: widget.mediaId,
+        mediaId: _curStreamId ?? widget.mediaId,
         onPlaybackElsewhere: _onPlaybackTakenOver);
 
     _curEpisodeIndex = widget.args.episodeList.isEmpty
@@ -247,29 +282,35 @@ class _MobilePlayerViewState extends State<_MobilePlayerView> {
     _engine.onError = _onEngineError;
     _engine.addListener(_onEngine);
     _posSub = _engine.positionStream.listen(_onPosition);
-    if (widget.args.isLive) {
-      _liveWatchdog = LiveStallWatchdog(
-        isHealthy: () =>
-            mounted &&
-            _playbackError == null &&
-            (_errorGrace?.isActive != true) &&
-            _engine.playing,
-        isBuffering: () => _engine.buffering,
-        onStallTier1: () {
-          _engine.pause();
-          _engine.play();
-        },
-        onStallTier2: () {
-          if (!mounted) return;
-          setState(() => _opened = false);
-          context.read<PlaybackBloc>().add(InitializeVideoEvent(
-                pluginId: widget.pluginId,
-                mediaId: _curMediaId,
-                preferredLabel: _curSourceLabel,
-              ));
-        },
-      )..arm();
-    }
+    final live = widget.args.isLive;
+    _stallWatchdog = LiveStallWatchdog(
+      // Only a stream that is really open, past its first frame and not
+      // mid-switch/error/take-over — a user pause reads playing=false and
+      // never trips it.
+      isHealthy: () =>
+          mounted &&
+          _opened &&
+          _started &&
+          !_transitioningEpisode &&
+          !_resolvingEpisode &&
+          _takeoverPrompt == null &&
+          _playbackError == null &&
+          (_errorGrace?.isActive != true) &&
+          _engine.playing,
+      isBuffering: () => _engine.buffering,
+      onStallTier1: () {
+        _engine.pause();
+        _engine.play();
+      },
+      onStallTier2: () {
+        if (mounted) _reopenCurrent();
+      },
+      // Same leashes as the TV player: VOD has no live edge to fall behind,
+      // so it waits a bit longer before reopening (which means a real seek
+      // back to where it stalled).
+      stallThreshold: Duration(seconds: live ? 9 : 15),
+      bufferingStallThreshold: Duration(seconds: live ? 18 : 25),
+    )..arm();
     // Native controller creation deferred to _ensureEngineInitialized(),
     // called right before the first engine.open() — not here. Mirrors the TV
     // player's own fix for a reported whole-screen freeze on weak hardware:
@@ -292,7 +333,9 @@ class _MobilePlayerViewState extends State<_MobilePlayerView> {
     // episode (Continue Watching, a search/quick-play deep link) carries no
     // episodeList — this fills it in so "episodio successivo" still shows up
     // a beat after playback starts instead of never.
-    _resolveEpisodeListIfMissing();
+    _resolveSeriesMetaIfMissing().whenComplete(() {
+      if (mounted) _resolveEpisodeListIfMissing();
+    });
 
     _armAutoHide();
     // On Android the ExoPlayer engine already pauses decoding natively when
@@ -364,7 +407,8 @@ class _MobilePlayerViewState extends State<_MobilePlayerView> {
     _progressTimer?.cancel();
     _resumeCoverSafetyTimer?.cancel();
     _posSub?.cancel();
-    _liveWatchdog?.disarm();
+    _stallWatchdog?.disarm();
+    _optimisticSeekClearTimer?.cancel();
     _seekBarFocusNode.dispose();
     // Final save while the engine is still alive — catches everything since
     // the last heartbeat (e.g. the user backs out 8s after the last tick).
@@ -384,6 +428,7 @@ class _MobilePlayerViewState extends State<_MobilePlayerView> {
       _engine.removeListener(_onEngine);
       _engine.dispose();
     } catch (_) {}
+    getIt<PluginBloc>().resumePolling();
     super.dispose();
   }
 
@@ -429,7 +474,9 @@ class _MobilePlayerViewState extends State<_MobilePlayerView> {
     // already reassigned to the incoming one, which would immediately roll
     // it forward again and skip an episode in Continue Watching — the same
     // failure mode as the web player's equivalent bug.
-    if (playing && !_transitioningEpisode) _progress.maybeClear(_engine);
+    if (playing && !_transitioningEpisode) {
+      _progress.maybeClear(_engine, prefetched: _prefetcher.cached);
+    }
 
     if (playing != _lastPlaying) {
       _lastPlaying = playing;
@@ -477,7 +524,6 @@ class _MobilePlayerViewState extends State<_MobilePlayerView> {
   void _onPlaybackTakenOver(String playingOn) {
     if (!mounted || _takeoverPrompt != null) return;
     _errorGrace?.cancel();
-    _liveWatchdog?.disarm();
     final resumePos = _engine.position;
     _engine.pause();
     // Best-effort — records exactly where this device stopped (mainly
@@ -494,29 +540,8 @@ class _MobilePlayerViewState extends State<_MobilePlayerView> {
         actionLabel: 'Riprendi qui',
         backLabel: 'Esci',
         onAction: () {
-          // A fresh _progress (same episode, but re-armed to resume-seek at
-          // resumePos instead of wherever _resumeSeek's own target already
-          // landed/confirmed long ago) — same reasoning as an episode
-          // switch's own _progress rebuild, just with this position instead
-          // of 0.
-          _progress = PlaybackProgress(
-              args: _currentArgs(seekTo: resumePos.inSeconds),
-              mediaId: _curMediaId,
-              onPlaybackElsewhere: _onPlaybackTakenOver);
-          setState(() {
-            _takeoverPrompt = null;
-            _opened = false;
-            _started = false;
-          });
-          _armResumeCoverSafetyTimer();
-          context.read<PlaybackBloc>().add(InitializeVideoEvent(
-                pluginId: widget.args.epPluginId,
-                mediaId: _curMediaId,
-                preferredLabel: _curSourceLabel,
-                startPositionSec: resolveStartPositionSec(
-                    isLive: widget.args.isLive, seekTo: resumePos.inSeconds),
-                takeOver: true,
-              ));
+          setState(() => _takeoverPrompt = null);
+          _reopenCurrent(atSec: resumePos.inSeconds, takeOver: true);
         },
       );
     });
@@ -536,6 +561,12 @@ class _MobilePlayerViewState extends State<_MobilePlayerView> {
   Future<void> _onReady(PlaybackReady s) async {
     if (_opened) return;
     _opened = true;
+    // The source actually resolved (empty for a direct URL) — becomes the
+    // Continue Watching id from here on, see _curStreamId.
+    if (s.streamId.isNotEmpty) {
+      _curStreamId = s.streamId;
+      _progress.mediaId = s.streamId;
+    }
     _ensureEngineInitialized();
     _skipIntervals = parseSkipTimes(s.extra['skip_times']);
     _activeSkip = null;
@@ -551,49 +582,80 @@ class _MobilePlayerViewState extends State<_MobilePlayerView> {
     _transitioningEpisode = false;
   }
 
-  void _retry() {
+  void _retry() => _reopenCurrent();
+
+  /// Re-resolves and reopens what is playing now — "Riprova", the stall
+  /// watchdog's second tier, and "Riprendi qui" after a take-over all land
+  /// here, mirroring the TV player's own onRetry:
+  ///
+  ///  - resumes at [atSec] if given, else where playback actually got to
+  ///    ([_lastPos]), and only falls back to the launch resume point when
+  ///    nothing has ticked yet for this stream;
+  ///  - re-resolves the *same source* ([_curStreamId], so the same language)
+  ///    instead of re-running GetStreams and taking whatever comes first;
+  ///  - builds a fresh [PlaybackProgress] so its resume seek is re-armed (the
+  ///    old one is long confirmed, which made the reopen start at 0).
+  void _reopenCurrent({int? atSec, bool takeOver = false}) {
     _errorGrace?.cancel();
     final bloc = context.read<PlaybackBloc>();
-    _progress.resetForRetry();
+    final isLive = widget.args.isLive;
+    // A direct URL (offline download) only applies to the title the screen
+    // was opened with — after an episode switch, re-resolve that episode.
+    final sameTitle = _curMediaId == widget.mediaId;
+    final retrySec = isLive
+        ? 0
+        : (atSec ??
+            (_lastPos > Duration.zero
+                ? _lastPos.inSeconds
+                : (sameTitle ? widget.args.seekTo : 0)));
+    _progress = PlaybackProgress(
+        args: _currentArgs(seekTo: retrySec),
+        mediaId: _curStreamId ?? _curMediaId,
+        onPlaybackElsewhere: _onPlaybackTakenOver);
     setState(() {
       _playbackError = null;
       _opened = false;
+      _started = false;
     });
-    // A direct-stream deep link (or an offline-downloads directUrl) only
-    // applies to the title the screen was opened with — once the user has
-    // moved to a later episode, retry has to re-resolve that episode's own
-    // sources instead.
-    final sameTitle = _curMediaId == widget.mediaId;
+    // No _armResumeCoverSafetyTimer() here: _onReady arms it once the new
+    // stream actually opens. Armed now, a resolve slower than its 5s would
+    // lift the cover before the resume seek, flashing frame 0.
+    _resumeCoverSafetyTimer?.cancel();
+    final startPositionSec =
+        resolveStartPositionSec(isLive: isLive, seekTo: retrySec);
     final directUrl = sameTitle ? widget.args.directUrl : null;
-    final direct = sameTitle ? widget.args.directStreamId : null;
-    final startPositionSec = sameTitle
-        ? resolveStartPositionSec(
-            isLive: widget.args.isLive, seekTo: widget.args.seekTo)
-        : 0.0;
+    final stream = _curStreamId;
     if (directUrl != null && directUrl.isNotEmpty) {
       bloc.add(UseDirectUrlEvent(
           url: directUrl, httpHeaders: widget.args.directUrlHeaders));
-    } else if (direct != null && direct.isNotEmpty) {
+    } else if (stream != null && stream.isNotEmpty) {
       bloc.add(SelectStreamEvent(
-          pluginId: widget.pluginId,
-          streamId: direct,
-          startPositionSec: startPositionSec));
+          pluginId: widget.args.epPluginId,
+          streamId: stream,
+          startPositionSec: startPositionSec,
+          takeOver: takeOver));
     } else {
       bloc.add(InitializeVideoEvent(
-        pluginId: widget.pluginId,
+        pluginId: widget.args.epPluginId,
         mediaId: _curMediaId,
         preferredLabel: _curSourceLabel,
         startPositionSec: startPositionSec,
+        takeOver: takeOver,
       ));
     }
   }
 
   void _seekBy(int secs) {
     final d = _engine.duration;
-    var t = _engine.position + Duration(seconds: secs);
+    var t = (_optimisticSeekTarget ?? _engine.position) + Duration(seconds: secs);
     if (t < Duration.zero) t = Duration.zero;
     if (d > Duration.zero && t > d) t = d;
     _engine.seek(t);
+    _optimisticSeekTarget = t;
+    _optimisticSeekClearTimer?.cancel();
+    _optimisticSeekClearTimer = Timer(const Duration(milliseconds: 1200), () {
+      _optimisticSeekTarget = null;
+    });
     _armAutoHide();
   }
 
@@ -608,6 +670,71 @@ class _MobilePlayerViewState extends State<_MobilePlayerView> {
       _curEpisodeIndex > 0 ||
       (_curSeasonIndex > 0 && widget.args.allSeasonIds.isNotEmpty);
 
+  // One-shot: backfill the series id / name / synopsis / genres when the
+  // launch path didn't pass them — mirrors the TV player's
+  // _resolveSeriesMetaIfMissing. Without a parent id the episode list below
+  // can't be rebuilt either (no prev/next, no auto-advance) and the
+  // Continue Watching row lands without its series overline/plot.
+  Future<void> _resolveSeriesMetaIfMissing() async {
+    final a = _baseArgs;
+    if (a.isLive || a.isAudio) return;
+    if (a.showTitle.isNotEmpty &&
+        a.plot.isNotEmpty &&
+        a.parentId.isNotEmpty &&
+        a.genres.isNotEmpty) {
+      return;
+    }
+    try {
+      final repo = getIt<MediaRepository>();
+      var parentId = a.parentId;
+      var plot = '';
+      var genres = const <String>[];
+      var rating = 0.0;
+      var year = 0;
+      if (parentId.isEmpty) {
+        // Episodes carry their series id (show_id); a standalone movie has
+        // none and its own plot is the one to keep.
+        final self = await repo.getDetails(a.epPluginId, _curMediaId);
+        if (!mounted) return;
+        parentId = self.item.showId;
+        if (self.hasMovie()) {
+          plot = self.movie.plot;
+          genres = self.movie.genres;
+          year = self.movie.year;
+        }
+        rating = self.item.rating;
+        if (year == 0) year = self.item.year;
+      }
+      var showTitle = '';
+      if (parentId.isNotEmpty) {
+        final res = await repo.getDetails(a.epPluginId, parentId);
+        if (!mounted) return;
+        showTitle = res.item.title;
+        if (rating <= 0) rating = res.item.rating;
+        if (year == 0) year = res.item.year;
+        if (res.hasSeries()) {
+          if (plot.isEmpty) plot = res.series.plot;
+          if (genres.isEmpty) genres = res.series.genres;
+          if (year == 0) year = res.series.year;
+        }
+      }
+      if (!mounted) return;
+      setState(() {
+        _baseArgs = _baseArgs.withSeriesMeta(
+          parentId: parentId,
+          showTitle: showTitle,
+          plot: plot,
+          genres: genres,
+          rating: rating,
+          year: year,
+        );
+      });
+      _progress.args = _currentArgs(seekTo: _progress.args.seekTo);
+    } catch (_) {
+      // best-effort — the CW card falls back to the episode title / no plot
+    }
+  }
+
   // One-shot: rebuild the episode list when the launch path didn't pass one
   // — a Continue Watching tap carries only the single episode (parentId +
   // its own title), same gap the TV player already backfills for (see
@@ -618,11 +745,11 @@ class _MobilePlayerViewState extends State<_MobilePlayerView> {
   Future<void> _resolveEpisodeListIfMissing() async {
     if (widget.args.isLive ||
         _curEpisodeList.isNotEmpty ||
-        widget.args.parentId.isEmpty) {
+        _baseArgs.parentId.isEmpty) {
       return;
     }
     final target = (_curTitle ?? '').trim().toLowerCase();
-    final cacheKey = '${widget.args.epPluginId} ${widget.args.parentId}';
+    final cacheKey = '${widget.args.epPluginId} ${_baseArgs.parentId}';
     final cached = playbackEpisodeCache[cacheKey];
     if (cached != null && cached.length >= 2) {
       _applyResolvedEpisodes(cached, target);
@@ -631,7 +758,7 @@ class _MobilePlayerViewState extends State<_MobilePlayerView> {
     try {
       final repo = getIt<MediaRepository>();
       final res =
-          await repo.browse(widget.args.epPluginId, widget.args.parentId, '');
+          await repo.browse(widget.args.epPluginId, _baseArgs.parentId, '');
       if (!mounted) return;
 
       var eps = <({
@@ -741,11 +868,35 @@ class _MobilePlayerViewState extends State<_MobilePlayerView> {
       _curSeasonNumbers = [for (final e in eps) e.seasonNumber];
       _curEpisodeIndex = idx;
     });
+    // Same stream, more context: _progress keeps its resume seek but must
+    // see the episode list too — otherwise finishing this episode dropped
+    // the whole series from Continue Watching (no "next" known) instead of
+    // rolling it forward, and the S/E badge stayed blank.
+    _progress.args = _currentArgs(seekTo: _progress.args.seekTo);
+    _inferSourceLabelIfMissing(eps[idx].id);
+  }
+
+  /// A Continue Watching launch carries the stream id but not its source
+  /// label — without the label, the next episode resolved with whatever
+  /// source came first (often another language). Recovered once from this
+  /// episode's own sources; see source_continuity.dart.
+  Future<void> _inferSourceLabelIfMissing(String episodeId) async {
+    final stream = _curStreamId;
+    if (_curSourceLabel.isNotEmpty || stream == null) return;
+    final label = await inferSourceLabel(getIt<MediaRepository>(),
+        pluginId: widget.args.epPluginId,
+        episodeId: episodeId,
+        streamId: stream);
+    if (!mounted || label == null || _curSourceLabel.isNotEmpty) return;
+    if (_curStreamId != stream) return; // moved on meanwhile
+    _curSourceLabel = label;
+    _progress.args = _currentArgs(seekTo: _progress.args.seekTo);
   }
 
   void _onPosition(Duration pos) {
     if (!mounted) return;
-    _liveWatchdog?.recordProgress();
+    _stallWatchdog?.recordProgress();
+    if (pos > Duration.zero && !_transitioningEpisode) _lastPos = pos;
     if (widget.args.isLive) return;
 
     final active = activeSkipInterval(_skipIntervals, pos);
@@ -934,6 +1085,7 @@ class _MobilePlayerViewState extends State<_MobilePlayerView> {
       final durationSeconds = prefetched.durationSeconds;
       final year = prefetched.year;
       final skipTimes = prefetched.skipTimesJson;
+      final streamId = prefetched.streamId;
       _prefetcher.clear();
       // Final save for the outgoing episode, using the engine's position
       // exactly as it still is right now — must run before stop() (which
@@ -945,6 +1097,8 @@ class _MobilePlayerViewState extends State<_MobilePlayerView> {
       _saveProgressGuarded();
       _transitioningEpisode = true;
       _engine.stop();
+      _lastPos = Duration.zero;
+      _curStreamId = streamId;
       setState(() {
         _curEpisodeIndex = newIndex;
         _curMediaId = newMediaId;
@@ -969,7 +1123,7 @@ class _MobilePlayerViewState extends State<_MobilePlayerView> {
       });
       _progress = PlaybackProgress(
           args: _currentArgs(),
-          mediaId: newMediaId,
+          mediaId: streamId,
           onPlaybackElsewhere: _onPlaybackTakenOver);
       _progress.onStreamOpened();
       _armResumeCoverSafetyTimer();
@@ -1013,13 +1167,7 @@ class _MobilePlayerViewState extends State<_MobilePlayerView> {
 
     // Prefer the same source label already playing; fall back to the first
     // source rather than bouncing out to an episode picker mid-binge.
-    final match = (_curSourceLabel.isEmpty
-            ? null
-            : sources
-                .where((s) =>
-                    s.label.toLowerCase() == _curSourceLabel.toLowerCase())
-                .firstOrNull) ??
-        (sources.isNotEmpty ? sources.first : null);
+    final match = pickSourceByLabel(sources, _curSourceLabel);
 
     if (!mounted) return;
 
@@ -1034,6 +1182,8 @@ class _MobilePlayerViewState extends State<_MobilePlayerView> {
       _saveProgressGuarded();
       _transitioningEpisode = true;
       _engine.stop();
+      _lastPos = Duration.zero;
+      _curStreamId = match.id;
       setState(() {
         _curEpisodeIndex = newIndex;
         _curMediaId = newMediaId;
@@ -1061,7 +1211,7 @@ class _MobilePlayerViewState extends State<_MobilePlayerView> {
       });
       _progress = PlaybackProgress(
           args: _currentArgs(),
-          mediaId: newMediaId,
+          mediaId: match.id,
           onPlaybackElsewhere: _onPlaybackTakenOver);
       context.read<PlaybackBloc>().add(
             SelectStreamEvent(
@@ -1083,8 +1233,8 @@ class _MobilePlayerViewState extends State<_MobilePlayerView> {
           'allSeasonLabels': widget.args.allSeasonLabels,
           'seasonIndex': _curSeasonIndex,
           'sourceLabel': _curSourceLabel,
-          'showTitle': widget.args.showTitle,
-          'parentId': widget.args.parentId,
+          'showTitle': _baseArgs.showTitle,
+          'parentId': _baseArgs.parentId,
         },
       );
     }
@@ -1101,7 +1251,7 @@ class _MobilePlayerViewState extends State<_MobilePlayerView> {
   /// one exception is _onPlaybackTakenOver's "Riprendi qui", which passes
   /// the position playback stopped at — same episode, so [_progress] must
   /// still resume-seek there instead of opening at 0.
-  PlaybackArgs _currentArgs({int seekTo = 0}) => widget.args.copyWith(
+  PlaybackArgs _currentArgs({int seekTo = 0}) => _baseArgs.copyWith(
         title: _curTitle,
         episodeList: _curEpisodeList,
         episodeTitles: _curEpisodeTitles,
@@ -1136,7 +1286,13 @@ class _MobilePlayerViewState extends State<_MobilePlayerView> {
     if (_controlsVisible) _armAutoHide();
   }
 
+  // Back pressed twice in a row (top-left arrow, loading/error overlays)
+  // used to pop the player AND the page underneath it.
+  bool _exiting = false;
+
   void _exit() {
+    if (_exiting) return;
+    _exiting = true;
     if (context.canPop()) {
       context.pop();
     } else {
@@ -1185,7 +1341,13 @@ class _MobilePlayerViewState extends State<_MobilePlayerView> {
             children: [
               Positioned.fill(
                 child: Center(
-                  child: _videoView ??= _engine.buildView(),
+                  // Audio-only media (mediaType "music"): artwork instead of
+                  // a black video surface — same as the TV player. The
+                  // engine still decodes the audio either way.
+                  child: widget.args.isAudio
+                      ? PlayerAudioArtwork(
+                          poster: widget.args.poster, title: _curTitle)
+                      : (_videoView ??= _engine.buildView()),
                 ),
               ),
               BlocBuilder<PlaybackBloc, PlaybackState>(
@@ -1249,6 +1411,24 @@ class _MobilePlayerViewState extends State<_MobilePlayerView> {
                   );
                 },
               ),
+              // Mid-playback rebuffer cue. The loading overlay above only
+              // covers the initial resolve/first frame; after that a stall
+              // used to look exactly like a frozen video (the TV overlay
+              // shows its spinner in this case too).
+              if (_started &&
+                  _lastBuffering &&
+                  _playbackError == null &&
+                  _takeoverPrompt == null)
+                const IgnorePointer(
+                  child: Center(
+                    child: SizedBox(
+                      width: 48,
+                      height: 48,
+                      child: CircularProgressIndicator(
+                          strokeWidth: 3, color: Colors.white),
+                    ),
+                  ),
+                ),
               if (_activeSkip != null && !_skipDismissed)
                 Positioned(
                   right: 16,
@@ -1308,8 +1488,8 @@ class _MobilePlayerViewState extends State<_MobilePlayerView> {
   }
 
   Widget _controls() {
-    final title = widget.args.showTitle.isNotEmpty
-        ? '${widget.args.showTitle} · ${_curTitle ?? ''}'
+    final title = _baseArgs.showTitle.isNotEmpty
+        ? '${_baseArgs.showTitle} · ${_curTitle ?? ''}'
         : (_curTitle ?? '');
 
     return Container(
@@ -1440,7 +1620,30 @@ class _MobilePlayerViewState extends State<_MobilePlayerView> {
     );
   }
 
+  void _switchLiveSource(int i) {
+    final id = widget.args.liveSources[i];
+    if (id == _curStreamId) return;
+    _errorGrace?.cancel();
+    _curStreamId = id;
+    if (i < widget.args.liveSourceLabels.length) {
+      _curSourceLabel = widget.args.liveSourceLabels[i];
+    }
+    setState(() {
+      _playbackError = null;
+      _opened = false;
+      _started = false;
+    });
+    _resumeCoverSafetyTimer?.cancel(); // re-armed by _onReady
+    context.read<PlaybackBloc>().add(SelectStreamEvent(
+          pluginId: widget.args.livePluginId.isNotEmpty
+              ? widget.args.livePluginId
+              : widget.pluginId,
+          streamId: id,
+        ));
+  }
+
   void _showTracksSheet() {
+    if (!TapGuard.acquire()) return; // double tap — see tap_guard.dart
     _hideTimer?.cancel();
     showModalBottomSheet<void>(
       context: context,
@@ -1471,7 +1674,11 @@ class _MobilePlayerViewState extends State<_MobilePlayerView> {
                   setSheet(() {});
                 },
               );
-          final nothing = video.length < 2 && audio.length < 2 && subs.isEmpty;
+          final liveSources = widget.args.isLive ? widget.args.liveSources : const <String>[];
+          final nothing = video.length < 2 &&
+              audio.length < 2 &&
+              subs.isEmpty &&
+              liveSources.length < 2;
           return SafeArea(
             child: ListView(
               shrinkWrap: true,
@@ -1484,6 +1691,24 @@ class _MobilePlayerViewState extends State<_MobilePlayerView> {
                       style: TextStyle(color: Colors.white54),
                     ),
                   ),
+                // Live: switch source in place (same as the TV live
+                // overlay's "SORGENTI" panel) — a dead feed no longer means
+                // backing out to the event sheet to pick another one.
+                if (liveSources.length > 1) ...[
+                  const _SheetHeader('Sorgente'),
+                  for (var i = 0; i < liveSources.length; i++)
+                    tile(
+                      i < widget.args.liveSourceLabels.length &&
+                              widget.args.liveSourceLabels[i].isNotEmpty
+                          ? widget.args.liveSourceLabels[i]
+                          : 'Sorgente ${i + 1}',
+                      liveSources[i] == _curStreamId,
+                      () {
+                        if (!popIfCurrent(ctx)) return;
+                        _switchLiveSource(i);
+                      },
+                    ),
+                ],
                 if (video.length > 1) ...[
                   const _SheetHeader('Qualità video'),
                   for (final t in video)

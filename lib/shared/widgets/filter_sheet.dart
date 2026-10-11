@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../core/grpc/clients/media_client.dart' show SearchFilter;
 import '../../core/theme/app_theme.dart';
+import '../utils/tap_guard.dart';
 
 /// Bottom sheet that edits the active search filters for a plugin.
 ///
@@ -147,14 +148,14 @@ class _FilterSheetState extends State<_FilterSheet> {
                 children: [
                   Expanded(
                     child: OutlinedButton(
-                      onPressed: () => Navigator.of(context).pop(),
+                      onPressed: () => popIfCurrent(context),
                       child: const Text('Annulla'),
                     ),
                   ),
                   const SizedBox(width: 12),
                   Expanded(
                     child: FilledButton(
-                      onPressed: () => Navigator.of(context).pop(_draft),
+                      onPressed: () => popIfCurrent(context, _draft),
                       child: Text(_draft.isEmpty
                           ? 'Applica'
                           : 'Applica (${_draft.length})'),

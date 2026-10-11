@@ -2,18 +2,19 @@
 // screen (not built yet).
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
-import 'package:go_router/go_router.dart';
 
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../../core/di/injection.dart';
 import '../../../core/grpc/clients/media_client.dart' show DownloadInfo;
+import '../../../core/grpc/grpc_errors.dart' show grpcMessage;
 import '../../../core/theme/app_theme.dart';
 import '../../media/data/media_repository.dart';
 import '../bloc/downloads_list_cubit.dart';
 import '../bloc/downloads_list_state.dart';
 import '../data/downloads_local_index.dart';
 import '../download_format.dart';
+import '../../../shared/utils/tap_guard.dart';
 
 class DownloadsPage extends StatelessWidget {
   const DownloadsPage({super.key});
@@ -38,6 +39,7 @@ class _DownloadsView extends StatelessWidget {
     return Scaffold(
       backgroundColor: AppTheme.bg,
       appBar: AppBar(
+        leading: const GuardedBackButton(),
         backgroundColor: AppTheme.bg,
         title: const Text('Download'),
       ),
@@ -245,18 +247,19 @@ class _DownloadRow extends StatelessWidget {
             IconButton(
               tooltip: 'Annulla',
               icon: const Icon(Icons.close_rounded, color: AppTheme.textMid),
-              onPressed: () => context
-                  .read<DownloadsListCubit>()
-                  .cancelDownload(info.downloadId),
+              onPressed: () => _run(
+                  context,
+                  () => context
+                      .read<DownloadsListCubit>()
+                      .cancelDownload(info.downloadId),
+                  'Impossibile annullare il download'),
             )
           else
             IconButton(
               tooltip: 'Elimina',
               icon: const Icon(Icons.delete_outline_rounded,
                   color: Color(0xFFFF6B6B)),
-              onPressed: () => context
-                  .read<DownloadsListCubit>()
-                  .deleteDownload(info.downloadId),
+              onPressed: () => _confirmDelete(context, info),
             ),
         ],
       ),
@@ -265,8 +268,49 @@ class _DownloadRow extends StatelessWidget {
 
   String _fmtDate(DateTime d) => '${d.day}/${d.month}/${d.year}';
 
+  /// Runs a cancel/delete, surfacing a failure instead of dropping it
+  /// (it used to escape as an uncaught async error with no feedback).
+  Future<void> _run(BuildContext context, Future<void> Function() action,
+      String failure) async {
+    final messenger = ScaffoldMessenger.of(context);
+    try {
+      await action();
+    } catch (e) {
+      messenger.showSnackBar(
+          SnackBar(content: Text('$failure: ${grpcMessage(e)}')));
+    }
+  }
+
+  /// Deleting removes the file from the server for good — one stray tap on
+  /// the bin icon used to do it with no confirmation.
+  Future<void> _confirmDelete(BuildContext context, DownloadInfo info) async {
+    if (!TapGuard.acquire()) return;
+    final cubit = context.read<DownloadsListCubit>();
+    final yes = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: AppTheme.surface,
+        title: const Text('Eliminare il download?'),
+        content: Text(
+            '«${info.title}» verrà rimosso dal server. L\'operazione non '
+            'si può annullare.'),
+        actions: [
+          TextButton(
+              onPressed: () => popIfCurrent(ctx, false),
+              child: const Text('Annulla')),
+          FilledButton(
+              onPressed: () => popIfCurrent(ctx, true),
+              child: const Text('Elimina')),
+        ],
+      ),
+    );
+    if (yes != true || !context.mounted) return;
+    await _run(context, () => cubit.deleteDownload(info.downloadId),
+        'Impossibile eliminare il download');
+  }
+
   void _watch(BuildContext context, DownloadInfo info) {
-    context.push(
+    context.pushGuarded(
       '/player/${info.pluginId}/${Uri.encodeComponent(info.mediaId)}',
       extra: <String, dynamic>{
         'directUrl': info.fileUrl,

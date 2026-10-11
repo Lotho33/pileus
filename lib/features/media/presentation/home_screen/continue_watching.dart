@@ -188,47 +188,12 @@ class _ContinueWatchingStripState extends State<_ContinueWatchingStrip> {
   }
 
   void _onTap(BuildContext ctx, ContinueWatchingItem item) {
-    final extra = <String, dynamic>{
-      // playableID is the plugin's already-resolved, per-language streamId —
-      // same value every other /player push site passes as 'streamId' to
-      // resolve it directly. Without this, PlaybackScreen falls back to
-      // InitializeVideoEvent, which re-runs GetStreams on playableID as if
-      // it were a bare mediaId; a plugin whose ids already carry a
-      // language/variant suffix can then double-suffix it and fail its own
-      // parsing, so the resolve fails outright.
-      'streamId': item.playableID,
-      // A "roll-forward" row (the next episode written when you finished the
-      // previous one — see playback_screen._onPosition) is stored at ~31 s
-      // purely to clear mycelium's `progress_time >= 30` CW filter; it's not
-      // a real resume point. Recognise it (no known duration + tiny
-      // progress) and start from the top instead.
-      'seekTo': (item.totalTime <= 0 && item.progressTime <= 35)
-          ? 0
-          : item.progressTime.toInt(),
-      'poster': item.poster,
-      'parentId': item.parentID,
-      if (item.title.isNotEmpty) 'title': item.title,
-      // Re-sent on resume so a re-watch keeps refreshing these (the
-      // backend's UpsertProgress won't let a blank value overwrite an
-      // already-stored one, so this is purely "keep it fresh," never lossy).
-      // PlaybackArgs.genres expects a List — item.genres already is one.
-      'showTitle': item.showTitle,
-      'plot': item.plot,
-      'rating': item.rating,
-      if (item.genres.isNotEmpty) 'genres': item.genres,
-      if (item.year > 0) 'year': item.year,
-      'durationSeconds': item.durationSeconds,
-    };
-
-    // Episode prev/next list is rebuilt player-side after playback starts
-    // (PlaybackScreen._resolveEpisodeListIfMissing) — it may need to walk
-    // several season directories, so it's not worth blocking the tap on
-    // here. Just pass the plugin id so that resolver knows who to ask.
-    if (item.parentID.isNotEmpty) extra['pluginId'] = item.providerID;
-
-    ctx.push(
+    // Shared with the mobile card and the details "Riprendi" buttons — see
+    // continue_watching_launch.dart for what each field is for.
+    PlayerLaunchGuard.push(
+      GoRouter.of(ctx),
       '/player/${item.providerID}/${Uri.encodeComponent(item.playableID)}',
-      extra: extra,
+      extra: continueWatchingPlayerExtra(item),
     );
   }
 

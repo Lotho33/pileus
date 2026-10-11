@@ -4,6 +4,7 @@ import '../../core/grpc/clients/media_client.dart' show PluginInfo;
 import '../../core/theme/app_theme.dart';
 import '../../features/media/presentation/widgets/plugin_nav.dart'
     show pluginLabel, PluginIcon;
+import '../../shared/utils/tap_guard.dart';
 
 /// Compact "current plugin" control for the mobile top bar: the active
 /// plugin's icon + name, tap opens a bottom sheet to switch. Sits inline in
@@ -82,6 +83,7 @@ class PluginSwitcherPill extends StatelessWidget {
   }
 
   void _openPicker(BuildContext context) {
+    if (!TapGuard.acquire()) return; // double tap — see tap_guard.dart
     showModalBottomSheet<void>(
       context: context,
       backgroundColor: AppTheme.surface,
@@ -131,7 +133,7 @@ class PluginSwitcherPill extends StatelessWidget {
                               color: AppTheme.primary)
                           : null,
                       onTap: () {
-                        Navigator.of(ctx).pop();
+                        if (!popIfCurrent(ctx)) return;
                         if (p.pluginId != active?.pluginId) {
                           onSelect(p.pluginId);
                         }

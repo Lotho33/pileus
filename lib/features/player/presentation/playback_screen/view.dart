@@ -137,6 +137,17 @@ class _PlaybackViewState extends State<_PlaybackView> {
   late int _currentEpisodeIndex;
   late int _currentSeasonIndex;
   late String _currentMediaId;
+  // The stream (source) id actually playing — GetStreams' per-source id,
+  // which carries the language. What Continue Watching stores ([_cwId]) and
+  // what retry/watchdog/"Riprendi qui" re-resolve, so neither a resume nor a
+  // recovery silently switches language. See source_continuity.dart. Null
+  // until known.
+  String? _currentStreamId;
+  String get _cwId => _currentStreamId ?? _currentMediaId;
+  // Remembered audio track for multi-audio streams — shared with mobile/
+  // desktop (audio_lang_pref.dart). TV used to always start in the device
+  // locale's language.
+  final _audioPref = AudioLangPref();
   late String _currentSourceLabel;
   late String? _currentTitle;
   late List<String> _currentEpisodeList;
@@ -218,6 +229,10 @@ class _PlaybackViewState extends State<_PlaybackView> {
         : args.episodeIndex.clamp(0, args.episodeList.length - 1);
     _currentSeasonIndex = args.seasonIndex;
     _currentMediaId = widget.mediaId;
+    final launchStream = args.directStreamId;
+    if (launchStream != null && launchStream.isNotEmpty) {
+      _currentStreamId = launchStream;
+    }
     _currentSourceLabel = args.sourceLabel;
     _currentTitle = args.title;
     _currentEpisodeList = args.episodeList;
@@ -296,6 +311,10 @@ class _PlaybackViewState extends State<_PlaybackView> {
       _lastEnginePlaying = playing;
       _onPlayingChanged(playing);
     }
+    // One-shot per stream (no-op once applied) — audio tracks are only
+    // known a moment after playback starts, so check on every tick until
+    // they are. Same as the mobile/desktop players.
+    if (playing) _audioPref.maybeApply(_engine);
     if (!_uiCubit.isClosed) {
       final b = _engine.buffering;
       if (b != _lastBuffering) {
@@ -422,14 +441,9 @@ class _PlaybackViewState extends State<_PlaybackView> {
           // with this position instead of 0.
           _resumeSeek = ResumeSeekController(
               targetSec: resumePos.inSeconds, isLive: widget.args.isLive);
-          context.read<PlaybackBloc>().add(InitializeVideoEvent(
-                pluginId: widget.args.epPluginId,
-                mediaId: _currentMediaId,
-                preferredLabel: _currentSourceLabel,
-                startPositionSec: resolveStartPositionSec(
-                    isLive: widget.args.isLive, seekTo: resumePos.inSeconds),
-                takeOver: true,
-              ));
+          _reresolveCurrent(
+              startSec: widget.args.isLive ? 0 : resumePos.inSeconds,
+              takeOver: true);
         },
       );
     });
@@ -507,19 +521,9 @@ class _PlaybackViewState extends State<_PlaybackView> {
           final retrySec =
               _lastEnginePos > Duration.zero ? _lastEnginePos.inSeconds : 0;
           _resumeSeek = ResumeSeekController(targetSec: retrySec, isLive: false);
-          context.read<PlaybackBloc>().add(InitializeVideoEvent(
-                pluginId: widget.args.epPluginId,
-                mediaId: _currentMediaId,
-                preferredLabel: _currentSourceLabel,
-                startPositionSec:
-                    resolveStartPositionSec(isLive: false, seekTo: retrySec),
-              ));
+          _reresolveCurrent(startSec: retrySec);
         } else {
-          context.read<PlaybackBloc>().add(InitializeVideoEvent(
-                pluginId: widget.args.epPluginId,
-                mediaId: _currentMediaId,
-                preferredLabel: _currentSourceLabel,
-              ));
+          _reresolveCurrent(startSec: 0);
         }
       }
 
@@ -545,6 +549,29 @@ class _PlaybackViewState extends State<_PlaybackView> {
       // settling.
       _lastProgressAt = DateTime.now();
     });
+  }
+
+  /// Re-resolves what's playing now — "Riprova", the stall watchdog and
+  /// "Riprendi qui". Re-resolves the *same source* ([_currentStreamId], so
+  /// the same language) when known; only falls back to GetStreams + label
+  /// match (the old path, which on a stream id could also trip plugins that
+  /// reject GetStreams on one) when it isn't.
+  void _reresolveCurrent({required int startSec, bool takeOver = false}) {
+    final startPositionSec =
+        resolveStartPositionSec(isLive: widget.args.isLive, seekTo: startSec);
+    final stream = _currentStreamId;
+    context.read<PlaybackBloc>().add(stream != null && stream.isNotEmpty
+        ? SelectStreamEvent(
+            pluginId: widget.args.epPluginId,
+            streamId: stream,
+            startPositionSec: startPositionSec,
+            takeOver: takeOver)
+        : InitializeVideoEvent(
+            pluginId: widget.args.epPluginId,
+            mediaId: _currentMediaId,
+            preferredLabel: _currentSourceLabel,
+            startPositionSec: startPositionSec,
+            takeOver: takeOver));
   }
 
   // ── Manual "restart in place" (TV freeze fallback) ──────────────────────
@@ -803,6 +830,23 @@ class _PlaybackViewState extends State<_PlaybackView> {
       _currentSeasonNumbers = [for (final e in eps) e.seasonNumber];
       _currentEpisodeIndex = idx;
     });
+    _inferSourceLabelIfMissing(eps[idx].id);
+  }
+
+  /// A Continue Watching launch carries the stream id but not its source
+  /// label — without it the next episode resolved with whatever source came
+  /// first (often another language). Recovered once from this episode's own
+  /// sources; see source_continuity.dart.
+  Future<void> _inferSourceLabelIfMissing(String episodeId) async {
+    final stream = _currentStreamId;
+    if (_currentSourceLabel.isNotEmpty || stream == null) return;
+    final label = await inferSourceLabel(getIt<MediaRepository>(),
+        pluginId: widget.args.epPluginId,
+        episodeId: episodeId,
+        streamId: stream);
+    if (!mounted || label == null || _currentSourceLabel.isNotEmpty) return;
+    if (_currentStreamId != stream) return; // moved on meanwhile
+    _currentSourceLabel = label;
   }
 
   @override
@@ -888,7 +932,7 @@ class _PlaybackViewState extends State<_PlaybackView> {
     if (pos.inSeconds <= 0) return;
     final resp = await getIt<MediaRepository>().updateProgress(
       pluginId: widget.args.epPluginId,
-      mediaId: _currentMediaId,
+      mediaId: _cwId,
       parentId: _parentId,
       position: pos,
       totalDuration: dur,
@@ -934,7 +978,7 @@ class _PlaybackViewState extends State<_PlaybackView> {
     if (_progressCleared) return;
     final resp = await getIt<MediaRepository>().updateProgress(
       pluginId: widget.args.epPluginId,
-      mediaId: _currentMediaId,
+      mediaId: _cwId,
       parentId: _parentId,
       position: Duration(seconds: _resumeSeek.targetSec),
       totalDuration: _engine.duration,
@@ -1150,10 +1194,26 @@ class _PlaybackViewState extends State<_PlaybackView> {
                   ? _currentEpisodeTitles[_currentEpisodeIndex + 1]
                   : '';
           final repo = getIt<MediaRepository>();
-          repo.updateProgress(
-            pluginId: widget.args.epPluginId,
-            mediaId: nextId,
-            parentId: _parentId,
+          final currentId = _cwId;
+          final pluginId = widget.args.epPluginId;
+          final parentId = _parentId;
+          final sourceLabel = _currentSourceLabel;
+          final prefetched = _prefetcher.cached;
+          // The next episode's *stream id* for the source playing now, not
+          // its bare id — resuming a bare id gives the plugin's default
+          // source, i.e. possibly another language. See
+          // source_continuity.dart. Everything it needs is captured above:
+          // the lookup is async and the screen may have moved on by then.
+          final progressFuture = streamIdForNextEpisode(
+            repo,
+            pluginId: pluginId,
+            nextEpisodeId: nextId,
+            sourceLabel: sourceLabel,
+            prefetched: prefetched,
+          ).then((nextStreamId) => repo.updateProgress(
+            pluginId: pluginId,
+            mediaId: nextStreamId,
+            parentId: parentId,
             // 31 s, and totalDuration left at 0 on purpose: the card's bar
             // reads 0% (progressFraction needs total_time), and resuming
             // this row starts ~30 s in — past the recap/logo stings on most
@@ -1178,16 +1238,14 @@ class _PlaybackViewState extends State<_PlaybackView> {
                 _currentSeasonNumbers, _currentEpisodeIndex + 1),
             episodeNumber: numberForEpisode(
                 _currentEpisodeNumbers, _currentEpisodeIndex + 1),
-          );
-          repo.deleteProgress(
-            providerID: widget.args.epPluginId,
-            playableID: _currentMediaId,
-          );
+          ));
+          progressFuture.catchError((_) => null).whenComplete(() =>
+              repo.deleteProgress(providerID: pluginId, playableID: currentId));
         } else if (!_hasNextEpisode && frac >= kCwDropThreshold) {
           _progressCleared = true;
           getIt<MediaRepository>().deleteProgress(
             providerID: widget.args.epPluginId,
-            playableID: _currentMediaId,
+            playableID: _cwId,
           );
         }
       }
@@ -1272,6 +1330,7 @@ class _PlaybackViewState extends State<_PlaybackView> {
     // against *this* new stream and shows the old error message over one
     // that's actually loading fine.
     _errorGraceTimer?.cancel();
+    _audioPref.reset();
     _lastStreamUrl = url;
     _lastStreamHeaders = headers;
     setState(() {
@@ -1427,6 +1486,7 @@ class _PlaybackViewState extends State<_PlaybackView> {
       _prefetcher.clear();
       _saveProgress();
       _transitioningEpisode = true;
+      _currentStreamId = prefetched.streamId;
       _errorGraceTimer?.cancel();
       _engine.stop();
       _uiCubit.setNextEpisodeSecs(null);
@@ -1483,13 +1543,7 @@ class _PlaybackViewState extends State<_PlaybackView> {
     // unknown (e.g. launched from continue-watching, which carries no
     // label) or this episode doesn't offer it, fall back to the first
     // source and just play — don't bounce to the episode picker mid-binge.
-    final match = (_currentSourceLabel.isEmpty
-            ? null
-            : sources
-                .where((s) =>
-                    s.label.toLowerCase() == _currentSourceLabel.toLowerCase())
-                .firstOrNull) ??
-        (sources.isNotEmpty ? sources.first : null);
+    final match = pickSourceByLabel(sources, _currentSourceLabel);
 
     if (!mounted) return;
 
@@ -1506,6 +1560,7 @@ class _PlaybackViewState extends State<_PlaybackView> {
       // in _startPlayback once the new stream actually attaches.
       _saveProgress();
       _transitioningEpisode = true;
+      _currentStreamId = match.id;
       _errorGraceTimer?.cancel();
       _engine.stop();
       _uiCubit.setNextEpisodeSecs(null);
@@ -1717,6 +1772,7 @@ class _PlaybackViewState extends State<_PlaybackView> {
         listener: (context, state) {
           if (state is PlaybackReady) {
             perf('screen: got PlaybackReady → _startPlayback');
+            if (state.streamId.isNotEmpty) _currentStreamId = state.streamId;
             _startPlayback(state.resolvedUrl, state.httpHeaders, state.extra);
           }
           if (state is PlaybackRetrying) {
@@ -2044,6 +2100,7 @@ class _PlaybackViewState extends State<_PlaybackView> {
                         engine: _engine,
                         volume: _volume,
                         onClose: _closeSettings,
+                        onAudioTrackSelected: (t) => _audioPref.remember(t.label),
                         onVolumeChanged: (v) {
                           setState(() => _volume = v);
                           _engine.setVolume(v);
@@ -2091,14 +2148,8 @@ class _PlaybackViewState extends State<_PlaybackView> {
                               url: direct,
                               httpHeaders: widget.args.directUrlHeaders));
                         } else {
-                          context.read<PlaybackBloc>().add(InitializeVideoEvent(
-                                pluginId: widget.args.epPluginId,
-                                mediaId: _currentMediaId,
-                                preferredLabel: _currentSourceLabel,
-                                startPositionSec: resolveStartPositionSec(
-                                    isLive: widget.args.isLive,
-                                    seekTo: retrySec),
-                              ));
+                          _reresolveCurrent(
+                              startSec: widget.args.isLive ? 0 : retrySec);
                         }
                       },
                       onExit: _exitPlayer,

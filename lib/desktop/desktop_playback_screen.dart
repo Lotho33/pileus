@@ -29,6 +29,7 @@ import '../features/player/presentation/widgets/player_seek_bar.dart';
 import '../features/player/presentation/widgets/pointer_next_episode_banner.dart';
 import '../features/player/presentation/widgets/pointer_skip_button.dart';
 import '../features/player/profile_lease_conflict.dart';
+import '../features/player/source_continuity.dart';
 import '../features/settings/data/settings_repository.dart';
 import '../shared/player/playback_progress.dart';
 
@@ -138,6 +139,13 @@ class _ViewState extends State<_View> with WindowListener {
   // See episode_nav.dart/skip_interval.dart/live_stall_watchdog.dart. TV and
   // mobile keep their own separate copies of the same logic.
   late String _curMediaId = widget.mediaId;
+  // Stream (source) id actually playing — carries the language; what
+  // Continue Watching stores and what retry/watchdog re-resolve. Same as the
+  // mobile/TV players, see source_continuity.dart.
+  String? _curStreamId;
+  // Last real position of the stream playing now — where "Riprova" and the
+  // stall watchdog's reopen resume to (reset on every episode switch).
+  Duration _lastPos = Duration.zero;
   late String _curSourceLabel = widget.args.sourceLabel;
   late String _curTitle = widget.args.title ?? '';
   late final EpisodeNavState _nav = EpisodeNavState.fromArgs(widget.args);
@@ -224,9 +232,13 @@ class _ViewState extends State<_View> with WindowListener {
     // fullscreen toggle icon and the Esc handling below drift out of step.
     windowManager.addListener(this);
     _settings = getIt<SettingsRepository>();
+    final launchStream = widget.args.directStreamId;
+    if (launchStream != null && launchStream.isNotEmpty) {
+      _curStreamId = launchStream;
+    }
     _progress = PlaybackProgress(
         args: widget.args,
-        mediaId: widget.mediaId,
+        mediaId: _curStreamId ?? widget.mediaId,
         onPlaybackElsewhere: _onPlaybackTakenOver);
 
     var bufMiB = widget.args.isLive
@@ -256,29 +268,30 @@ class _ViewState extends State<_View> with WindowListener {
           const Duration(seconds: 15), (_) => _saveProgressGuarded());
     }
     _posSub = _engine.positionStream.listen(_onPosition);
-    if (widget.args.isLive) {
-      _liveWatchdog = LiveStallWatchdog(
-        isHealthy: () =>
-            mounted &&
-            _error == null &&
-            (_errorGrace?.isActive != true) &&
-            _engine.playing,
-        isBuffering: () => _engine.buffering,
-        onStallTier1: () {
-          _engine.pause();
-          _engine.play();
-        },
-        onStallTier2: () {
-          if (!mounted) return;
-          setState(() => _opened = false);
-          context.read<PlaybackBloc>().add(InitializeVideoEvent(
-                pluginId: widget.pluginId,
-                mediaId: _curMediaId,
-                preferredLabel: _curSourceLabel,
-              ));
-        },
-      )..arm();
-    }
+    // Live and on-demand, same as TV/mobile — see live_stall_watchdog.dart.
+    final live = widget.args.isLive;
+    _liveWatchdog = LiveStallWatchdog(
+      isHealthy: () =>
+          mounted &&
+          _opened &&
+          _started &&
+          !_transitioningEpisode &&
+          !_resolvingEpisode &&
+          _takeoverPrompt == null &&
+          _error == null &&
+          (_errorGrace?.isActive != true) &&
+          _engine.playing,
+      isBuffering: () => _engine.buffering,
+      onStallTier1: () {
+        _engine.pause();
+        _engine.play();
+      },
+      onStallTier2: () {
+        if (mounted) _reopenCurrent();
+      },
+      stallThreshold: Duration(seconds: live ? 9 : 15),
+      bufferingStallThreshold: Duration(seconds: live ? 18 : 25),
+    )..arm();
     _armAutoHide();
     AppLifecycleReactor.instance.state.addListener(_onLifecycle);
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -368,7 +381,9 @@ class _ViewState extends State<_View> with WindowListener {
       // _progress already reassigned to the incoming one, which would
       // immediately roll it forward again and skip an episode in Continue
       // Watching — the same failure mode as the web player's equivalent bug.
-      if (!_transitioningEpisode) _progress.maybeClear(_engine);
+      if (!_transitioningEpisode) {
+        _progress.maybeClear(_engine, prefetched: _prefetcher.cached);
+      }
     }
     _progress.maybeResumeSeek(_engine);
 
@@ -426,7 +441,6 @@ class _ViewState extends State<_View> with WindowListener {
   void _onPlaybackTakenOver(String playingOn) {
     if (!mounted || _takeoverPrompt != null) return;
     _errorGrace?.cancel();
-    _liveWatchdog?.disarm();
     final resumePos = _engine.position;
     _engine.pause();
     // Best-effort — records exactly where this device stopped (mainly
@@ -443,29 +457,8 @@ class _ViewState extends State<_View> with WindowListener {
         actionLabel: 'Riprendi qui',
         backLabel: 'Esci',
         onAction: () {
-          // A fresh _progress (same episode, but re-armed to resume-seek at
-          // resumePos instead of wherever _resumeSeek's own target already
-          // landed/confirmed long ago) — same reasoning as an episode
-          // switch's own _progress rebuild, just with this position instead
-          // of 0.
-          _progress = PlaybackProgress(
-              args: _currentArgs(seekTo: resumePos.inSeconds),
-              mediaId: _curMediaId,
-              onPlaybackElsewhere: _onPlaybackTakenOver);
-          setState(() {
-            _takeoverPrompt = null;
-            _opened = false;
-            _started = false;
-          });
-          _armResumeCoverSafetyTimer();
-          context.read<PlaybackBloc>().add(InitializeVideoEvent(
-                pluginId: widget.args.epPluginId,
-                mediaId: _curMediaId,
-                preferredLabel: _curSourceLabel,
-                startPositionSec: resolveStartPositionSec(
-                    isLive: widget.args.isLive, seekTo: resumePos.inSeconds),
-                takeOver: true,
-              ));
+          setState(() => _takeoverPrompt = null);
+          _reopenCurrent(atSec: resumePos.inSeconds, takeOver: true);
         },
       );
     });
@@ -485,6 +478,10 @@ class _ViewState extends State<_View> with WindowListener {
   Future<void> _onReady(PlaybackReady s) async {
     if (_opened) return;
     _opened = true;
+    if (s.streamId.isNotEmpty) {
+      _curStreamId = s.streamId;
+      _progress.mediaId = s.streamId;
+    }
     // Fires for both the very first stream and every subsequent episode
     // (see _openEpisode's cold path, which dispatches SelectStreamEvent and
     // resets _opened) — so skip markers refresh per-episode for free.
@@ -507,6 +504,7 @@ class _ViewState extends State<_View> with WindowListener {
   void _onPosition(Duration pos) {
     if (!mounted) return;
     _liveWatchdog?.recordProgress();
+    if (pos > Duration.zero && !_transitioningEpisode) _lastPos = pos;
     if (widget.args.isLive) return;
 
     final active = activeSkipInterval(_skipIntervals, pos);
@@ -619,6 +617,7 @@ class _ViewState extends State<_View> with WindowListener {
       final durationSeconds = prefetched.durationSeconds;
       final year = prefetched.year;
       final skipTimes = prefetched.skipTimesJson;
+      final streamId = prefetched.streamId;
       _prefetcher.clear();
       // Final save for the outgoing episode, using the engine's position
       // exactly as it still is right now — must run before stop() (which
@@ -630,6 +629,8 @@ class _ViewState extends State<_View> with WindowListener {
       _saveProgressGuarded();
       _transitioningEpisode = true;
       _engine.stop();
+      _lastPos = Duration.zero;
+      _curStreamId = streamId;
       setState(() {
         _curMediaId = newMediaId;
         _curSourceLabel = sourceLabel;
@@ -650,7 +651,7 @@ class _ViewState extends State<_View> with WindowListener {
       });
       _progress = PlaybackProgress(
           args: _currentArgs(),
-          mediaId: newMediaId,
+          mediaId: streamId,
           onPlaybackElsewhere: _onPlaybackTakenOver);
       _progress.onStreamOpened();
       _armResumeCoverSafetyTimer();
@@ -679,13 +680,7 @@ class _ViewState extends State<_View> with WindowListener {
     }
     final streamsRes = await streamsFuture;
     final sources = streamsRes.sources;
-    final match = (_curSourceLabel.isEmpty
-            ? null
-            : sources
-                .where((s) =>
-                    s.label.toLowerCase() == _curSourceLabel.toLowerCase())
-                .firstOrNull) ??
-        (sources.isNotEmpty ? sources.first : null);
+    final match = pickSourceByLabel(sources, _curSourceLabel);
 
     if (!mounted) return;
 
@@ -706,6 +701,8 @@ class _ViewState extends State<_View> with WindowListener {
       _saveProgressGuarded();
       _transitioningEpisode = true;
       _engine.stop();
+      _lastPos = Duration.zero;
+      _curStreamId = match.id;
       setState(() {
         _curMediaId = newMediaId;
         _curSourceLabel = match.label;
@@ -726,7 +723,7 @@ class _ViewState extends State<_View> with WindowListener {
       });
       _progress = PlaybackProgress(
           args: _currentArgs(),
-          mediaId: newMediaId,
+          mediaId: match.id,
           onPlaybackElsewhere: _onPlaybackTakenOver);
       context.read<PlaybackBloc>().add(
             SelectStreamEvent(pluginId: widget.pluginId, streamId: match.id),
@@ -776,32 +773,57 @@ class _ViewState extends State<_View> with WindowListener {
         year: _curYear,
       );
 
-  void _retry() {
+  void _retry() => _reopenCurrent();
+
+  /// "Riprova", the stall watchdog's second tier and "Riprendi qui" — same
+  /// contract as the mobile player's: resume where playback actually got to
+  /// (not the launch resume point, nor — after an episode switch — the
+  /// *first* episode), re-resolving the same source/language, with a fresh
+  /// [PlaybackProgress] so the resume seek is re-armed.
+  void _reopenCurrent({int? atSec, bool takeOver = false}) {
     _errorGrace?.cancel();
     final bloc = context.read<PlaybackBloc>();
-    _progress.resetForRetry();
+    final isLive = widget.args.isLive;
+    final sameTitle = _curMediaId == widget.mediaId;
+    final retrySec = isLive
+        ? 0
+        : (atSec ??
+            (_lastPos > Duration.zero
+                ? _lastPos.inSeconds
+                : (sameTitle ? widget.args.seekTo : 0)));
+    _progress = PlaybackProgress(
+        args: _currentArgs(seekTo: retrySec),
+        mediaId: _curStreamId ?? _curMediaId,
+        onPlaybackElsewhere: _onPlaybackTakenOver);
     setState(() {
       _error = null;
       _opened = false;
+      _started = false;
     });
-    final directUrl = widget.args.directUrl;
-    final direct = widget.args.directStreamId;
-    final startPositionSec = resolveStartPositionSec(
-        isLive: widget.args.isLive, seekTo: widget.args.seekTo);
+    // No _armResumeCoverSafetyTimer() here: _onReady arms it once the new
+    // stream actually opens. Armed now, a resolve slower than its 5s would
+    // lift the cover before the resume seek, flashing frame 0.
+    _resumeCoverSafetyTimer?.cancel();
+    final startPositionSec =
+        resolveStartPositionSec(isLive: isLive, seekTo: retrySec);
+    final directUrl = sameTitle ? widget.args.directUrl : null;
+    final stream = _curStreamId;
     if (directUrl != null && directUrl.isNotEmpty) {
       bloc.add(UseDirectUrlEvent(
           url: directUrl, httpHeaders: widget.args.directUrlHeaders));
-    } else if (direct != null && direct.isNotEmpty) {
+    } else if (stream != null && stream.isNotEmpty) {
       bloc.add(SelectStreamEvent(
-          pluginId: widget.pluginId,
-          streamId: direct,
-          startPositionSec: startPositionSec));
+          pluginId: widget.args.epPluginId,
+          streamId: stream,
+          startPositionSec: startPositionSec,
+          takeOver: takeOver));
     } else {
       bloc.add(InitializeVideoEvent(
-        pluginId: widget.pluginId,
-        mediaId: widget.mediaId,
-        preferredLabel: widget.args.sourceLabel,
+        pluginId: widget.args.epPluginId,
+        mediaId: _curMediaId,
+        preferredLabel: _curSourceLabel,
         startPositionSec: startPositionSec,
+        takeOver: takeOver,
       ));
     }
   }

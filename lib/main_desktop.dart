@@ -5,6 +5,7 @@ import 'package:window_manager/window_manager.dart';
 import 'core/app_lifecycle.dart';
 import 'core/di/injection.dart';
 import 'core/perf_profile.dart';
+import 'core/utils/error_hooks.dart';
 import 'core/utils/perf_log.dart';
 import 'desktop/desktop_app.dart';
 import 'features/settings/data/settings_repository.dart';
@@ -24,6 +25,7 @@ void main() => runDesktopApp();
 
 Future<void> runDesktopApp() async {
   WidgetsFlutterBinding.ensureInitialized();
+  installErrorHooks();
 
   await windowManager.ensureInitialized();
   windowManager.waitUntilReadyToShow(

@@ -1,0 +1,17 @@
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- TV flavor additions on top of src/main/AndroidManifest.xml.
+
+         The LEANBACK_LAUNCHER category is what places the app on the
+         Android TV / Fire TV home screen. It lives only in this flavor: in
+         src/main the mobile flavor inherited it too, and Play then treats
+         the phone/tablet listing as TV-capable (TV quality review + a
+         missing-banner error, since src/mobile strips the banner). -->
+    <application>
+        <activity android:name=".MainActivity">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN"/>
+                <category android:name="android.intent.category.LEANBACK_LAUNCHER"/>
+            </intent-filter>
+        </activity>
+    </application>
+</manifest>

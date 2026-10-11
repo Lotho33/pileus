@@ -192,6 +192,7 @@ class PlaybackBloc extends Bloc<PlaybackEvent, PlaybackState> {
         resolvedUrl: resolved.resolvedUrl,
         httpHeaders: resolved.httpHeaders,
         extra: Map<String, String>.from(resolved.extra),
+        streamId: event.streamId,
       ));
       return;
     }

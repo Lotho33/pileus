@@ -125,18 +125,13 @@ class _WatchButtonState extends State<_WatchButton> {
 
   Future<void> _checkResume() async {
     try {
-      final repo = getIt<MediaRepository>();
-      final items = await repo.getContinueWatching(pluginId: widget.pluginId);
+      // Matches on the movie id *and* its sources' ids — Continue Watching
+      // stores the stream id that was playing (see resume_lookup.dart); the
+      // old movie-id-only match never found a row written by a source pick.
+      final match = await findResumeEntry(getIt<MediaRepository>(),
+          pluginId: widget.pluginId, itemId: widget.mediaId, isSeries: false);
       if (!mounted) return;
-      final match = items
-          .where((i) => i.parentID.isEmpty && i.playableID == widget.mediaId)
-          .firstOrNull;
-      // A "next episode" row parked at ~31s just to clear mycelium's
-      // progress_time>=30 filter (see PlaybackProgress.maybeClear) isn't a
-      // real resume point — same guard the home Continue Watching card uses.
-      final isRealProgress =
-          match != null && !(match.totalTime <= 0 && match.progressTime <= 35);
-      if (isRealProgress) setState(() => _resume = match);
+      if (match != null) setState(() => _resume = match);
     } catch (_) {
       // best-effort — falls back to "Guarda"
     } finally {
@@ -150,21 +145,19 @@ class _WatchButtonState extends State<_WatchButton> {
   void _playResume(BuildContext context, ContinueWatchingItem resume) {
     // Same minimal push as the home Continue Watching card's resume — see
     // mobile_home_screen.dart's _CwCard._resume() for the identical pattern.
-    context.push(
+    PlayerLaunchGuard.push(
+      GoRouter.of(context),
       '/player/${widget.pluginId}/${Uri.encodeComponent(resume.playableID)}',
       extra: {
-        'streamId': resume.playableID,
-        'title': resume.title,
-        'showTitle': resume.showTitle,
-        'poster': resume.poster.isNotEmpty
-            ? resume.poster
-            : posterForMovie(
-                coverUrl: widget.coverUrl,
-                fanartUrl: widget.fanartUrl,
-                posterUrl: widget.posterUrl,
-              ),
-        'parentId': resume.parentID,
-        'seekTo': resume.progressTime.toInt(),
+        ...continueWatchingPlayerExtra(
+          resume,
+          posterFallback: posterForMovie(
+            coverUrl: widget.coverUrl,
+            fanartUrl: widget.fanartUrl,
+            posterUrl: widget.posterUrl,
+          ),
+        ),
+        // This screen's own fresher metadata wins over the stored row's.
         'plot': widget.plot,
         'genres': widget.genres,
         'rating': widget.rating,
