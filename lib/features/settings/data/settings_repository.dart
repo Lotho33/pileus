@@ -45,6 +45,7 @@ class SettingsRepository {
   static const _kSoftwareVideoDecoder = 'settings.softwareVideoDecoder';
   static const _kCompatVideoSurface = 'settings.compatVideoSurface';
   static const _kMaxVideoHeight = 'settings.maxVideoHeight';
+  static const _kVideoViewMode = 'settings.videoViewMode';
   static const _kOverscanPercent = 'settings.overscanPercent';
   static const _kProfilePrefsBlob = 'settings.profilePrefsBlob';
 
@@ -108,6 +109,12 @@ class SettingsRepository {
   // ExoPlayer (it answers only once it has the whole segment), so ABR never
   // steps down on its own — this is the knob for a slow line or a weak box.
   // Device-level; an explicitly chosen quality in the player still wins.
+  // Player "Formato" (VideoViewMode.name) — device-level: the right one
+  // depends on this screen's shape, not on the viewer.
+  String? getVideoViewMode() => _prefs.getString(_kVideoViewMode);
+  Future<void> setVideoViewMode(String name) =>
+      _prefs.setString(_kVideoViewMode, name);
+
   static const maxVideoHeightOptions = [0, 1080, 720, 480];
   int getMaxVideoHeight() {
     final v = _prefs.getInt(_kMaxVideoHeight) ?? 0;

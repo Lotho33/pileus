@@ -208,9 +208,32 @@ class _BetterPlayerVideoFitWidgetState extends State<_BetterPlayerVideoFitWidget
 
   StreamSubscription<BetterPlayerControllerEvent>? _controllerEventSubscription;
 
+  // PILEUS PATCH: the FittedBox below sizes the picture from
+  // controller.value.size, but nothing rebuilt it when that size changed
+  // (late-known size, ABR switch to other proportions) — the picture stayed
+  // laid out with the first size it saw. Rebuild on every size change.
+  Size? _lastSize;
+  VideoPlayerController? _sizeListenedController;
+
+  void _onValueForSize() {
+    final size = controller?.value.size;
+    if (mounted && size != _lastSize) {
+      setState(() => _lastSize = size);
+    }
+  }
+
+  void _listenSize() {
+    if (_sizeListenedController == controller) return;
+    _sizeListenedController?.removeListener(_onValueForSize);
+    _sizeListenedController = controller;
+    _lastSize = controller?.value.size;
+    controller?.addListener(_onValueForSize);
+  }
+
   @override
   void initState() {
     super.initState();
+    _listenSize();
     if (!widget.betterPlayerController.betterPlayerConfiguration.showPlaceholderUntilPlay) {
       _started = true;
     } else {
@@ -223,6 +246,7 @@ class _BetterPlayerVideoFitWidgetState extends State<_BetterPlayerVideoFitWidget
   @override
   void didUpdateWidget(_BetterPlayerVideoFitWidget oldWidget) {
     super.didUpdateWidget(oldWidget);
+    _listenSize();
     if (oldWidget.betterPlayerController.videoPlayerController != controller) {
       if (_initializedListener != null) {
         oldWidget.betterPlayerController.videoPlayerController?.removeListener(_initializedListener!);
@@ -343,6 +367,7 @@ class _BetterPlayerVideoFitWidgetState extends State<_BetterPlayerVideoFitWidget
     if (_initializedListener != null) {
       widget.betterPlayerController.videoPlayerController?.removeListener(_initializedListener!);
     }
+    _sizeListenedController?.removeListener(_onValueForSize);
     _controllerEventSubscription?.cancel();
     super.dispose();
   }

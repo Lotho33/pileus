@@ -1510,13 +1510,10 @@ class _TracksPanelState extends State<_TracksPanel> {
                         tile(t.label, t.id == e.activeSubtitleTrack?.id,
                             () => e.selectSubtitleTrack(t)),
                     ],
-                    if (video.length < 2 && audio.length < 2 && subs.isEmpty)
-                      const Padding(
-                        padding: EdgeInsets.all(20),
-                        child: Text(
-                            'Nessuna traccia alternativa per questo stream.',
-                            style: TextStyle(color: Colors.white54)),
-                      ),
+                    const _PanelHeader('Formato'),
+                    for (final m in VideoViewMode.values)
+                      tile(m.label, videoViewMode.value == m,
+                          () => videoViewMode.value = m),
                   ],
                 ),
               ),

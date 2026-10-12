@@ -282,6 +282,13 @@ class MethodChannelVideoPlayer extends VideoPlayerPlatform {
           case 'pipStop':
             return VideoEvent(eventType: VideoEventType.pipStop, key: key);
 
+          case 'videoSizeChanged':
+            return VideoEvent(
+              eventType: VideoEventType.videoSizeChanged,
+              key: key,
+              size: Size((map['width'] as num).toDouble(), (map['height'] as num).toDouble()),
+            );
+
           case 'videoStats':
             return VideoEvent(
               eventType: VideoEventType.videoStats,

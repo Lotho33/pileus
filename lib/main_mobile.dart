@@ -62,6 +62,7 @@ Future<void> runMobileApp() async {
   // No software-decoder / compat-rendering switches on the phone UI (TV-box
   // workarounds); the quality cap and the diagnostics stats do apply.
   applyAndroidVideoSettings(settings, tvSwitches: false);
+  bindStoredVideoViewMode(settings);
 
   runApp(const PileusMobileApp());
 }

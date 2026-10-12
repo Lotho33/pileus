@@ -26,11 +26,14 @@ import '../../models/skip_interval.dart';
 const _seekStepSec = 5.0;
 // Timer-driven, non affidato al key-repeat nativo del sistema/telecomando
 // (rate incoerente tra Android TV, browser, desktop — alcuni remote non
-// ripetono affatto). Ogni tick avanza lo step; il primo passo (alla
-// pressione) resta invariato — un tap rapido si ferma prima che il timer
-// scatti la prima volta, quindi il comportamento di un singolo tap non
-// cambia.
+// ripetono affatto).
 const _holdTickInterval = Duration(milliseconds: 350);
+// D-pad scrubbing only ever moves the *preview*; the one real seek happens
+// this long after the last key release. Presses landing inside the window
+// keep adding to the same preview — so a burst of taps (or an HDMI-CEC
+// remote that turns a hold into a stream of separate press/release pairs)
+// is still a single seek, not one per press.
+const _commitDelay = Duration(milliseconds: 700);
 // Safety net: se una piattaforma non manda mai un KeyUp affidabile, il hold
 // si ferma comunque dopo un tetto massimo invece di continuare a scorrere
 // all'infinito. Abbondante rispetto ai ~19 tick che servono a raggiungere il
@@ -98,20 +101,12 @@ class _PlayerSeekBarState extends State<PlayerSeekBar> {
   // the real widget.posSec if a seek is ever silently dropped.
   Timer? _optimisticClearTimer;
 
-  // Real seek — used for a single tap/step, and to commit the final target
-  // once a hold ends (see _commitHold below).
-  void _stepBy(double deltaSec, double dur) {
-    final base = (_dragPos ?? widget.posSec).clamp(0.0, dur);
-    final target = (base + deltaSec).clamp(0.0, dur);
-    widget.onSeek(target);
-    _setDragPos(target);
-  }
-
-  // Visual-only move — no real seek() call. Repeatedly calling the real
-  // seek() on every ~350ms hold tick (up to 3/s) was making mpv re-buffer
-  // constantly while the user was just trying to scrub through the video —
-  // the same "preview while held, commit on release" idea the touch-drag
-  // handlers below already used, just not applied to the keyboard/D-pad path.
+  // Visual-only move — no real seek() call. Every D-pad step (tap or hold
+  // tick) only moves this preview; the real seek happens once, in
+  // _commitPending. Seeking on the first press used to start an ExoPlayer
+  // rebuffer right away, which flipped [PlayerSeekBar.disabled] on — and
+  // the disabled check then swallowed the KeyUp, so the hold never stopped:
+  // it kept ramping (up to 10 min/tick) for ~20s and committed a huge jump.
   void _previewStepBy(double deltaSec, double dur) {
     final base = (_dragPos ?? widget.posSec).clamp(0.0, dur);
     _setDragPos((base + deltaSec).clamp(0.0, dur));
@@ -120,13 +115,17 @@ class _PlayerSeekBarState extends State<PlayerSeekBar> {
   void _setDragPos(double target) {
     setState(() => _dragPos = target);
     _optimisticClearTimer?.cancel();
+    // Only once nothing is pending — while a commit is still due the
+    // preview must stay where the user put it.
+    if (_commitTimer != null || _holdTimer != null) return;
     _optimisticClearTimer = Timer(const Duration(milliseconds: 1200), () {
       if (mounted) setState(() => _dragPos = null);
     });
   }
 
-  // ── Hold-to-accelerate ──────────────────────────────────────────────────
+  // ── Hold-to-accelerate + deferred commit ────────────────────────────────
   Timer? _holdTimer;
+  Timer? _commitTimer;
   int _holdTicks = 0;
   LogicalKeyboardKey? _holdingKey;
 
@@ -151,7 +150,7 @@ class _PlayerSeekBarState extends State<PlayerSeekBar> {
     if (resume) widget.onScrubEnd?.call();
   }
 
-  // Gradual ramp — starts at the same 10s a single tap already does, and
+  // Gradual ramp — starts at the same 5s a single tap already does, and
   // only reaches a large per-tick jump after being held for a few real
   // seconds, capping at 10 minutes/tick so a long hold can cross a full
   // movie without needing an implausibly long press.
@@ -165,7 +164,10 @@ class _PlayerSeekBarState extends State<PlayerSeekBar> {
     return 600; // 10 min/tick — max, past ~6.65s held
   }
 
-  void _startHold(LogicalKeyboardKey key, double sign, double dur) {
+  // Key down: first step right away (preview only), then the hold ticks.
+  void _press(LogicalKeyboardKey key, double sign, double dur) {
+    _commitTimer?.cancel();
+    _commitTimer = null;
     _beginScrub();
     _holdingKey = key;
     _holdTicks = 0;
@@ -174,44 +176,63 @@ class _PlayerSeekBarState extends State<PlayerSeekBar> {
       _holdTicks++;
       widget.onActivity?.call();
       _previewStepBy(sign * _stepForTick(_holdTicks), dur);
-      if (_holdTicks >= _maxHoldTicks) _stopHold(key);
+      if (_holdTicks >= _maxHoldTicks) _release(key);
     });
+    _previewStepBy(sign * _seekStepSec, dur);
   }
 
-  void _stopHold(LogicalKeyboardKey key) {
+  // Key up (or the safety cap): stop ticking, commit after _commitDelay
+  // unless another press continues the scrub first.
+  void _release(LogicalKeyboardKey key) {
     if (_holdingKey != key) return;
-    _cancelHold(commit: true);
-  }
-
-  // commit: true applies whatever _dragPos the hold left behind as a real
-  // seek() — the hold only ever moved the preview, so without this the
-  // final position the user actually stopped on would never reach the
-  // player. false (dispose, widget going away) skips calling back out.
-  void _cancelHold({bool commit = false}) {
-    if (commit && _holdTimer != null && _dragPos != null) {
-      widget.onSeek(_dragPos!);
-    }
     _holdTimer?.cancel();
     _holdTimer = null;
     _holdingKey = null;
     _holdTicks = 0;
-    // Seek first (above), then resume — never resume a still-disposing widget.
-    _endScrub(resume: commit);
+    _commitTimer?.cancel();
+    _commitTimer = Timer(_commitDelay, _commitPending);
+  }
+
+  // The single real seek of a D-pad scrub, then resume (if it was playing).
+  void _commitPending() {
+    _commitTimer?.cancel();
+    _commitTimer = null;
+    if (!_scrubbing) return;
+    final target = _dragPos;
+    if (target != null) widget.onSeek(target);
+    _endScrub(resume: true);
+    if (target != null) _setDragPos(target); // re-arms the clear timer
+  }
+
+  // Stop everything now. commit: true seeks to wherever the preview is and
+  // resumes (focus moved away, another key pressed); false (dispose) skips
+  // calling back out.
+  void _cancelHold({bool commit = false}) {
+    _holdTimer?.cancel();
+    _holdTimer = null;
+    _holdingKey = null;
+    _holdTicks = 0;
+    if (commit) {
+      _commitPending();
+    } else {
+      _commitTimer?.cancel();
+      _commitTimer = null;
+      _endScrub(resume: false);
+    }
   }
 
   KeyEventResult _onKeyEvent(FocusNode node, KeyEvent event, double dur) {
     final key = event.logicalKey;
-    // Any other key pressed while a hold is in progress stops it — "tenendo
-    // premuto... rilasciando dovrebbe fermarsi, o anche solo premendo un
-    // altro tasto". A real KeyUp on the held key already stops it below, and
-    // losing focus already stops it via onFocusChange — this covers the
-    // remaining case: a different key pressed *without* first releasing the
-    // held one, and without that key moving focus away either (e.g.
-    // select/enter toggling play/pause while the seek bar keeps focus).
-    // Deliberately not swallowed here (falls through to whatever handling
-    // below/beyond this widget that key normally gets) — only the hold
-    // itself is cut short, not the key press.
-    if (_holdingKey != null && key != _holdingKey && event is KeyDownEvent) {
+    // Any other key pressed while a scrub is in progress (held or waiting
+    // to commit) commits it now — "rilasciando dovrebbe fermarsi, o anche
+    // solo premendo un altro tasto". Deliberately not swallowed: only the
+    // scrub is cut short, not that key's own action (e.g. OK toggling
+    // play/pause, Up moving focus).
+    final isArrowLR = key == LogicalKeyboardKey.arrowLeft ||
+        key == LogicalKeyboardKey.arrowRight;
+    if (!isArrowLR &&
+        event is KeyDownEvent &&
+        (_holdingKey != null || _commitTimer != null)) {
       _cancelHold(commit: true);
     }
     if (key == LogicalKeyboardKey.arrowUp) {
@@ -228,31 +249,29 @@ class _PlayerSeekBarState extends State<PlayerSeekBar> {
       widget.onNavigateDown!();
       return KeyEventResult.handled;
     }
-    if (key != LogicalKeyboardKey.arrowLeft &&
-        key != LogicalKeyboardKey.arrowRight) {
-      return KeyEventResult.ignored;
+    if (!isArrowLR) return KeyEventResult.ignored;
+    final sign = key == LogicalKeyboardKey.arrowLeft ? -1.0 : 1.0;
+    // Release is always honoured — even while disabled (buffering). Ending
+    // a scrub must never depend on the player's state.
+    if (event is KeyUpEvent) {
+      widget.onActivity?.call();
+      _release(key);
+      return KeyEventResult.handled;
     }
+    // Platform auto-repeat: our own timer drives the hold. Swallowed so it
+    // doesn't bubble to the screen-level ±10s handler either.
+    if (event is KeyRepeatEvent) return KeyEventResult.handled;
     // Swallowed rather than left ignored: bubbling up while disabled would
     // hand this to the screen-level handler, which (before this widget
     // existed) used arrow keys for its own ±10s seek — exactly the action
-    // this state is meant to suspend.
-    if (widget.disabled) return KeyEventResult.handled;
-    final sign = key == LogicalKeyboardKey.arrowLeft ? -1.0 : 1.0;
+    // this state is meant to suspend. A scrub already in progress may go on.
+    if (widget.disabled && !_scrubbing) return KeyEventResult.handled;
     if (event is KeyDownEvent) {
       widget.onActivity?.call();
-      // A platform that auto-repeats KeyDownEvents while held would
-      // otherwise re-trigger this branch (and double-step) on every repeat —
-      // only the first press of a given direction starts anything; our own
-      // timer, not the platform's repeat rate, drives every step after that.
-      if (_holdingKey != key) {
-        _stepBy(sign * _seekStepSec, dur);
-        _startHold(key, sign, dur);
-      }
-      return KeyEventResult.handled;
-    }
-    if (event is KeyUpEvent) {
-      widget.onActivity?.call();
-      _stopHold(key);
+      // Switching direction mid-hold: the other key's release may never
+      // come (some remotes), so close that hold first.
+      if (_holdingKey != null && _holdingKey != key) _release(_holdingKey!);
+      if (_holdingKey != key) _press(key, sign, dur);
       return KeyEventResult.handled;
     }
     return KeyEventResult.ignored;

@@ -16,7 +16,7 @@ import '../../engine/player_engine.dart';
 // deals with playback-track selection.
 // ─────────────────────────────────────────────────────────────────────────────
 
-enum _SettingsCategory { audio, video, subtitles }
+enum _SettingsCategory { audio, video, format, subtitles }
 
 enum _PanelView { master, detail }
 
@@ -58,12 +58,14 @@ class PlayerSettingsPanelState extends State<PlayerSettingsPanel> {
   final _volumeRowFn = FocusNode();
   final _audioRowFn = FocusNode();
   final _videoRowFn = FocusNode();
+  final _formatRowFn = FocusNode();
   final _subsRowFn = FocusNode();
 
   // Entry point into each category's option list, landed on when a row is
   // opened — one per category, also alive for the panel's whole lifetime.
   final _audioFirstFn = FocusNode();
   final _videoFirstFn = FocusNode();
+  final _formatFirstFn = FocusNode();
   final _subsFirstFn = FocusNode();
 
   List<MediaTrack> get _audioTracks => widget.engine.audioTracks;
@@ -115,6 +117,7 @@ class PlayerSettingsPanelState extends State<PlayerSettingsPanel> {
       final stillVisible = switch (_detailCategory!) {
         _SettingsCategory.audio => _hasAudio,
         _SettingsCategory.video => _hasVideo,
+        _SettingsCategory.format => true,
         _SettingsCategory.subtitles => _hasSubs,
       };
       // The category the user was looking at just disappeared (e.g. an
@@ -131,9 +134,11 @@ class PlayerSettingsPanelState extends State<PlayerSettingsPanel> {
     _volumeRowFn.dispose();
     _audioRowFn.dispose();
     _videoRowFn.dispose();
+    _formatRowFn.dispose();
     _subsRowFn.dispose();
     _audioFirstFn.dispose();
     _videoFirstFn.dispose();
+    _formatFirstFn.dispose();
     _subsFirstFn.dispose();
     super.dispose();
   }
@@ -147,7 +152,7 @@ class PlayerSettingsPanelState extends State<PlayerSettingsPanel> {
   void requestInitialFocus() => _volumeRowFn.requestFocus();
 
   List<FocusNode> get _masterChain =>
-      [_volumeRowFn, _audioRowFn, _videoRowFn, _subsRowFn];
+      [_volumeRowFn, _audioRowFn, _videoRowFn, _formatRowFn, _subsRowFn];
 
   void _moveMasterRow(FocusNode from, int dir) {
     var i = _masterChain.indexOf(from);
@@ -178,6 +183,7 @@ class PlayerSettingsPanelState extends State<PlayerSettingsPanel> {
         switch (_detailCategory) {
           _SettingsCategory.audio => _audioRowFn,
           _SettingsCategory.video => _videoRowFn,
+          _SettingsCategory.format => _formatRowFn,
           _SettingsCategory.subtitles => _subsRowFn,
           null => _volumeRowFn,
         };
@@ -278,6 +284,18 @@ class PlayerSettingsPanelState extends State<PlayerSettingsPanel> {
             onOpen: () => _openDetail(_SettingsCategory.video, _videoFirstFn),
             onCloseFromLeft: widget.onClose,
           ),
+        // Always available — whatever the stream, the picture can be
+        // fitted/zoomed/stretched.
+        _CategoryRow(
+          icon: Icons.aspect_ratio_rounded,
+          label: 'Formato',
+          value: videoViewMode.value.label,
+          focusNode: _formatRowFn,
+          onUp: () => _moveMasterRow(_formatRowFn, -1),
+          onDown: () => _moveMasterRow(_formatRowFn, 1),
+          onOpen: () => _openDetail(_SettingsCategory.format, _formatFirstFn),
+          onCloseFromLeft: widget.onClose,
+        ),
         if (_hasSubs)
           _CategoryRow(
             icon: Icons.subtitles_rounded,
@@ -332,6 +350,25 @@ class PlayerSettingsPanelState extends State<PlayerSettingsPanel> {
                 selected: active == tracks[i],
                 onTap: () => widget.engine.selectVideoTrack(tracks[i]),
                 focusNode: i == 0 ? _videoFirstFn : null,
+                onBack: _returnToMaster,
+              ),
+          ],
+        );
+
+      case _SettingsCategory.format:
+        final active = videoViewMode.value;
+        return ListView(
+          key: const ValueKey('detail_format'),
+          padding: EdgeInsets.symmetric(vertical: AppScale.space(context, 8)),
+          children: [
+            _DetailHeader(label: 'Formato', onBack: _returnToMaster),
+            for (var i = 0; i < VideoViewMode.values.length; i++)
+              _TrackTile(
+                label: VideoViewMode.values[i].label,
+                selected: active == VideoViewMode.values[i],
+                onTap: () => setState(
+                    () => videoViewMode.value = VideoViewMode.values[i]),
+                focusNode: i == 0 ? _formatFirstFn : null,
                 onBack: _returnToMaster,
               ),
           ],

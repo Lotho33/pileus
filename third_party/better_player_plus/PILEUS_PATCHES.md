@@ -40,6 +40,15 @@ the verbatim upstream backport (3):
 8. `BetterPlayerAndroidOptions.statsIntervalMs`: periodic `videoStats` event
    (decoder rendered/dropped/skipped counters, current format, buffer).
 
+9. Video size: `onVideoSizeChanged` → `videoSizeChanged` event → Dart
+   `VideoPlayerValue.size`, and `initialized` reports the *display* size
+   (pixel aspect ratio applied, swapped for 90/270° rotation) and no longer
+   overwrites a known size with 0x0. Upstream reported the size once, from
+   the first STATE_READY: 0x0 when the video format wasn't known yet (laid
+   out as a 1x1 square), stale after an ABR switch (upstream #112/#113).
+10. `better_player_with_controls.dart` `_BetterPlayerVideoFitWidget`
+    rebuilds when `controller.value.size` changes (it read it only at build).
+
 Upgrading to 2.0.0+: patch 3 is upstream there; re-apply all the others.
 Upgrading: re-copy the new upstream release here and re-apply both patches
 (or drop the fork once upstream fixes 1.).

@@ -1710,7 +1710,10 @@ class _MobilePlayerViewState extends State<_MobilePlayerView> {
                 },
               );
           final liveSources = widget.args.isLive ? widget.args.liveSources : const <String>[];
-          final nothing = video.length < 2 &&
+          // "Formato" below is always there for video, so "nothing to pick"
+          // only applies to audio-only media now.
+          final nothing = widget.args.isAudio &&
+              video.length < 2 &&
               audio.length < 2 &&
               subs.isEmpty &&
               liveSources.length < 2;
@@ -1768,6 +1771,12 @@ class _MobilePlayerViewState extends State<_MobilePlayerView> {
                   for (final t in subs)
                     tile(t.label, t.id == _engine.activeSubtitleTrack?.id,
                         () => _engine.selectSubtitleTrack(t)),
+                ],
+                if (!widget.args.isAudio) ...[
+                  const _SheetHeader('Formato'),
+                  for (final m in VideoViewMode.values)
+                    tile(m.label, videoViewMode.value == m,
+                        () => videoViewMode.value = m),
                 ],
               ],
             ),

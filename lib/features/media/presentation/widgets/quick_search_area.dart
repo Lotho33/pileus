@@ -51,17 +51,62 @@ const int _kQuickSearchVisibleCards = 4;
 // almost immediately by the next keystroke anyway.
 const int _kMinSearchLength = 2;
 
+/// Shared between the home screen and its [QuickSearchArea].
+///
+/// - [requestOpen]: the *only* deliberate way to open search. Focus landing
+///   inside the panel without it — Flutter restoring the home route's focus
+///   history after a pushed route (player, details) pops, when the card it
+///   would restore was rebuilt meanwhile (Continue Watching reloads after
+///   playback) — is bounced straight back out instead of opening search
+///   with focus stranded on its invisible focus proxy.
+/// - [isOpen] / [close]: lets the home's root Back (PopScope) close search
+///   instead of showing "Premi di nuovo per uscire". One Back press reaches
+///   the app as both a key event and a platform popRoute (see
+///   back_dispatch.dart); when the popRoute wins, search's own Back handler
+///   only sees the echo — without this it never closed.
+class QuickSearchController {
+  bool _openRequested = false;
+  bool _isOpen = false;
+  VoidCallback? _close;
+
+  bool get isOpen => _isOpen;
+
+  /// Opens search by focusing [barFocusNode] (the area's entry proxy).
+  void requestOpen(FocusNode barFocusNode) {
+    _openRequested = true;
+    barFocusNode.requestFocus();
+    // Only valid for this one focus move: if focus didn't actually enter
+    // (excluded, nav open…), a later stray restore must not inherit it.
+    WidgetsBinding.instance.addPostFrameCallback((_) => _openRequested = false);
+  }
+
+  /// Closes search if open; true when it was.
+  bool close() {
+    if (!_isOpen || _close == null) return false;
+    _close!();
+    return true;
+  }
+
+  bool _takeOpenRequest() {
+    final r = _openRequested;
+    _openRequested = false;
+    return r;
+  }
+}
+
 class QuickSearchArea extends StatefulWidget {
   final String pluginId;
   final String pluginName;
   final FocusNode barFocusNode;
   final VoidCallback onDismiss;
+  final QuickSearchController controller;
 
   const QuickSearchArea({
     super.key,
     required this.pluginId,
     required this.pluginName,
     required this.barFocusNode,
+    required this.controller,
     required this.onDismiss,
   });
 

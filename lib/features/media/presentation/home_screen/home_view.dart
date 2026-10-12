@@ -75,6 +75,8 @@ class _HomeViewState extends State<_HomeView> {
   // target — moved here from the old _PluginNav sub-panel, which used to be
   // the only way to reach search.
   final FocusNode _searchBarFocusNode = FocusNode();
+  // See QuickSearchController: deliberate opens + root-Back closing search.
+  final _quickSearch = QuickSearchController();
   // Whatever card had focus the instant quick search was entered — captured
   // so leaving search (Esc or an explicit D-pad exit, see
   // _QuickSearchArea.onDismiss below) can land back on that exact item
@@ -236,6 +238,10 @@ class _HomeViewState extends State<_HomeView> {
   static const _exitConfirmWindow = Duration(milliseconds: 2000);
 
   void _handleRootBack(BuildContext context) {
+    // This Back may be the platform-path copy of a press quick search's own
+    // key handler then sees only as an echo (back_dispatch.dart) — so close
+    // search here, never treat it as "leave the app".
+    if (_quickSearch.close()) return;
     final now = DateTime.now();
     final last = _lastBackPressAt;
     if (last != null && now.difference(last) < _exitConfirmWindow) {
@@ -415,7 +421,8 @@ class _HomeViewState extends State<_HomeView> {
                                         // the user was just on.
                                         _preSearchFocus.set(
                                             FocusManager.instance.primaryFocus);
-                                        _searchBarFocusNode.requestFocus();
+                                        _quickSearch
+                                            .requestOpen(_searchBarFocusNode);
                                       },
                                       bodyKey:
                                           _pageKeys[state.plugins[i].pluginId]!,
@@ -461,6 +468,7 @@ class _HomeViewState extends State<_HomeView> {
                               pluginId: _selectedPluginId!,
                               pluginName: pluginLabel(state.plugins[safeIdx]),
                               barFocusNode: _searchBarFocusNode,
+                              controller: _quickSearch,
                               onDismiss: () {
                                 // Restore focus to whatever card the user was
                                 // actually on before opening search — falls

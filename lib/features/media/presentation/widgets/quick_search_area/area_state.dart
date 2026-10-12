@@ -61,12 +61,56 @@ class _QuickSearchAreaState extends State<QuickSearchArea> {
     // first key instead.
     widget.barFocusNode.addListener(_onBarFocusRequested);
     FocusManager.instance.addListener(_onGlobalFocusChange);
+    _attachController(widget.controller);
+  }
+
+  @override
+  void didUpdateWidget(QuickSearchArea old) {
+    super.didUpdateWidget(old);
+    if (old.controller != widget.controller) {
+      _detachController(old.controller);
+      _attachController(widget.controller);
+    }
+  }
+
+  void _attachController(QuickSearchController c) {
+    c._close = _dismiss;
+    c._isOpen = _expanded;
+  }
+
+  void _detachController(QuickSearchController c) {
+    if (c._close == _dismiss) {
+      c._close = null;
+      c._isOpen = false;
+    }
+  }
+
+  void _setExpanded(bool v) {
+    widget.controller._isOpen = v;
+    if (v != _expanded) setState(() => _expanded = v);
   }
 
   void _onBarFocusRequested() {
     if (!widget.barFocusNode.hasFocus) return;
+    _focusKeyboardSoon();
+  }
+
+  // The keyboard only exists once the panel has rebuilt expanded — on a slow
+  // box that can take more than the one frame this used to wait, leaving
+  // focus on the invisible proxy (arrows swallowed by the scope below, so
+  // nothing could move). A few frames of retry, only while still open.
+  void _focusKeyboardSoon([int tries = 4]) {
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted) _keyboardKey.currentState?.firstFocusNode.requestFocus();
+      if (!mounted || !_scopeFocusNode.hasFocus) return;
+      final kb = _keyboardKey.currentState;
+      if (kb != null) {
+        if (widget.barFocusNode.hasFocus) kb.firstFocusNode.requestFocus();
+        return;
+      }
+      if (tries > 0) {
+        _focusKeyboardSoon(tries - 1);
+        WidgetsBinding.instance.scheduleFrame();
+      }
     });
   }
 
@@ -96,6 +140,7 @@ class _QuickSearchAreaState extends State<QuickSearchArea> {
   @override
   void dispose() {
     FocusManager.instance.removeListener(_onGlobalFocusChange);
+    _detachController(widget.controller);
     _debounce?.cancel();
     _controller.removeListener(_onQueryChanged);
     _controller.dispose();
@@ -182,6 +227,7 @@ class _QuickSearchAreaState extends State<QuickSearchArea> {
     // route the key to). Collapsing here directly, instead of only ever
     // relying on that side effect, means every _dismiss() call actually
     // closes the panel regardless of how the focus handoff below goes.
+    widget.controller._isOpen = false;
     if (_expanded || _pendingSearch) {
       setState(() {
         _expanded = false;
@@ -538,7 +584,21 @@ class _QuickSearchAreaState extends State<QuickSearchArea> {
       focusNode: _scopeFocusNode,
       canRequestFocus: false,
       onFocusChange: (v) {
-        if (v != _expanded) setState(() => _expanded = v);
+        if (v && !_expanded && !widget.controller._takeOpenRequest()) {
+          // Focus walked in without the home asking to open search — the
+          // route focus restore after a pop (see QuickSearchController).
+          // Hand it straight back to the home instead of opening.
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (!mounted || !_scopeFocusNode.hasFocus || _expanded) return;
+            widget.onDismiss();
+            FocusManager.instance.applyFocusChangesIfNeeded();
+            if (_scopeFocusNode.hasFocus) {
+              FocusManager.instance.primaryFocus?.unfocus();
+            }
+          });
+          return;
+        }
+        _setExpanded(v);
       },
       // Safety net: an arrow key that no descendant here has anywhere to
       // send it (e.g. right-arrow with no filters, or off some edge case

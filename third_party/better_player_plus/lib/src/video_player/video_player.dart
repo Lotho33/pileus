@@ -220,9 +220,12 @@ class VideoPlayerController extends ValueNotifier<VideoPlayerValue> {
       videoEventStreamController.add(event);
       switch (event.eventType) {
         case VideoEventType.initialized:
+          // PILEUS PATCH: a 0x0 size here (video format not known yet) must
+          // not wipe one a videoSizeChanged event already delivered.
+          final knownSize = event.size != null && event.size!.width > 0 && event.size!.height > 0;
           value = value.copyWith(
             duration: event.duration,
-            size: event.size,
+            size: knownSize ? event.size : null,
             rotationCorrection: event.rotationCorrection,
           );
           _initializingCompleter.complete(null);
@@ -249,6 +252,11 @@ class VideoPlayerController extends ValueNotifier<VideoPlayerValue> {
           value = value.copyWith(isPip: true);
         case VideoEventType.pipStop:
           value = value.copyWith(isPip: false);
+        case VideoEventType.videoSizeChanged:
+          // PILEUS PATCH: keep the layout size in step with the real picture.
+          if (event.size != null && event.size!.width > 0 && event.size!.height > 0) {
+            value = value.copyWith(size: event.size);
+          }
         case VideoEventType.videoFrozen:
         case VideoEventType.videoStats:
         case VideoEventType.unknown:

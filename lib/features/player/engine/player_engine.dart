@@ -10,8 +10,10 @@ import 'package:media_kit_video/media_kit_video.dart' as mkv;
 import '../../../core/utils/perf_log.dart';
 import 'decoder_capability_fallback.dart';
 import 'stream_format.dart';
+import 'video_view_mode.dart';
 
 export 'stream_format.dart';
+export 'video_view_mode.dart';
 
 /// One selectable playback track (audio language, subtitle language, video
 /// quality). Backend-agnostic: [raw] holds the native handle the concrete
@@ -237,7 +239,8 @@ abstract class PlayerEngine extends ChangeNotifier {
 
   // ── View ───────────────────────────────────────────────────────────────────
 
-  /// The video render surface. Style is fixed at [initialize] time.
+  /// The video render surface. Style is fixed at [initialize] time; the
+  /// picture follows [videoViewMode] live.
   Widget buildView();
 }
 
@@ -832,10 +835,45 @@ class _ExoPlayerEngine extends PlayerEngine {
     _emit();
   }
 
+  // better_player lays its picture out in an AspectRatio box that defaults
+  // to a fixed 16:9 (we never set one) — on a 20:9 phone the video never
+  // used the whole screen, and zoom/fill would have been confined to that
+  // box. Here the box is the whole area (or the forced-ratio box), and the
+  // mode picks the fit of the picture inside it. Subtitles are drawn in the
+  // same box, so they stay on screen in every mode.
   @override
-  Widget buildView() => _controller == null
-      ? const SizedBox.shrink()
-      : BetterPlayer(controller: _c);
+  Widget buildView() {
+    if (_controller == null) return const SizedBox.shrink();
+    return ValueListenableBuilder<VideoViewMode>(
+      valueListenable: videoViewMode,
+      builder: (context, mode, _) => LayoutBuilder(builder: (context, c) {
+        var area = c.biggest;
+        if (!area.isFinite) area = MediaQuery.sizeOf(context);
+        final forced = mode.forcedAspect;
+        final box = forced == null ? area : containAspect(area, forced);
+        final fit = switch (mode) {
+          VideoViewMode.fit => BoxFit.contain,
+          VideoViewMode.zoom => BoxFit.cover,
+          // Forced ratios: the box already has the target proportions.
+          VideoViewMode.stretch ||
+          VideoViewMode.ratio16x9 ||
+          VideoViewMode.ratio4x3 =>
+            BoxFit.fill,
+        };
+        // Read by better_player's own build, which runs right after this.
+        if (box.width > 0 && box.height > 0) {
+          _c.setOverriddenAspectRatio(box.width / box.height);
+        }
+        if (_c.getFit() != fit) _c.setOverriddenFit(fit);
+        return Center(
+          child: SizedBox.fromSize(
+            size: box,
+            child: BetterPlayer(controller: _c),
+          ),
+        );
+      }),
+    );
+  }
 
   static const _noneTrack = MediaTrack(id: '', label: '');
 }
@@ -1192,9 +1230,24 @@ class _MpvPlayerEngine extends PlayerEngine {
   Widget buildView() {
     final vc = _videoController;
     if (vc == null) return const SizedBox.shrink();
+    return ValueListenableBuilder<VideoViewMode>(
+      valueListenable: videoViewMode,
+      builder: (context, mode, _) => _mkVideo(vc, mode),
+    );
+  }
+
+  Widget _mkVideo(mkv.VideoController vc, VideoViewMode mode) {
     return mkv.Video(
       controller: vc,
       controls: null,
+      // media_kit's aspectRatio forces the picture's proportions; fit places
+      // it in the viewport.
+      fit: switch (mode) {
+        VideoViewMode.zoom => BoxFit.cover,
+        VideoViewMode.stretch => BoxFit.fill,
+        _ => BoxFit.contain,
+      },
+      aspectRatio: mode.forcedAspect,
       subtitleViewConfiguration: mkv.SubtitleViewConfiguration(
         style: TextStyle(
           fontSize: _style.fontSize,

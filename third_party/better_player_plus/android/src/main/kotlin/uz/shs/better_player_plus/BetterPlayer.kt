@@ -41,6 +41,7 @@ import androidx.media3.common.PlaybackException
 import androidx.media3.common.PlaybackParameters
 import androidx.media3.common.MimeTypes
 import androidx.media3.common.Player
+import androidx.media3.common.VideoSize
 import androidx.media3.common.Timeline
 import androidx.media3.common.TrackSelectionOverride
 import androidx.media3.common.util.UnstableApi
@@ -538,6 +539,24 @@ internal class BetterPlayer(
                 }
             }
 
+            // PILEUS PATCH: upstream only ever reported the video size once,
+            // in "initialized", from whatever videoFormat ExoPlayer had at the
+            // first STATE_READY — 0x0 if the video format wasn't known yet
+            // (Dart then laid the picture out as a 1x1 square), never updated
+            // after an ABR switch to a variant with different proportions
+            // (upstream issues #112/#113), and ignoring non-square pixels.
+            override fun onVideoSizeChanged(videoSize: VideoSize) {
+                val size = displaySize(
+                    videoSize.width, videoSize.height, videoSize.pixelWidthHeightRatio,
+                    exoPlayer?.videoFormat?.rotationDegrees ?: 0
+                ) ?: return
+                val event: MutableMap<String, Any> = HashMap()
+                event["event"] = "videoSizeChanged"
+                event["width"] = size.first
+                event["height"] = size.second
+                eventSink.success(event)
+            }
+
             override fun onPlayerError(error: PlaybackException) {
                 // PILEUS PATCH: a live stream that fell behind the playlist's
                 // window (typically after a network dip) is not fatal —
@@ -667,16 +686,16 @@ internal class BetterPlayer(
             event["duration"] = getDuration()
             exoPlayer?.let { player ->
                 player.videoFormat?.let { videoFormat ->
-                    var width = videoFormat.width
-                    var height = videoFormat.height
                     val rotationDegrees = videoFormat.rotationDegrees
-                    // Switch the width/height if video was taken in portrait mode
-                    if (rotationDegrees == 90 || rotationDegrees == 270) {
-                        width = videoFormat.height
-                        height = videoFormat.width
+                    // PILEUS PATCH: display size (pixel aspect ratio applied,
+                    // swapped for portrait rotation) — see displaySize().
+                    displaySize(
+                        videoFormat.width, videoFormat.height,
+                        videoFormat.pixelWidthHeightRatio, rotationDegrees
+                    )?.let { (width, height) ->
+                        event["width"] = width
+                        event["height"] = height
                     }
-                    event["width"] = width
-                    event["height"] = height
                     // Unless the producer applies the rotation itself, frames arrive unrotated
                     // and the Dart side has to rotate the texture.
                     event["rotationCorrection"] =
@@ -839,6 +858,16 @@ internal class BetterPlayer(
         // The player must be released before the producer that owns its surface.
         exoPlayer?.release()
         videoOutput.release()
+    }
+
+    // PILEUS PATCH: the size the picture should be shown at — non-square
+    // pixels (anamorphic SD) stretched to their display width, swapped for
+    // a 90/270° rotation. Null while the size is still unknown.
+    private fun displaySize(width: Int, height: Int, pixelRatio: Float, rotation: Int): Pair<Int, Int>? {
+        if (width <= 0 || height <= 0) return null
+        val par = if (pixelRatio > 0f) pixelRatio else 1f
+        val w = Math.round(width * par)
+        return if (rotation == 90 || rotation == 270) Pair(height, w) else Pair(w, height)
     }
 
     // PILEUS PATCH (see onPlayerError). True when the player was sent back
