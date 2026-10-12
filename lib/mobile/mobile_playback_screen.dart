@@ -205,7 +205,7 @@ class _MobilePlayerViewState extends State<_MobilePlayerView> {
   final _seekBarFocusNode = FocusNode(canRequestFocus: false);
   StreamSubscription<Duration>? _posSub;
   bool _engineInitialized = false;
-  late final int _bufMiB;
+  late final int _bufSec;
 
   // Last real (non-zero) position of the stream playing now — where "Riprova"
   // and the stall watchdog's reopen resume to. Reset on every episode switch.
@@ -274,11 +274,12 @@ class _MobilePlayerViewState extends State<_MobilePlayerView> {
     ]);
     SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
 
-    var bufMiB = widget.args.isLive
-        ? _settings.getLiveBufferMiB()
-        : _settings.getPlayerBufferMiB();
-    if (lowPowerUi) bufMiB = bufMiB.clamp(4, widget.args.isLive ? 10 : 16);
-    _bufMiB = bufMiB;
+    final chosenSec = widget.args.isLive
+        ? _settings.getLiveBufferSec()
+        : _settings.getVodBufferSec();
+    _bufSec = appliedReserveSec(chosenSec,
+        live: widget.args.isLive, lowPower: lowPowerUi);
+    perf('mobile: buffer reserve chosen=${chosenSec}s applied=${_bufSec}s');
 
     _engine = PlayerEngine.create();
     _engine.onError = _onEngineError;
@@ -384,7 +385,7 @@ class _MobilePlayerViewState extends State<_MobilePlayerView> {
         bottomPadding: _settings.getSubtitleBottomPadding(),
       ),
       isLive: widget.args.isLive,
-      bufferMiB: _bufMiB,
+      bufferSeconds: _bufSec,
     );
     // The `??=` in build() cached the SizedBox.shrink() placeholder from
     // every build before this ran — drop it and force a rebuild so the next

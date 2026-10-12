@@ -34,7 +34,7 @@ class _PlaybackViewState extends State<_PlaybackView> {
   // Read once from settings in initState, reused verbatim by
   // _restartPlayerInPlace so a manual restart doesn't have to re-read
   // SettingsRepository or duplicate the lowPowerUi clamp.
-  late final int _bufferMiB;
+  late final int _bufferSec;
   // Guards _ensureEngineInitialized so the native player setup runs exactly
   // once per engine instance — see that method. _restartPlayerInPlace
   // initializes its replacement _engine itself and keeps this true.
@@ -255,11 +255,13 @@ class _PlaybackViewState extends State<_PlaybackView> {
     // picture appears. Under "hardware modesto" cap both harder — these
     // boxes have ~1 GB shared with the OS and the lowmemorykiller is active
     // during playback.
-    var bufMiB = args.isLive
-        ? _settings.getLiveBufferMiB()
-        : _settings.getPlayerBufferMiB();
-    if (lowPowerUi) bufMiB = bufMiB.clamp(4, args.isLive ? 10 : 16);
-    _bufferMiB = bufMiB;
+    final chosenSec = args.isLive
+        ? _settings.getLiveBufferSec()
+        : _settings.getVodBufferSec();
+    _bufferSec = appliedReserveSec(chosenSec,
+        live: args.isLive, lowPower: lowPowerUi);
+    perf('screen: buffer reserve chosen=${chosenSec}s applied=${_bufferSec}s'
+        '${_bufferSec != chosenSec ? ' (hardware modesto cap)' : ''}');
 
     // _engine.create() is a plain Dart object (no native call) — safe here.
     // _engine.initialize() is NOT: on Android it synchronously spins up a
@@ -666,7 +668,7 @@ class _PlaybackViewState extends State<_PlaybackView> {
         bottomPadding: _subtitleBottomPadding,
       ),
       isLive: widget.args.isLive,
-      bufferMiB: _bufferMiB,
+      bufferSeconds: _bufferSec,
     );
     if (!mounted) {
       // The screen itself got torn down while we were awaiting — its own
@@ -1332,7 +1334,7 @@ class _PlaybackViewState extends State<_PlaybackView> {
         bottomPadding: _subtitleBottomPadding,
       ),
       isLive: widget.args.isLive,
-      bufferMiB: _bufferMiB,
+      bufferSeconds: _bufferSec,
     );
     perf('screen: engine initialized (${_engine.runtimeType})');
   }

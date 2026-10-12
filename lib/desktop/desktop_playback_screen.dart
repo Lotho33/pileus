@@ -242,10 +242,11 @@ class _ViewState extends State<_View> with WindowListener {
         mediaId: _curStreamId ?? widget.mediaId,
         onPlaybackElsewhere: _onPlaybackTakenOver);
 
-    var bufMiB = widget.args.isLive
-        ? _settings.getLiveBufferMiB()
-        : _settings.getPlayerBufferMiB();
-    if (lowPowerUi) bufMiB = bufMiB.clamp(4, widget.args.isLive ? 10 : 16);
+    final chosenSec = widget.args.isLive
+        ? _settings.getLiveBufferSec()
+        : _settings.getVodBufferSec();
+    final bufSec = appliedReserveSec(chosenSec,
+        live: widget.args.isLive, lowPower: lowPowerUi);
 
     _engine = PlayerEngine.create();
     _engine.onError = _onEngineError;
@@ -258,7 +259,7 @@ class _ViewState extends State<_View> with WindowListener {
         bottomPadding: _settings.getSubtitleBottomPadding(),
       ),
       isLive: widget.args.isLive,
-      bufferMiB: bufMiB,
+      bufferSeconds: bufSec,
     );
 
     // isLive skips this on purpose even for the single-device-lease

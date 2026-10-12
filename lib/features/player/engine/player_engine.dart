@@ -8,10 +8,12 @@ import 'package:media_kit/media_kit.dart' as mk;
 import 'package:media_kit_video/media_kit_video.dart' as mkv;
 
 import '../../../core/utils/perf_log.dart';
+import 'buffer_policy.dart';
 import 'decoder_capability_fallback.dart';
 import 'stream_format.dart';
 import 'video_view_mode.dart';
 
+export 'buffer_policy.dart' show appliedReserveSec;
 export 'stream_format.dart';
 export 'video_view_mode.dart';
 
@@ -128,13 +130,13 @@ abstract class PlayerEngine extends ChangeNotifier {
 
   // ── Lifecycle ──────────────────────────────────────────────────────────────
 
-  /// Build the native controller. [bufferMiB] is a rough cushion hint (mpv
-  /// sizes its demuxer cache by bytes; ExoPlayer buffers by time and this is
-  /// mapped to a millisecond window).
+  /// Build the native controller. [bufferSeconds]: the playback reserve —
+  /// seconds of media to keep buffered ahead (see buffer_policy.dart for
+  /// each backend's mapping).
   Future<void> initialize(
     PlayerSubtitleStyle subtitleStyle, {
     required bool isLive,
-    required int bufferMiB,
+    required int bufferSeconds,
   });
 
   /// Open [url] and start decoding. Safe to call again to switch stream
@@ -284,36 +286,21 @@ class _ExoPlayerEngine extends PlayerEngine {
   Future<void> initialize(
     PlayerSubtitleStyle style, {
     required bool isLive,
-    required int bufferMiB,
+    required int bufferSeconds,
   }) async {
     _isLive = isLive;
 
-    // ExoPlayer buffers by time. On weak Amlogic boxes (Tanix W2) a brief
-    // network dip at an HLS segment boundary was underrunning the audio —
-    // too short to stall, long enough to hear a hitch. Bumped the floor and
-    // especially the after-rebuffer cushion so it refills properly before
-    // resuming. Kept moderate: ~1 GB shared RAM, buffer is decoded/muxed
-    // media held in memory. Live stays a touch tighter to hold the edge.
-    //
-    // [bufferMiB] threads through from the Preferences "buffer" slider — it
-    // only has to actually matter on Android, since the mpv desktop/web
-    // backend already honours it directly (as raw bytes). Scale the ms
-    // windows against it, anchored so the Preferences *default* MiB
-    // reproduces the exact ms values above (bufferMiB == baseMiB ⇒ scale
-    // == 1, zero behaviour change for anyone who never touched the
-    // setting) — without this, a spotty mobile connection gets no benefit
-    // from raising the buffer size, and a live stream that falls behind
-    // just stalls outright instead of riding out the dip.
-    final baseMiB = isLive ? 16 : 32; // must match SettingsRepository's
-    // live/playerBufferMiBDefault.
-    final scale = bufferMiB / baseMiB;
-    int scaled(int baseMs, {required int minMs, required int maxMs}) =>
-        (baseMs * scale).round().clamp(minMs, maxMs);
+    // [bufferSeconds] is the Preferenze "Riserva di riproduzione" — see
+    // buffer_policy.dart for how it maps onto ExoPlayer's windows.
+    final b = exoBufferMs(bufferSeconds);
+    perf('exo: buffer reserve ${bufferSeconds}s → min=${b.minBuffer ~/ 1000}s '
+        'max=${b.maxBuffer ~/ 1000}s afterRebuffer=${b.afterRebuffer / 1000}s '
+        'forPlayback=${b.forPlayback / 1000}s (live=$isLive)');
     _bufferingConfig = BetterPlayerBufferingConfiguration(
-      minBufferMs: scaled(isLive ? 16000 : 20000, minMs: 4000, maxMs: 90000),
-      maxBufferMs: scaled(isLive ? 24000 : 35000, minMs: 8000, maxMs: 150000),
-      bufferForPlaybackMs: 2500,
-      bufferForPlaybackAfterRebufferMs: scaled(6000, minMs: 3000, maxMs: 20000),
+      minBufferMs: b.minBuffer,
+      maxBufferMs: b.maxBuffer,
+      bufferForPlaybackMs: b.forPlayback,
+      bufferForPlaybackAfterRebufferMs: b.afterRebuffer,
     );
 
     _controller = BetterPlayerController(
@@ -937,14 +924,19 @@ class _MpvPlayerEngine extends PlayerEngine {
   Future<void> initialize(
     PlayerSubtitleStyle style, {
     required bool isLive,
-    required int bufferMiB,
+    required int bufferSeconds,
   }) async {
     _style = style;
+    // The reserve is time-based (demuxer-readahead-secs / cache-secs, set
+    // below once mpv is up); bufferSize (→ demuxer-max-bytes) is only a
+    // safety ceiling now, not the user's choice — see buffer_policy.dart.
+    final capBytes = mpvBufferCapBytes(bufferSeconds);
     _player = mk.Player(
-      configuration: mk.PlayerConfiguration(
-        bufferSize: bufferMiB * 1024 * 1024,
-      ),
+      configuration: mk.PlayerConfiguration(bufferSize: capBytes),
     );
+    perf('mpv: buffer reserve ${bufferSeconds}s '
+        '(readahead/cache-secs=$bufferSeconds, '
+        'max-bytes cap=${capBytes ~/ (1024 * 1024)} MiB, live=$isLive)');
     _playerCreated = true;
     if (!kIsWeb) {
       // mpv's own softvol ceiling (`volume-max`) defaults to 130, which
@@ -983,6 +975,11 @@ class _MpvPlayerEngine extends PlayerEngine {
           maxVolume.toInt().toString(),
           waitForInitialization: false,
         );
+        // Same safe point (mpv handle up, independent of open()).
+        native.setProperty('demuxer-readahead-secs', '$bufferSeconds',
+            waitForInitialization: false);
+        native.setProperty('cache-secs', '$bufferSeconds',
+            waitForInitialization: false);
       }));
     }
     _videoController = mkv.VideoController(

@@ -214,8 +214,8 @@ class _PlaybackSection extends StatefulWidget {
 
 class _PlaybackSectionState extends State<_PlaybackSection> {
   final _s = getIt<SettingsRepository>();
-  late int _vod = _s.getPlayerBufferMiB();
-  late int _live = _s.getLiveBufferMiB();
+  late int _vod = _s.getVodBufferSec();
+  late int _live = _s.getLiveBufferSec();
 
   @override
   Widget build(BuildContext context) {
@@ -224,29 +224,32 @@ class _PlaybackSectionState extends State<_PlaybackSection> {
       children: [
         _sectionTitle('Riproduzione'),
         _SliderRow(
-          label: 'Buffer video (on demand)',
-          value: '$_vod MiB',
+          label: 'Riserva di riproduzione',
+          value: '$_vod s',
           v: _vod.toDouble(),
-          min: SettingsRepository.playerBufferMiBMin.toDouble(),
-          max: SettingsRepository.playerBufferMiBMax.toDouble(),
+          min: SettingsRepository.vodBufferSecMin.toDouble(),
+          max: SettingsRepository.vodBufferSecMax.toDouble(),
           onChanged: (x) => setState(() {
-            _vod = x.round();
-            _s.setPlayerBufferMiB(_vod);
+            _vod = (x / 5).round() * 5;
+            _s.setVodBufferSec(_vod);
           }),
         ),
         _SliderRow(
-          label: 'Buffer live',
-          value: '$_live MiB',
+          label: 'Riserva di riproduzione (live)',
+          value: '$_live s',
           v: _live.toDouble(),
-          min: SettingsRepository.liveBufferMiBMin.toDouble(),
-          max: SettingsRepository.liveBufferMiBMax.toDouble(),
+          min: SettingsRepository.liveBufferSecMin.toDouble(),
+          max: SettingsRepository.liveBufferSecMax.toDouble(),
           onChanged: (x) => setState(() {
             _live = x.round();
-            _s.setLiveBufferMiB(_live);
+            _s.setLiveBufferSec(_live);
           }),
         ),
         const SizedBox(height: 6),
-        const Text('Si applica alla prossima riproduzione.',
+        const Text(
+            'Secondi di video tenuti pronti in anticipo. Più riserva = meno '
+            'interruzioni, al costo di un po\' di memoria (per le dirette '
+            'anche più ritardo). Si applica alla prossima riproduzione.',
             style: TextStyle(color: AppTheme.textLow, fontSize: 12)),
       ],
     );

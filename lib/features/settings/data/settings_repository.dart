@@ -38,8 +38,11 @@ class SettingsRepository {
   static const _kSubtitleColorArgb = 'settings.subtitleColorArgb';
   static const _kSubtitleBgEnabled = 'settings.subtitleBgEnabled';
   static const _kSubtitleBottomPadding = 'settings.subtitleBottomPadding';
+  // Legacy (MiB) buffer keys — only read to migrate, see _bufferSec.
   static const _kPlayerBufferMiB = 'settings.playerBufferMiB';
   static const _kLiveBufferMiB = 'settings.liveBufferMiB';
+  static const _kVodBufferSec = 'settings.vodBufferSec';
+  static const _kLiveBufferSec = 'settings.liveBufferSec';
   static const _kLowPowerMode = 'settings.lowPowerMode';
   static const _kDiagnostics = 'settings.diagnostics';
   static const _kSoftwareVideoDecoder = 'settings.softwareVideoDecoder';
@@ -49,29 +52,68 @@ class SettingsRepository {
   static const _kOverscanPercent = 'settings.overscanPercent';
   static const _kProfilePrefsBlob = 'settings.profilePrefsBlob';
 
-  // Player demux buffer, in MiB. Not per-profile (it's a device/hardware
-  // concern, not a viewing preference). Split VOD vs live: a film benefits
-  // from a big cushion against a slow link, a live stream does NOT — a large
-  // buffer there just means a long pre-roll before the picture appears and
-  // more latency behind the live edge, for no gain.
-  static const int playerBufferMiBDefault = 32; // VOD
-  static const int playerBufferMiBMin = 8;
-  static const int playerBufferMiBMax = 128;
-  static const int liveBufferMiBDefault = 16;
-  static const int liveBufferMiBMin = 4;
-  static const int liveBufferMiBMax = 64;
+  // Playback reserve ("Riserva di riproduzione"), in SECONDS of media kept
+  // buffered ahead — what every backend actually honours (ExoPlayer's
+  // min/max buffer, mpv's demuxer-readahead-secs/cache-secs, hls.js's
+  // maxBufferLength). Not per-profile (a device/network concern). Split VOD
+  // vs live: a film wants a big cushion — some segments not yet in the
+  // CDN's cache take 20–40s to arrive, and mycelium only reads ~45s ahead —
+  // while a big live buffer just adds pre-roll and latency behind the edge.
+  //
+  // It used to be a MiB slider that Android merely treated as a time
+  // multiplier (MiB/32 × 20s), so the label lied; stored MiB values are
+  // migrated on first read (see _bufferSec).
+  static const int vodBufferSecDefault = 60;
+  static const int vodBufferSecMin = 15;
+  static const int vodBufferSecMax = 180;
+  static const int liveBufferSecDefault = 20;
+  static const int liveBufferSecMin = 6;
+  static const int liveBufferSecMax = 60;
 
-  int getPlayerBufferMiB() =>
-      ((_prefs.getInt(_kPlayerBufferMiB) ?? playerBufferMiBDefault))
-          .clamp(playerBufferMiBMin, playerBufferMiBMax);
-  Future<void> setPlayerBufferMiB(int v) => _prefs.setInt(
-      _kPlayerBufferMiB, v.clamp(playerBufferMiBMin, playerBufferMiBMax));
+  int getVodBufferSec() => _bufferSec(
+        key: _kVodBufferSec,
+        legacyMiBKey: _kPlayerBufferMiB,
+        // The old MiB value's effective minBuffer on Android: MiB/32 × 20s.
+        fromMiB: (mib) => mib / 32 * 20,
+        def: vodBufferSecDefault,
+        min: vodBufferSecMin,
+        max: vodBufferSecMax,
+      );
+  Future<void> setVodBufferSec(int v) =>
+      _prefs.setInt(_kVodBufferSec, v.clamp(vodBufferSecMin, vodBufferSecMax));
 
-  int getLiveBufferMiB() =>
-      ((_prefs.getInt(_kLiveBufferMiB) ?? liveBufferMiBDefault))
-          .clamp(liveBufferMiBMin, liveBufferMiBMax);
-  Future<void> setLiveBufferMiB(int v) => _prefs.setInt(
-      _kLiveBufferMiB, v.clamp(liveBufferMiBMin, liveBufferMiBMax));
+  int getLiveBufferSec() => _bufferSec(
+        key: _kLiveBufferSec,
+        legacyMiBKey: _kLiveBufferMiB,
+        // Old live: MiB/16 × 16s.
+        fromMiB: (mib) => mib / 16 * 16,
+        def: liveBufferSecDefault,
+        min: liveBufferSecMin,
+        max: liveBufferSecMax,
+      );
+  Future<void> setLiveBufferSec(int v) => _prefs.setInt(
+      _kLiveBufferSec, v.clamp(liveBufferSecMin, liveBufferSecMax));
+
+  // New key if set; else a stored legacy MiB value converted (and written
+  // back under the new key, the old one dropped) so a user's earlier choice
+  // carries over; else the default.
+  int _bufferSec({
+    required String key,
+    required String legacyMiBKey,
+    required double Function(int mib) fromMiB,
+    required int def,
+    required int min,
+    required int max,
+  }) {
+    final stored = _prefs.getInt(key);
+    if (stored != null) return stored.clamp(min, max);
+    final legacy = _prefs.getInt(legacyMiBKey);
+    if (legacy == null) return def;
+    final migrated = fromMiB(legacy).round().clamp(min, max);
+    _prefs.setInt(key, migrated);
+    _prefs.remove(legacyMiBKey);
+    return migrated;
+  }
 
   // "Modalità hardware modesto" — trims the UI's own GPU cost on weak boxes
   // (drops blur passes and scale-shader effects; see core/perf_profile.dart).

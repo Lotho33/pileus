@@ -20,8 +20,8 @@ class MobilePreferencesScreen extends StatefulWidget {
 class _MobilePreferencesScreenState extends State<MobilePreferencesScreen> {
   final _s = getIt<SettingsRepository>();
 
-  late int _vodBuf = _s.getPlayerBufferMiB();
-  late int _liveBuf = _s.getLiveBufferMiB();
+  late int _vodBuf = _s.getVodBufferSec();
+  late int _liveBuf = _s.getLiveBufferSec();
   late double _subSize = _s.getSubtitleFontSize();
   late Color _subColor = _s.getSubtitleColor();
   late bool _subBg = _s.getSubtitleBgEnabled();
@@ -50,27 +50,30 @@ class _MobilePreferencesScreenState extends State<MobilePreferencesScreen> {
         children: [
           _header('Player'),
           _sliderTile(
-            'Buffer video (on demand)',
-            '$_vodBuf MiB',
+            'Riserva di riproduzione',
+            '$_vodBuf s',
             _vodBuf.toDouble(),
-            SettingsRepository.playerBufferMiBMin.toDouble(),
-            SettingsRepository.playerBufferMiBMax.toDouble(),
+            SettingsRepository.vodBufferSecMin.toDouble(),
+            SettingsRepository.vodBufferSecMax.toDouble(),
             (v) => setState(() {
-              _vodBuf = v.round();
-              _s.setPlayerBufferMiB(_vodBuf);
+              _vodBuf = (v / 5).round() * 5;
+              _s.setVodBufferSec(_vodBuf);
             }),
           ),
           _sliderTile(
-            'Buffer live',
-            '$_liveBuf MiB',
+            'Riserva di riproduzione (live)',
+            '$_liveBuf s',
             _liveBuf.toDouble(),
-            SettingsRepository.liveBufferMiBMin.toDouble(),
-            SettingsRepository.liveBufferMiBMax.toDouble(),
+            SettingsRepository.liveBufferSecMin.toDouble(),
+            SettingsRepository.liveBufferSecMax.toDouble(),
             (v) => setState(() {
               _liveBuf = v.round();
-              _s.setLiveBufferMiB(_liveBuf);
+              _s.setLiveBufferSec(_liveBuf);
             }),
           ),
+          _note('Secondi di video tenuti pronti in anticipo. Più riserva = '
+              'meno interruzioni, al costo di un po\' di memoria (per le '
+              'dirette anche più ritardo).'),
           // ExoPlayer-only (patched better_player_plus): no effect on iOS.
           if (Platform.isAndroid)
             ListTile(

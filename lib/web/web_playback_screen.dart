@@ -12,9 +12,11 @@ import '../core/di/injection.dart';
 import '../core/utils/perf_log.dart' show kPerfDiagnostics;
 import '../core/grpc/clients/media_client.dart' show ProgressResponse;
 import '../features/media/data/media_repository.dart';
+import '../features/settings/data/settings_repository.dart';
 import '../features/player/bloc/playback_bloc.dart';
 import '../features/player/bloc/playback_event.dart';
 import '../features/player/bloc/playback_state.dart';
+import '../features/player/engine/buffer_policy.dart' show hlsJsBuffer;
 import '../features/player/episode_nav.dart';
 import '../features/player/episode_poster.dart';
 import '../features/player/episode_prefetch.dart';
@@ -74,8 +76,16 @@ extension type _Hls._(JSObject _) implements JSObject {
 // construction time only, so — unlike mpv's `start` property (see
 // player_engine.dart) — there's nothing to leak into a later _Hls() built
 // fresh for the next episode/retry.
+// maxBufferLength / maxMaxBufferLength (seconds): the "Riserva di
+// riproduzione" setting — see buffer_policy.dart's hlsJsBuffer. Omitted
+// named arguments are left out of the JS object, so hls.js keeps its own
+// default for anything not passed.
 extension type _HlsConfig._(JSObject _) implements JSObject {
-  external factory _HlsConfig({double startPosition});
+  external factory _HlsConfig({
+    double startPosition,
+    double maxBufferLength,
+    double maxMaxBufferLength,
+  });
 }
 
 // hls.js's error-event payload — only the fields read here. `type`/`details`
@@ -869,9 +879,22 @@ class _ViewState extends State<_View> {
     if (looksHls && !nativeHls && _hlsUsable) {
       try {
         _hls?.destroy();
+        final settings = getIt<SettingsRepository>();
+        final reserve = widget.args.isLive
+            ? settings.getLiveBufferSec()
+            : settings.getVodBufferSec();
+        final buf = hlsJsBuffer(reserve);
+        _dlog('[web player] buffer reserve ${reserve}s → '
+            'maxBufferLength=${buf.maxBufferLength}s '
+            'maxMaxBufferLength=${buf.maxMaxBufferLength}s');
         final h = _Hls((startPosition != null && startPosition > Duration.zero)
-            ? _HlsConfig(startPosition: startPosition.inSeconds.toDouble())
-            : null);
+            ? _HlsConfig(
+                startPosition: startPosition.inSeconds.toDouble(),
+                maxBufferLength: buf.maxBufferLength,
+                maxMaxBufferLength: buf.maxMaxBufferLength)
+            : _HlsConfig(
+                maxBufferLength: buf.maxBufferLength,
+                maxMaxBufferLength: buf.maxMaxBufferLength));
         // Registered before loadSource/attachMedia so an error on the very
         // first manifest fetch can't fire before this is wired up. hls.js
         // otherwise fails a lot of this silently from Dart's side — no

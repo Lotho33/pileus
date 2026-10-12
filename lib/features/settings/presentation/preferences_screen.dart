@@ -105,9 +105,9 @@ class _PreferencesBodyState extends State<_PreferencesBody> {
         ),
         SizedBox(height: AppScale.space(context, 12)),
         const SettingsSectionHeader('Player'),
-        const _BufferPrefRow(),
+        const _ReservePrefRow(live: false),
         SizedBox(height: AppScale.space(context, 4)),
-        const _LiveBufferPrefRow(),
+        const _ReservePrefRow(live: true),
         SizedBox(height: AppScale.space(context, 4)),
         const _LowPowerPrefRow(),
         if (!kIsWeb && Platform.isAndroid) ...[
@@ -427,7 +427,7 @@ class _AndroidVideoPrefRowState extends State<_AndroidVideoPrefRow> {
 }
 
 /// "Modalità hardware modesto" — see SettingsRepository.getLowPowerMode.
-/// Self-contained like _BufferPrefRow: the player re-reads it on the next
+/// Self-contained like _ReservePrefRow: the player re-reads it on the next
 /// playback, nothing else observes it.
 class _LowPowerPrefRow extends StatefulWidget {
   const _LowPowerPrefRow();
@@ -473,37 +473,44 @@ class _LowPowerPrefRowState extends State<_LowPowerPrefRow> {
   }
 }
 
-/// Video demux buffer size (MiB), stored straight in SettingsRepository —
-/// not reactive anywhere but the player, which re-reads it on the next
-/// playback, so it doesn't need to go through SettingsCubit.
-class _BufferPrefRow extends StatefulWidget {
-  const _BufferPrefRow();
+/// "Riserva di riproduzione" — seconds of media kept buffered ahead (see
+/// SettingsRepository.getVodBufferSec), one row for on-demand and one for
+/// live (a big live reserve only adds pre-roll and latency). Self-contained:
+/// the player re-reads it on the next playback, nothing else observes it.
+class _ReservePrefRow extends StatefulWidget {
+  final bool live;
+  const _ReservePrefRow({required this.live});
 
   @override
-  State<_BufferPrefRow> createState() => _BufferPrefRowState();
+  State<_ReservePrefRow> createState() => _ReservePrefRowState();
 }
 
-class _BufferPrefRowState extends State<_BufferPrefRow> {
+class _ReservePrefRowState extends State<_ReservePrefRow> {
   final _repo = getIt<SettingsRepository>();
-  late int _mib = _repo.getPlayerBufferMiB();
-  static const _step = 8;
+  late int _sec =
+      widget.live ? _repo.getLiveBufferSec() : _repo.getVodBufferSec();
+
+  int get _min => widget.live
+      ? SettingsRepository.liveBufferSecMin
+      : SettingsRepository.vodBufferSecMin;
+  int get _max => widget.live
+      ? SettingsRepository.liveBufferSecMax
+      : SettingsRepository.vodBufferSecMax;
+  // 15→180 in 11 presses; 6→60 in 18.
+  int get _step => widget.live ? 3 : 15;
 
   void _nudge(int dir) {
-    final next = (_mib + dir * _step).clamp(
-        SettingsRepository.playerBufferMiBMin,
-        SettingsRepository.playerBufferMiBMax);
-    if (next == _mib) return;
-    setState(() => _mib = next);
-    _repo.setPlayerBufferMiB(next);
+    final next = (_sec + dir * _step).clamp(_min, _max);
+    if (next == _sec) return;
+    setState(() => _sec = next);
+    widget.live ? _repo.setLiveBufferSec(next) : _repo.setVodBufferSec(next);
   }
 
   @override
   Widget build(BuildContext context) {
     final captionFs =
         (AppScale.sh(context) * (13.0 / 1080.0)).clamp(10.0, 20.0);
-    final frac = (_mib - SettingsRepository.playerBufferMiBMin) /
-        (SettingsRepository.playerBufferMiBMax -
-            SettingsRepository.playerBufferMiBMin);
+    final frac = (_sec - _min) / (_max - _min);
     return Padding(
       padding: EdgeInsets.symmetric(
           horizontal: AppScale.space(context, 20),
@@ -522,12 +529,15 @@ class _BufferPrefRowState extends State<_BufferPrefRow> {
           children: [
             Row(
               children: [
-                Text('Buffer video (on demand)',
+                Text(
+                    widget.live
+                        ? 'Riserva di riproduzione (live)'
+                        : 'Riserva di riproduzione',
                     style: TextStyle(
                         color: focused ? Colors.white : Colors.white54,
                         fontSize: captionFs)),
                 const Spacer(),
-                Text('$_mib MB',
+                Text('$_sec s',
                     style: TextStyle(
                         color: focused ? Colors.white : Colors.white54,
                         fontSize: captionFs)),
@@ -560,105 +570,14 @@ class _BufferPrefRowState extends State<_BufferPrefRow> {
             ),
             SizedBox(height: AppScale.space(context, 6)),
             Text(
-              'Più alto = meno rebuffering su rete lenta, più RAM usata. '
-              'Si applica alla prossima riproduzione.',
-              style:
-                  TextStyle(color: Colors.white38, fontSize: captionFs * 0.9),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-/// Separate, smaller demux buffer for live streams — a big buffer there only
-/// adds pre-roll and latency. See SettingsRepository.getLiveBufferMiB.
-class _LiveBufferPrefRow extends StatefulWidget {
-  const _LiveBufferPrefRow();
-
-  @override
-  State<_LiveBufferPrefRow> createState() => _LiveBufferPrefRowState();
-}
-
-class _LiveBufferPrefRowState extends State<_LiveBufferPrefRow> {
-  final _repo = getIt<SettingsRepository>();
-  late int _mib = _repo.getLiveBufferMiB();
-  static const _step = 4;
-
-  void _nudge(int dir) {
-    final next = (_mib + dir * _step).clamp(SettingsRepository.liveBufferMiBMin,
-        SettingsRepository.liveBufferMiBMax);
-    if (next == _mib) return;
-    setState(() => _mib = next);
-    _repo.setLiveBufferMiB(next);
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final captionFs =
-        (AppScale.sh(context) * (13.0 / 1080.0)).clamp(10.0, 20.0);
-    final frac = (_mib - SettingsRepository.liveBufferMiBMin) /
-        (SettingsRepository.liveBufferMiBMax -
-            SettingsRepository.liveBufferMiBMin);
-    return Padding(
-      padding: EdgeInsets.symmetric(
-          horizontal: AppScale.space(context, 20),
-          vertical: AppScale.space(context, 6)),
-      child: TvFocusable(
-        onLeft: () => _nudge(-1),
-        onRight: () => _nudge(1),
-        onFocusChange: (f) {
-          if (f && context.mounted && Scrollable.maybeOf(context) != null) {
-            Scrollable.ensureVisible(context,
-                alignment: 0.5, duration: const Duration(milliseconds: 200));
-          }
-        },
-        builder: (context, focused) => Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Text('Buffer live',
-                    style: TextStyle(
-                        color: focused ? Colors.white : Colors.white54,
-                        fontSize: captionFs)),
-                const Spacer(),
-                Text('$_mib MB',
-                    style: TextStyle(
-                        color: focused ? Colors.white : Colors.white54,
-                        fontSize: captionFs)),
-              ],
-            ),
-            SizedBox(height: AppScale.space(context, 8)),
-            LayoutBuilder(
-              builder: (context, cc) => Stack(
-                children: [
-                  Container(
-                    height: 4,
-                    decoration: BoxDecoration(
-                      color: Colors.white24,
-                      borderRadius: BorderRadius.circular(2),
-                    ),
-                  ),
-                  AnimatedContainer(
-                    duration: const Duration(milliseconds: 100),
-                    height: 4,
-                    width: cc.maxWidth * frac,
-                    decoration: BoxDecoration(
-                      color: Colors.white,
-                      borderRadius: BorderRadius.circular(2),
-                      boxShadow:
-                          focused ? AppScale.focusGlow(Colors.white) : null,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            SizedBox(height: AppScale.space(context, 6)),
-            Text(
-              'Più basso = la diretta parte prima e resta vicina al live. '
-              'Si applica alla prossima riproduzione.',
+              widget.live
+                  ? 'Secondi tenuti pronti in anticipo. Più riserva = meno '
+                      'interruzioni, ma più ritardo rispetto alla diretta e '
+                      'un po\' di memoria in più. Vale dalla prossima '
+                      'riproduzione.'
+                  : 'Secondi di video tenuti pronti in anticipo. Più '
+                      'riserva = meno interruzioni, al costo di un po\' di '
+                      'memoria. Vale dalla prossima riproduzione.',
               style:
                   TextStyle(color: Colors.white38, fontSize: captionFs * 0.9),
             ),
