@@ -8,6 +8,10 @@ import 'package:media_kit/media_kit.dart' as mk;
 import 'package:media_kit_video/media_kit_video.dart' as mkv;
 
 import '../../../core/utils/perf_log.dart';
+import 'decoder_capability_fallback.dart';
+import 'stream_format.dart';
+
+export 'stream_format.dart';
 
 /// One selectable playback track (audio language, subtitle language, video
 /// quality). Backend-agnostic: [raw] holds the native handle the concrete
@@ -72,6 +76,22 @@ abstract class PlayerEngine extends ChangeNotifier {
 
   PlayerEngine._();
 
+  /// Device-level Android video options (Preferenze → Player), read when
+  /// the next native player is created. No effect on the mpv backend.
+  /// [maxVideoHeight]: 0 = no cap. [stats]: periodic decoder counters in
+  /// the `pileus/perf` log (field diagnostics).
+  static void configureAndroidVideo({
+    required bool softwareDecoder,
+    required bool compatSurface,
+    required int maxVideoHeight,
+    required bool stats,
+  }) {
+    BetterPlayerAndroidOptions.preferSoftwareVideoDecoder = softwareDecoder;
+    BetterPlayerAndroidOptions.legacySurfaceTexture = compatSurface;
+    BetterPlayerAndroidOptions.maxVideoHeight = maxVideoHeight;
+    BetterPlayerAndroidOptions.statsIntervalMs = stats ? 10000 : 0;
+  }
+
   bool _disposed = false;
 
   final _positionCtrl = StreamController<Duration>.broadcast();
@@ -126,8 +146,14 @@ abstract class PlayerEngine extends ChangeNotifier {
   /// callers don't need to remember to pass null themselves.
   /// ResumeSeekController (resume_seek.dart) remains the safety net if the
   /// backend doesn't manage to honour this.
+  ///
+  /// [format]: see [StreamFormat]. Only the ExoPlayer backend needs it (it
+  /// picks the HLS or the progressive pipeline up front); mpv probes the
+  /// content itself.
   Future<void> open(String url,
-      {required Map<String, String> headers, Duration? startPosition});
+      {required Map<String, String> headers,
+      Duration? startPosition,
+      StreamFormat format = StreamFormat.auto});
 
   Future<void> stop();
 
@@ -184,6 +210,12 @@ abstract class PlayerEngine extends ChangeNotifier {
   /// grace timer (many are transient segment fetch failures that recover).
   void Function(String message)? onError;
 
+  /// The picture stopped updating while playback (audio, position) goes on,
+  /// and the backend's own cheap recovery didn't fix it. Only the ExoPlayer
+  /// backend detects this (patched better_player_plus). The screen decides
+  /// how hard to recover — a fresh engine is the reliable fix.
+  VoidCallback? onVideoFrozen;
+
   // ── Tracks ─────────────────────────────────────────────────────────────────
 
   List<MediaTrack> get audioTracks;
@@ -228,6 +260,22 @@ class _ExoPlayerEngine extends PlayerEngine {
   // Consumed (and cleared) by the next `initialized` event — see open()'s
   // own doc for why this can never leak into a later episode/source.
   Duration? _pendingStartPosition;
+
+  // ExoPlayer leaves playWhenReady set after a fatal error (the player just
+  // drops to IDLE), so the Dart-side isPlaying stays true. Without this the
+  // screens' grace timers read "still playing" and never surface the error.
+  // Every onPlayerError is fatal in ExoPlayer; cleared by the next open().
+  bool _failed = false;
+
+  // Decoder-capability fallback (see decoder_capability_fallback.dart).
+  // _lastUrl/_lastHeaders: what to reopen. _capTried: indices into the
+  // current source's asms tracks already used as a fallback — reset only by
+  // an external open(), so one source never loops through the same quality.
+  String? _lastUrl;
+  Map<String, String> _lastHeaders = const {};
+  StreamFormat _lastFormat = StreamFormat.auto;
+  final Set<int> _capTried = {};
+  bool _capRecovering = false;
 
   @override
   Future<void> initialize(
@@ -317,11 +365,7 @@ class _ExoPlayerEngine extends PlayerEngine {
         if (vpc != null && _valueListener == null) {
           _valueListener = () {
             final err = vpc.value.errorDescription;
-            if (err != null && err != _lastError) {
-              _lastError = err;
-              perf('exo: player value error: $err');
-              onError?.call(err);
-            }
+            if (err != null) _handleError(err, source: 'player value');
             _emit();
           };
           vpc.addListener(_valueListener!);
@@ -355,17 +399,7 @@ class _ExoPlayerEngine extends PlayerEngine {
       case BetterPlayerEventType.exception:
         final msg =
             e.parameters?['exception']?.toString() ?? 'Errore sconosciuto';
-        perf('exo: exception: $msg');
-        // An exception very often arrives mid-bufferingStart (the stall that
-        // precedes it) — without clearing the flag here it stays stuck true
-        // until a later open() cycles through a fresh bufferingStart/End
-        // pair, reading as "the spinner never went away" even once the
-        // screen's own error handling has moved on.
-        _buffering = false;
-        if (msg != _lastError) {
-          _lastError = msg;
-          onError?.call(msg);
-        }
+        _handleError(msg, source: 'exception');
         _emit();
       case BetterPlayerEventType.changedResolution:
         perf('exo: changedResolution pos=${position.inMilliseconds}ms');
@@ -373,6 +407,14 @@ class _ExoPlayerEngine extends PlayerEngine {
       case BetterPlayerEventType.changedTrack:
         perf('exo: changedTrack');
         _emit();
+      case BetterPlayerEventType.videoStats:
+        _logVideoStats(e.parameters);
+      case BetterPlayerEventType.videoFrozen:
+        final p = e.parameters;
+        perf('exo: video frozen at ${(p?['position'] as Duration?)?.inSeconds}s '
+            '(rendered=${p?['rendered']} dropped=${p?['dropped']}), '
+            'surface re-attach did not help');
+        onVideoFrozen?.call();
       case BetterPlayerEventType.progress:
       case BetterPlayerEventType.play:
       case BetterPlayerEventType.pause:
@@ -386,22 +428,168 @@ class _ExoPlayerEngine extends PlayerEngine {
     }
   }
 
+  // Previous videoStats counters, to log per-interval deltas. Reset when
+  // the native counters restart (new decoder instance).
+  int _statsRendered = 0;
+  int _statsDropped = 0;
+
+  /// One `pileus/perf` line per stats interval (field diagnostics only):
+  /// frames shown/dropped in that interval, the variant playing, buffer
+  /// ahead. Dropped frames with a healthy buffer = the box can't keep up;
+  /// a buffer near 0 = the network/server can't.
+  void _logVideoStats(Map<String, dynamic>? p) {
+    if (p == null) return;
+    final rendered = (p['rendered'] as int?) ?? 0;
+    final dropped = (p['dropped'] as int?) ?? 0;
+    if (rendered < _statsRendered || dropped < _statsDropped) {
+      _statsRendered = 0;
+      _statsDropped = 0;
+    }
+    final pos = p['position'] as Duration?;
+    final bitrate = (p['bitrate'] as int?) ?? -1;
+    perf('exo: stats pos=${pos?.inSeconds}s '
+        '${p['width']}x${p['height']}'
+        '@${bitrate > 0 ? '${(bitrate / 1000).round()}k' : '?'} '
+        'shown=+${rendered - _statsRendered} dropped=+${dropped - _statsDropped} '
+        '(tot $dropped) buffer=${((p['bufferedMs'] as int?) ?? 0) ~/ 1000}s '
+        'playing=${p['playing']}');
+    _statsRendered = rendered;
+    _statsDropped = dropped;
+  }
+
+  /// Both error paths (the `exception` event and the value listener's
+  /// errorDescription) carry the same native onPlayerError text, so this
+  /// sees most errors twice — deduped on [_lastError].
+  void _handleError(String msg, {required String source}) {
+    if (msg == _lastError) return;
+    final failed = parseDecoderCapabilityError(msg);
+    // The same failure again (its second error path, or the old value
+    // replayed while the source is swapped) — already being handled, and
+    // must not mark the reopened player as failed.
+    if (failed != null && _capRecovering) return;
+    _lastError = msg;
+    perf('exo: $source error: $msg');
+    // An exception very often arrives mid-bufferingStart (the stall that
+    // precedes it) — without clearing the flag here it stays stuck true
+    // until a later open() cycles through a fresh bufferingStart/End
+    // pair, reading as "the spinner never went away" even once the
+    // screen's own error handling has moved on.
+    _buffering = false;
+    _failed = true;
+
+    if (failed == null) {
+      onError?.call(msg);
+      return;
+    }
+    if (_tryDecoderFallback(failed)) return;
+    final size = failed.sizeLabel;
+    onError?.call('Risoluzione video non supportata da questo dispositivo'
+        '${size == null ? '' : ' ($size)'}');
+  }
+
+  /// Reopens the current source capped to a lower HLS variant after the
+  /// decoder refused the one ExoPlayer picked. False when there is no lower
+  /// variant left to try (single-quality playlist, or all tried already).
+  bool _tryDecoderFallback(FailedVideoFormat failed) {
+    final url = _lastUrl;
+    if (url == null) return false;
+    final tracks = _c.betterPlayerAsmsTracks;
+    final variants = [
+      for (final t in tracks) (height: t.height ?? 0, bitrate: t.bitrate ?? 0),
+    ];
+    final idx = pickDecoderFallback(variants, failed, _capTried);
+    if (idx == null) return false;
+    _capTried.add(idx);
+    final track = tracks[idx];
+    // Not started yet (the usual case: MediaCodec fails on the first frame)
+    // → the resume point open() was given is still pending; otherwise pick
+    // up where playback died. Live just rejoins the edge.
+    final pos = position;
+    final resumeAt = _isLive
+        ? null
+        : (_pendingStartPosition ?? (pos > Duration.zero ? pos : null));
+    perf('exo: decoder refused ${failed.sizeLabel ?? '?'}'
+        '@${failed.bitrate ?? '?'} → reopening capped to '
+        '${track.height ?? '?'}p@${track.bitrate ?? '?'} at '
+        '${resumeAt?.inSeconds ?? 0}s');
+    _capRecovering = true;
+    // Next event-loop turn: lets the rest of this error's dispatch (it
+    // reaches us twice) finish against the failed player first.
+    Future(() async {
+      if (_disposed || _controller == null) {
+        _capRecovering = false;
+        return;
+      }
+      try {
+        await _open(url,
+            headers: _lastHeaders,
+            startPosition: resumeAt,
+            format: _lastFormat);
+        if (_controller == null) return; // disposed meanwhile
+        // After setupDataSource, which resets the selector to "auto" on its
+        // way out. setTrack only caps the selector (max size/bitrate).
+        await _c.setTrack(track);
+        // Built here, not looked up: setupDataSource re-parses the playlist
+        // asynchronously, so videoTracks may still be empty. Same id scheme
+        // as videoTracks, so the settings panel highlights it.
+        if ((track.height ?? 0) > 0) {
+          _selectedVideo = MediaTrack(
+            id: '${track.height}p@${track.bitrate}',
+            label: _videoLabel(track),
+            raw: track,
+          );
+        }
+        _emit();
+      } catch (e) {
+        perf('exo: decoder fallback reopen failed: $e');
+      } finally {
+        _capRecovering = false;
+      }
+    });
+    return true;
+  }
+
   static final _progressiveExt =
       RegExp(r'\.(mp4|mkv|webm|mov|avi|m4v)(\?|$)', caseSensitive: false);
 
   @override
   Future<void> open(String url,
-      {required Map<String, String> headers, Duration? startPosition}) async {
-    perf('exo: open (live=$_isLive, startPosition=$startPosition)');
+      {required Map<String, String> headers,
+      Duration? startPosition,
+      StreamFormat format = StreamFormat.auto}) {
+    _capTried.clear();
+    return _open(url,
+        headers: headers, startPosition: startPosition, format: format);
+  }
+
+  Future<void> _open(String url,
+      {required Map<String, String> headers,
+      Duration? startPosition,
+      required StreamFormat format}) async {
+    perf('exo: open (live=$_isLive, format=${format.name}, '
+        'startPosition=$startPosition)');
+    _lastUrl = url;
+    _lastHeaders = headers;
+    _lastFormat = format;
     _lastError = null;
+    _failed = false;
     _selectedVideo = null;
     _pendingStartPosition = startPosition;
-    // mycelium serves HLS by default; only skip the hint for a URL that
-    // clearly points at a progressive container. Without a correct hint
-    // ExoPlayer picks the wrong extractor and fails with a bare
-    // "Source error".
-    final format =
-        _progressiveExt.hasMatch(url) ? null : BetterPlayerVideoFormat.hls;
+    // ExoPlayer needs the pipeline up front: a wrong one fails with a bare
+    // "Source error". An explicit format (offline downloads, from
+    // DownloadInfo.container) wins; otherwise mycelium serves HLS unless the
+    // URL clearly names a progressive container. Progressive is always
+    // passed as `other`, never left null: with no hint the plugin infers the
+    // type from the path's extension and throws on a path without a dot
+    // (`/downloads/file?…` used to be exactly that).
+    final progressive = switch (format) {
+      StreamFormat.progressive => true,
+      StreamFormat.hls => false,
+      StreamFormat.auto => _progressiveExt.hasMatch(url),
+    };
+    final videoFormat = progressive
+        ? BetterPlayerVideoFormat.other
+        : BetterPlayerVideoFormat.hls;
     try {
       await _c.setupDataSource(
         BetterPlayerDataSource(
@@ -409,10 +597,11 @@ class _ExoPlayerEngine extends PlayerEngine {
           url,
           headers: headers,
           liveStream: _isLive,
-          videoFormat: format,
-          useAsmsTracks: true,
-          useAsmsAudioTracks: true,
-          useAsmsSubtitles: true,
+          videoFormat: videoFormat,
+          // HLS master-playlist tracks; a progressive file has none.
+          useAsmsTracks: !progressive,
+          useAsmsAudioTracks: !progressive,
+          useAsmsSubtitles: !progressive,
           bufferingConfiguration: _bufferingConfig,
         ),
       );
@@ -421,9 +610,7 @@ class _ExoPlayerEngine extends PlayerEngine {
       // it through onError like a mid-stream failure instead of letting it
       // surface as an unhandled async exception — open() is called
       // fire-and-forget from the screen.
-      final msg = e.toString();
-      _lastError = msg;
-      onError?.call(msg);
+      _handleError(e.toString(), source: 'setupDataSource');
     }
     _emit();
   }
@@ -456,8 +643,7 @@ class _ExoPlayerEngine extends PlayerEngine {
   Future<void> pause() => _c.pause();
 
   @override
-  Future<void> playOrPause() =>
-      (_c.isPlaying() ?? false) ? _c.pause() : _c.play();
+  Future<void> playOrPause() => playing ? _c.pause() : _c.play();
 
   @override
   Future<void> seek(Duration to) => _c.seekTo(to);
@@ -479,9 +665,13 @@ class _ExoPlayerEngine extends PlayerEngine {
   Duration get duration =>
       _controller?.videoPlayerController?.value.duration ?? Duration.zero;
 
+  /// Follows ExoPlayer's playWhenReady (our patched better_player_plus, see
+  /// third_party/better_player_plus/PILEUS_PATCHES.md), so it stays true
+  /// through a rebuffer — what the screens' stall watchdogs rely on.
   @override
   bool get playing =>
-      _controller?.videoPlayerController?.value.isPlaying ?? false;
+      !_failed &&
+      (_controller?.videoPlayerController?.value.isPlaying ?? false);
 
   @override
   bool get buffering =>
@@ -794,7 +984,9 @@ class _MpvPlayerEngine extends PlayerEngine {
 
   @override
   Future<void> open(String url,
-      {required Map<String, String> headers, Duration? startPosition}) async {
+      {required Map<String, String> headers,
+      Duration? startPosition,
+      StreamFormat format = StreamFormat.auto}) async {
     // mk.Media.start (media_kit's own contract-level "open at position"
     // hook — verified against the installed media_kit 1.2.6's native
     // player: it sets mpv's own `start` property reactively, off the

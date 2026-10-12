@@ -1,5 +1,9 @@
+import 'dart:async';
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 
+import '../../core/perf_profile.dart';
 import '../../core/theme/app_scale.dart';
 import '../../core/theme/app_theme.dart';
 
@@ -43,14 +47,101 @@ class PileusSpinner extends StatelessWidget {
       child: SizedBox(
         width: size,
         height: size,
-        child: CircularProgressIndicator(
-          color: color,
-          value: value,
-          strokeWidth: size * (2.5 / 30),
-        ),
+        child: lowPowerUi && value == null
+            ? _SteppedSpinner(color: color, strokeWidth: size * (2.5 / 30))
+            : CircularProgressIndicator(
+                color: color,
+                value: value,
+                strokeWidth: size * (2.5 / 30),
+              ),
       ),
     );
   }
+}
+
+/// "Hardware modesto" spinner: a fixed arc that turns in steps ~12 times a
+/// second instead of CircularProgressIndicator's 60 fps animation.
+///
+/// A spinning indicator is what keeps the whole screen re-rendering and
+/// re-compositing every vsync (an idle Flutter screen renders nothing), so
+/// on a weak TV box it is the single biggest sustained GPU load in the
+/// UI — and the moment the Tanix W2's driver used to hang: "it always
+/// freezes while a spinner is spinning". Each step still repaints the full
+/// frame, but 5× fewer of them.
+class _SteppedSpinner extends StatefulWidget {
+  final Color color;
+  final double strokeWidth;
+
+  const _SteppedSpinner({required this.color, required this.strokeWidth});
+
+  @override
+  State<_SteppedSpinner> createState() => _SteppedSpinnerState();
+}
+
+class _SteppedSpinnerState extends State<_SteppedSpinner> {
+  static const _interval = Duration(milliseconds: 83);
+  static const _steps = 12; // one turn per second
+  Timer? _timer;
+  int _step = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    _timer = Timer.periodic(_interval, (_) {
+      if (mounted) setState(() => _step = (_step + 1) % _steps);
+    });
+  }
+
+  @override
+  void dispose() {
+    _timer?.cancel();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => RepaintBoundary(
+        child: CustomPaint(
+          painter: _ArcPainter(
+            color: widget.color,
+            strokeWidth: widget.strokeWidth,
+            startAngle: _step * 2 * math.pi / _steps,
+          ),
+        ),
+      );
+}
+
+class _ArcPainter extends CustomPainter {
+  final Color color;
+  final double strokeWidth;
+  final double startAngle;
+
+  const _ArcPainter({
+    required this.color,
+    required this.strokeWidth,
+    required this.startAngle,
+  });
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final rect = (Offset.zero & size).deflate(strokeWidth / 2);
+    canvas.drawArc(
+      rect,
+      startAngle,
+      math.pi * 1.5,
+      false,
+      Paint()
+        ..color = color
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = strokeWidth
+        ..strokeCap = StrokeCap.square,
+    );
+  }
+
+  @override
+  bool shouldRepaint(_ArcPainter old) =>
+      old.startAngle != startAngle ||
+      old.color != color ||
+      old.strokeWidth != strokeWidth;
 }
 
 /// Cross-fades between [PileusSpinner] and [child] on [isLoading], instead

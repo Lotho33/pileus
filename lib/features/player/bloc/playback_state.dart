@@ -1,5 +1,7 @@
 import 'package:equatable/equatable.dart';
 
+import '../engine/stream_format.dart';
+
 abstract class PlaybackState extends Equatable {
   const PlaybackState();
   @override
@@ -42,14 +44,20 @@ class PlaybackReady extends PlaybackState {
   /// a later resume re-resolves this exact source (and so this language)
   /// instead of the plugin's default for the bare episode id.
   final String streamId;
+
+  /// Passed straight to PlayerEngine.open. [StreamFormat.auto] for anything
+  /// resolved; a direct URL (offline download) carries its known format.
+  final StreamFormat format;
   const PlaybackReady({
     required this.resolvedUrl,
     required this.httpHeaders,
     this.extra = const {},
     this.streamId = '',
+    this.format = StreamFormat.auto,
   });
   @override
-  List<Object?> get props => [resolvedUrl, httpHeaders, extra, streamId];
+  List<Object?> get props =>
+      [resolvedUrl, httpHeaders, extra, streamId, format];
 }
 
 class PlaybackRetrying extends PlaybackState {

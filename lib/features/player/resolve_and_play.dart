@@ -7,7 +7,9 @@ import '../../core/di/injection.dart';
 import '../../core/grpc/clients/media_client.dart' hide ContinueWatchingItem;
 import '../../core/grpc/grpc_errors.dart';
 import '../../shared/utils/tap_guard.dart';
+import '../../core/theme/app_scale.dart';
 import '../../core/theme/app_theme.dart';
+import '../../shared/widgets/pileus_spinner.dart';
 import '../media/data/media_repository.dart';
 
 /// Fetch the stream sources for [mediaId]; if there's more than one, show a
@@ -53,9 +55,9 @@ OverlayEntry? _showLaunchSpinner(NavigatorState navigator) {
   final overlay = navigator.overlay;
   if (overlay == null) return null;
   final entry = OverlayEntry(
-    builder: (_) => const ColoredBox(
-      color: Color(0x88000000),
-      child: Center(child: CircularProgressIndicator()),
+    builder: (ctx) => ColoredBox(
+      color: const Color(0x88000000),
+      child: Center(child: PileusSpinner(size: AppScale.spinnerL(ctx))),
     ),
   );
   overlay.insert(entry);

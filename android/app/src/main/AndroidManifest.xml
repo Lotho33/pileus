@@ -91,38 +91,14 @@
               android:name="io.flutter.embedding.android.NormalTheme"
               android:resource="@style/NormalTheme"
               />
-            <!-- Force Impeller's OpenGL ES renderer instead of Vulkan
-                 (EnableImpeller=false is kept only as a no-op for older
-                 engines that still had the Skia path).
-
-                 On the weak Amlogic TV boxes (Tanix W2 / S905W, Fire Stick,
-                 Mali-450) the Vulkan driver is unreliable under the combined
-                 load of a hardware-decoded video Surface plus Flutter
-                 compositing — the swapchain has reported "Fence wait
-                 failed: ErrorDeviceLost" / "No surface available", i.e. a
-                 hard screen freeze on playback start. The GLES backend has
-                 no swapchain fence to lose. Conservative default for this
-                 device class; a capable phone/tablet is unaffected either
-                 way. -->
-            <meta-data
-              android:name="io.flutter.embedding.android.ImpellerBackend"
-              android:value="opengles"
-              />
-            <meta-data
-              android:name="io.flutter.embedding.android.EnableImpeller"
-              android:value="false"
-              />
-            <!-- Since Flutter 3.29 platform-view compositing on Android 10+
-                 goes through SurfaceControl. On the Amlogic TV boxes'
-                 HWComposer this has invalidated the shared rendering Surface
-                 the instant the video PlatformView's Surface is allocated
-                 (UI freeze on playback start). Force the older TextureView /
-                 virtual-display compositing path, which the Amlogic
-                 compositor handles. -->
-            <meta-data
-              android:name="io.flutter.embedding.android.EnableSurfaceControl"
-              android:value="false"
-              />
+            <!-- Engine flags (Impeller backend etc.) are NOT set here: the
+                 Flutter engine only reads them from <application> meta-data
+                 (FlutterLoader → ApplicationInfo.metaData), so the
+                 ImpellerBackend / EnableImpeller / EnableSurfaceControl
+                 entries that used to sit on this <activity> were silently
+                 ignored (EnableSurfaceControl no longer exists at all since
+                 Flutter 3.47). The TV flavor sets the backend in
+                 src/tv/AndroidManifest.xml. -->
             <intent-filter>
                 <action android:name="android.intent.action.MAIN"/>
                 <category android:name="android.intent.category.LAUNCHER"/>

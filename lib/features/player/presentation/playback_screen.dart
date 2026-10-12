@@ -72,7 +72,8 @@ class PlaybackScreen extends StatelessWidget {
             resolveStartPositionSec(isLive: args.isLive, seekTo: args.seekTo);
         if (args.directUrl != null && args.directUrl!.isNotEmpty) {
           bloc.add(UseDirectUrlEvent(
-              url: args.directUrl!, httpHeaders: args.directUrlHeaders));
+              url: args.directUrl!, httpHeaders: args.directUrlHeaders,
+              format: args.directUrlFormat));
         } else if (args.directStreamId != null &&
             args.directStreamId!.isNotEmpty) {
           bloc.add(SelectStreamEvent(

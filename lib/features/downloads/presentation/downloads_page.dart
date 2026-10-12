@@ -2,6 +2,7 @@
 // screen (not built yet).
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:go_router/go_router.dart';
 
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -14,6 +15,7 @@ import '../bloc/downloads_list_cubit.dart';
 import '../bloc/downloads_list_state.dart';
 import '../data/downloads_local_index.dart';
 import '../download_format.dart';
+import '../download_playback.dart';
 import '../../../shared/utils/tap_guard.dart';
 
 class DownloadsPage extends StatelessWidget {
@@ -309,16 +311,18 @@ class _DownloadRow extends StatelessWidget {
         'Impossibile eliminare il download');
   }
 
-  void _watch(BuildContext context, DownloadInfo info) {
-    context.pushGuarded(
+  // Resume point + progressive-format hint: see downloadPlaybackExtra. This
+  // page used to pass neither — a download replayed from here always
+  // started at 0, and was opened by guessing the format from the URL.
+  // The tap guard is taken before the Continue Watching lookup: taken at
+  // push time, a double tap would run two lookups and could push twice.
+  Future<void> _watch(BuildContext context, DownloadInfo info) async {
+    if (!TapGuard.acquire()) return;
+    final extra = await downloadPlaybackExtra(info);
+    if (!context.mounted) return;
+    GoRouter.of(context).push(
       '/player/${info.pluginId}/${Uri.encodeComponent(info.mediaId)}',
-      extra: <String, dynamic>{
-        'directUrl': info.fileUrl,
-        'title': info.title,
-        'showTitle': info.seriesTitle,
-        'poster': info.poster,
-        'parentId': info.parentId,
-      },
+      extra: extra,
     );
   }
 }

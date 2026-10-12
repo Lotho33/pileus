@@ -1,3 +1,5 @@
+import '../engine/stream_format.dart';
+
 class PlaybackArgs {
   final bool isAudio;
   final bool isLive;
@@ -13,6 +15,16 @@ class PlaybackArgs {
   // (mutually exclusive resolve shortcuts).
   final String? directUrl;
   final Map<String, String> directUrlHeaders;
+  // DownloadInfo.container of the file behind [directUrl] ("mkv"…), empty
+  // when unknown. Tells the player it is a progressive file instead of
+  // guessing from the URL — see [directUrlFormat].
+  final String directUrlContainer;
+
+  /// How to open [directUrl] — explicit from the download's container, not
+  /// inferred from the URL (a download link with no extension used to be
+  /// opened as HLS and fail).
+  StreamFormat get directUrlFormat =>
+      StreamFormat.fromContainer(directUrlContainer);
   final String? title;
   final List<String> episodeList;
   final List<String> episodeTitles;
@@ -73,6 +85,7 @@ class PlaybackArgs {
     this.directStreamId,
     this.directUrl,
     this.directUrlHeaders = const {},
+    this.directUrlContainer = '',
     this.title,
     this.episodeList = const [],
     this.episodeTitles = const [],
@@ -112,6 +125,7 @@ class PlaybackArgs {
       directUrlHeaders:
           (extra?['directUrlHeaders'] as Map?)?.cast<String, String>() ??
               const {},
+      directUrlContainer: extra?['directUrlContainer'] as String? ?? '',
       title: extra?['title'] as String?,
       episodeList: (extra?['episodeList'] as List?)?.cast<String>() ?? const [],
       episodeTitles:
@@ -184,6 +198,7 @@ class PlaybackArgs {
       directStreamId: base.directStreamId,
       directUrl: base.directUrl,
       directUrlHeaders: base.directUrlHeaders,
+      directUrlContainer: base.directUrlContainer,
       epPluginId: base.epPluginId,
       livePluginId: base.livePluginId,
       liveMediaId: base.liveMediaId,
@@ -236,6 +251,7 @@ class PlaybackArgs {
       directStreamId: directStreamId,
       directUrl: directUrl,
       directUrlHeaders: directUrlHeaders,
+      directUrlContainer: directUrlContainer,
       epPluginId: epPluginId,
       livePluginId: livePluginId,
       liveMediaId: liveMediaId,

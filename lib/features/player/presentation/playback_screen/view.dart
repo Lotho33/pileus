@@ -97,6 +97,7 @@ class _PlaybackViewState extends State<_PlaybackView> {
   // reads these.
   String? _lastStreamUrl;
   Map<String, String> _lastStreamHeaders = const {};
+  StreamFormat _lastStreamFormat = StreamFormat.auto;
   // Same reasoning as PlayerOverlayState._optimisticSeekTarget: the reported
   // position lags a seek() call, so two fast arrow presses on the raw D-pad
   // handler (as opposed to the seek bar / skip buttons, which track this
@@ -271,6 +272,7 @@ class _PlaybackViewState extends State<_PlaybackView> {
     // instead of here — see that method for why.
     _engine = PlayerEngine.create();
     _engine.onError = _onEngineError;
+    _engine.onVideoFrozen = _onVideoFrozen;
     _engine.addListener(_onEngineChanged);
     perf('screen: engine created (${_engine.runtimeType})');
 
@@ -594,9 +596,46 @@ class _PlaybackViewState extends State<_PlaybackView> {
   // Dart-observable signal that the picture is frozen while everything else
   // (audio, position, playing) reports healthy — the underlying frame-render
   // count isn't exposed past the plugin's Dart API. Manual only.
+  // Automatic trigger for the restart below. The patched better_player_plus
+  // detects the frozen picture natively (no new frames while the position
+  // keeps advancing), tries a surface re-attach first, and only reports here
+  // when that didn't help. Budgeted so a box that freezes on every stream
+  // doesn't restart forever — past it the manual button is still there.
+  final List<DateTime> _autoRestarts = [];
+
+  void _onVideoFrozen() {
+    // Same "is this stream really ours to recover" gates as the stall
+    // watchdog: not mid episode-switch (_lastStreamUrl may still be the
+    // outgoing episode), not under an error overlay, not taken over.
+    if (!mounted ||
+        _transitioningEpisode ||
+        _takeoverPrompt != null ||
+        _playbackError != null ||
+        _pendingErrorText != null) {
+      return;
+    }
+    final now = DateTime.now();
+    _autoRestarts.removeWhere(
+        (t) => now.difference(t) > kVideoFrozenRestartWindow);
+    if (_autoRestarts.length >= kVideoFrozenRestartBudget) {
+      perf('screen: video frozen — auto-restart budget used up, manual only');
+      return;
+    }
+    _autoRestarts.add(now);
+    perf('screen: video frozen — restarting player in place '
+        '(#${_autoRestarts.length})');
+    _restartPlayerInPlace();
+  }
+
   Future<void> _restartPlayerInPlace() async {
     final url = _lastStreamUrl;
     if (url == null) return; // nothing resolved yet — nothing to reopen
+    // VOD picks up where playback actually was (the button used to be
+    // live-only; the frozen-video auto-restart reaches here for VOD too).
+    // Captured before the old engine goes away.
+    final resumeAt = !widget.args.isLive && _lastEnginePos > Duration.zero
+        ? _lastEnginePos
+        : null;
     perf('screen: manual player restart in place');
     _stallStrikes = 0;
     _errorGraceTimer?.cancel();
@@ -612,10 +651,12 @@ class _PlaybackViewState extends State<_PlaybackView> {
     // to a rebuild.
     final old = _engine;
     old.onError = null;
+    old.onVideoFrozen = null;
     old.removeListener(_onEngineChanged);
 
     final fresh = PlayerEngine.create();
     fresh.onError = _onEngineError;
+    fresh.onVideoFrozen = _onVideoFrozen;
     fresh.addListener(_onEngineChanged);
     await fresh.initialize(
       PlayerSubtitleStyle(
@@ -636,11 +677,13 @@ class _PlaybackViewState extends State<_PlaybackView> {
     }
     setState(() => _engine = fresh);
     old.dispose();
-    // No startPosition here on purpose: this reopens the SAME stream the
-    // user was already mid-way through when it froze, not a fresh
-    // Continue-Watching resume — passing _resumeSeek's original CW target
-    // would rewind past wherever playback actually was.
-    _engine.open(url, headers: _lastStreamHeaders);
+    // resumeAt is where this stream actually was when it froze — never
+    // _resumeSeek's original Continue-Watching target, which would rewind
+    // past it. Live has none.
+    _engine.open(url,
+        headers: _lastStreamHeaders,
+        startPosition: resumeAt,
+        format: _lastStreamFormat);
   }
 
   // One-shot: backfill the series name / synopsis / parent id when a launch
@@ -1295,7 +1338,8 @@ class _PlaybackViewState extends State<_PlaybackView> {
   }
 
   void _startPlayback(
-      String url, Map<String, String> headers, Map<String, String> extra) {
+      String url, Map<String, String> headers, Map<String, String> extra,
+      {StreamFormat format = StreamFormat.auto}) {
     _ensureEngineInitialized();
     List<SkipInterval> intervals = const [];
     final skipJson = extra['skip_times'];
@@ -1333,6 +1377,7 @@ class _PlaybackViewState extends State<_PlaybackView> {
     _audioPref.reset();
     _lastStreamUrl = url;
     _lastStreamHeaders = headers;
+    _lastStreamFormat = format;
     setState(() {
       _playbackReady = true;
       _videoStarted = false;
@@ -1345,7 +1390,9 @@ class _PlaybackViewState extends State<_PlaybackView> {
     perf('screen: engine.open()  host=${Uri.tryParse(url)?.host ?? '?'}'
         '  headers=${headers.length}');
     _engine.open(url,
-        headers: headers, startPosition: _resumeSeek.pendingStartPosition);
+        headers: headers,
+        startPosition: _resumeSeek.pendingStartPosition,
+        format: format);
     if (!widget.args.isLive) _markOpened();
     // Backstop for the "Primo frame" gate in _onPosition: if the resume
     // seek/confirmation never lands (dropped seek, no more position ticks),
@@ -1773,7 +1820,8 @@ class _PlaybackViewState extends State<_PlaybackView> {
           if (state is PlaybackReady) {
             perf('screen: got PlaybackReady → _startPlayback');
             if (state.streamId.isNotEmpty) _currentStreamId = state.streamId;
-            _startPlayback(state.resolvedUrl, state.httpHeaders, state.extra);
+            _startPlayback(state.resolvedUrl, state.httpHeaders, state.extra,
+                format: state.format);
           }
           if (state is PlaybackRetrying) {
             ScaffoldMessenger.of(context)
@@ -2146,7 +2194,8 @@ class _PlaybackViewState extends State<_PlaybackView> {
                         if (direct != null && direct.isNotEmpty) {
                           context.read<PlaybackBloc>().add(UseDirectUrlEvent(
                               url: direct,
-                              httpHeaders: widget.args.directUrlHeaders));
+                              httpHeaders: widget.args.directUrlHeaders,
+              format: widget.args.directUrlFormat));
                         } else {
                           _reresolveCurrent(
                               startSec: widget.args.isLive ? 0 : retrySec);

@@ -61,7 +61,8 @@ class DesktopPlaybackScreen extends StatelessWidget {
             resolveStartPositionSec(isLive: args.isLive, seekTo: args.seekTo);
         if (directUrl != null && directUrl.isNotEmpty) {
           bloc.add(UseDirectUrlEvent(
-              url: directUrl, httpHeaders: args.directUrlHeaders));
+              url: directUrl, httpHeaders: args.directUrlHeaders,
+              format: args.directUrlFormat));
         } else if (direct != null && direct.isNotEmpty) {
           bloc.add(SelectStreamEvent(
               pluginId: pluginId,
@@ -493,7 +494,9 @@ class _ViewState extends State<_View> with WindowListener {
     _progress.onStreamOpened();
     _armResumeCoverSafetyTimer();
     await _engine.open(s.resolvedUrl,
-        headers: s.httpHeaders, startPosition: _progress.pendingStartPosition);
+        headers: s.httpHeaders,
+        startPosition: _progress.pendingStartPosition,
+        format: s.format);
     _progress.markStarted(_engine);
     // The cold path's counterpart to the warm path's own clear in
     // _openEpisode — this is the "new stream confirmed open" signal for
@@ -810,7 +813,8 @@ class _ViewState extends State<_View> with WindowListener {
     final stream = _curStreamId;
     if (directUrl != null && directUrl.isNotEmpty) {
       bloc.add(UseDirectUrlEvent(
-          url: directUrl, httpHeaders: widget.args.directUrlHeaders));
+          url: directUrl, httpHeaders: widget.args.directUrlHeaders,
+              format: widget.args.directUrlFormat));
     } else if (stream != null && stream.isNotEmpty) {
       bloc.add(SelectStreamEvent(
           pluginId: widget.args.epPluginId,

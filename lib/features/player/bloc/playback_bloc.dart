@@ -28,8 +28,12 @@ class PlaybackBloc extends Bloc<PlaybackEvent, PlaybackState> {
   }
 
   void _onUseDirectUrl(UseDirectUrlEvent event, Emitter<PlaybackState> emit) {
-    perf('bloc: UseDirectUrlEvent → PlaybackReady (no resolve)');
-    emit(PlaybackReady(resolvedUrl: event.url, httpHeaders: event.httpHeaders));
+    perf('bloc: UseDirectUrlEvent → PlaybackReady (no resolve, '
+        'format=${event.format.name})');
+    emit(PlaybackReady(
+        resolvedUrl: event.url,
+        httpHeaders: event.httpHeaders,
+        format: event.format));
   }
 
   Future<void> _onInitialize(

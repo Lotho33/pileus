@@ -42,6 +42,9 @@ class SettingsRepository {
   static const _kLiveBufferMiB = 'settings.liveBufferMiB';
   static const _kLowPowerMode = 'settings.lowPowerMode';
   static const _kDiagnostics = 'settings.diagnostics';
+  static const _kSoftwareVideoDecoder = 'settings.softwareVideoDecoder';
+  static const _kCompatVideoSurface = 'settings.compatVideoSurface';
+  static const _kMaxVideoHeight = 'settings.maxVideoHeight';
   static const _kOverscanPercent = 'settings.overscanPercent';
   static const _kProfilePrefsBlob = 'settings.profilePrefsBlob';
 
@@ -82,6 +85,37 @@ class SettingsRepository {
   // auto-detect). When false, main.dart is free to set it from hardware
   // detection; when true, that stored choice is authoritative.
   bool isLowPowerModeSet() => _prefs.containsKey(_kLowPowerMode);
+
+  // Android player escape hatches for boxes whose video hardware misbehaves
+  // (Tanix W2: picture freezes while audio goes on). Device-level, off by
+  // default, applied to the next player created — see
+  // PlayerEngine.configureAndroidVideo.
+  //  - software decoder: ExoPlayer tries the software video decoders before
+  //    the box's own (which stays as fallback). CPU-heavy above 720p.
+  //  - compat surface: video drawn into a GL SurfaceTexture (the pre-fork
+  //    path) instead of Flutter's SurfaceProducer.
+  bool getSoftwareVideoDecoder() =>
+      _prefs.getBool(_kSoftwareVideoDecoder) ?? false;
+  Future<void> setSoftwareVideoDecoder(bool v) =>
+      _prefs.setBool(_kSoftwareVideoDecoder, v);
+  bool getCompatVideoSurface() =>
+      _prefs.getBool(_kCompatVideoSurface) ?? false;
+  Future<void> setCompatVideoSurface(bool v) =>
+      _prefs.setBool(_kCompatVideoSurface, v);
+
+  // Highest video height the Android player's automatic quality may pick
+  // (0 = no cap). The mycelium proxy hides the real link speed from
+  // ExoPlayer (it answers only once it has the whole segment), so ABR never
+  // steps down on its own — this is the knob for a slow line or a weak box.
+  // Device-level; an explicitly chosen quality in the player still wins.
+  static const maxVideoHeightOptions = [0, 1080, 720, 480];
+  int getMaxVideoHeight() {
+    final v = _prefs.getInt(_kMaxVideoHeight) ?? 0;
+    return maxVideoHeightOptions.contains(v) ? v : 0;
+  }
+
+  Future<void> setMaxVideoHeight(int v) => _prefs.setInt(
+      _kMaxVideoHeight, maxVideoHeightOptions.contains(v) ? v : 0);
 
   // Field diagnostics: when on, a release build emits the `[pileus/perf]` /
   // `[pileus/jank]` trace — used to pull logs off a specific TV box without a

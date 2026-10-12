@@ -21,12 +21,12 @@ import '../../../shared/widgets/settings/dialog_action_button.dart';
 import '../../../shared/widgets/settings/settings_header.dart';
 import '../../../shared/widgets/settings/settings_nav_row.dart';
 import '../../../shared/widgets/tv_focusable.dart';
-import '../../media/data/continue_watching_item.dart';
 import '../../media/data/media_repository.dart';
 import '../bloc/downloads_list_cubit.dart';
 import '../bloc/downloads_list_state.dart';
 import '../data/downloads_local_index.dart';
 import '../download_format.dart';
+import '../download_playback.dart';
 
 class TvDownloadsScreen extends StatelessWidget {
   const TvDownloadsScreen({super.key});
@@ -249,43 +249,13 @@ class _DownloadRow extends StatelessWidget {
     );
   }
 
-  // A download's progress is tracked under the original plugin/media ids
-  // (see PlaybackArgs.directUrl's own doc) exactly like a regular stream —
-  // but unlike _WatchButton on the details screen, this row never checked
-  // for one, so replaying a downloaded episode/film always restarted at 0
-  // even with real Continue Watching progress already sitting there for
-  // this same id. Same lookup + "real progress" guard as _WatchButton.
-  // _checkResume (details_screen/watch_button.dart) — a CW row parked at
-  // ~31s just to clear mycelium's progress_time>=30 filter isn't a genuine
-  // resume point.
+  // Resume point + progressive-format hint: see downloadPlaybackExtra.
   Future<void> _watch(BuildContext context, DownloadInfo info) async {
-    ContinueWatchingItem? resume;
-    try {
-      final items = await getIt<MediaRepository>()
-          .getContinueWatching(pluginId: info.pluginId);
-      resume = items
-          .where((i) => i.parentID.isEmpty && i.playableID == info.mediaId)
-          .firstOrNull;
-      if (resume != null &&
-          resume.totalTime <= 0 &&
-          resume.progressTime <= 35) {
-        resume = null;
-      }
-    } catch (_) {
-      // best-effort — falls back to starting from 0, same as before this
-      // check existed.
-    }
+    final extra = await downloadPlaybackExtra(info);
     if (!context.mounted) return;
     context.push(
       '/player/${info.pluginId}/${Uri.encodeComponent(info.mediaId)}',
-      extra: <String, dynamic>{
-        'directUrl': info.fileUrl,
-        'title': info.title,
-        'showTitle': info.seriesTitle,
-        'poster': info.poster,
-        'parentId': info.parentId,
-        if (resume != null) 'seekTo': resume.progressTime.toInt(),
-      },
+      extra: extra,
     );
   }
 }

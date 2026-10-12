@@ -7,6 +7,23 @@
          the phone/tablet listing as TV-capable (TV quality review + a
          missing-banner error, since src/mobile strips the banner). -->
     <application>
+        <!-- Impeller on OpenGL ES instead of Vulkan, TV boxes only. Must sit
+             on <application>: the engine reads its flags from
+             ApplicationInfo.metaData and ignores activity-level ones (it
+             used to be on the activity, so every box ran Vulkan anyway).
+
+             TV-box Mali drivers (Tanix W2: Amlogic S905W2 / Mali-G31) are
+             not on the engine's own "known bad Vulkan driver" list, but hang
+             under sustained rendering — the UI freezes while a spinner
+             spins, the picture freezes while video audio goes on, earlier
+             "Fence wait failed: ErrorDeviceLost" in logs. The GLES backend
+             has no swapchain fence to lose, and video textures stay plain
+             SurfaceTextures there (no GL→Vulkan interop). Check with
+             `adb logcat | grep "Impeller rendering backend"` → (OpenGLES).
+             Phones keep the default (Vulkan where the driver is good). -->
+        <meta-data
+            android:name="io.flutter.embedding.android.ImpellerBackend"
+            android:value="opengles" />
         <activity android:name=".MainActivity">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN"/>

@@ -1,5 +1,7 @@
 import 'package:equatable/equatable.dart';
 
+import '../engine/stream_format.dart';
+
 abstract class PlaybackEvent extends Equatable {
   const PlaybackEvent();
   @override
@@ -68,7 +70,15 @@ class SelectStreamEvent extends PlaybackEvent {
 class UseDirectUrlEvent extends PlaybackEvent {
   final String url;
   final Map<String, String> httpHeaders;
-  const UseDirectUrlEvent({required this.url, this.httpHeaders = const {}});
+
+  /// What the URL is, when the caller knows (a download's container) —
+  /// see PlaybackArgs.directUrlFormat.
+  final StreamFormat format;
+  const UseDirectUrlEvent({
+    required this.url,
+    this.httpHeaders = const {},
+    this.format = StreamFormat.auto,
+  });
   @override
-  List<Object?> get props => [url, httpHeaders];
+  List<Object?> get props => [url, httpHeaders, format];
 }

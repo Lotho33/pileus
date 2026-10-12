@@ -9,6 +9,7 @@ import '../../../core/di/injection.dart';
 import '../../../core/perf_profile.dart';
 import '../../../core/theme/app_scale.dart';
 import '../../../core/theme/app_theme.dart';
+import '../../player/android_video_settings.dart';
 import '../../../shared/widgets/ambient_glow_background.dart';
 import '../../../shared/widgets/settings/settings_header.dart';
 import '../../../shared/widgets/settings/settings_section_header.dart';
@@ -109,6 +110,29 @@ class _PreferencesBodyState extends State<_PreferencesBody> {
         const _LiveBufferPrefRow(),
         SizedBox(height: AppScale.space(context, 4)),
         const _LowPowerPrefRow(),
+        if (!kIsWeb && Platform.isAndroid) ...[
+          SizedBox(height: AppScale.space(context, 4)),
+          const _MaxVideoHeightPrefRow(),
+          SizedBox(height: AppScale.space(context, 4)),
+          const _AndroidVideoPrefRow(
+            label: 'Decodifica video software',
+            caption: 'Usa il decoder software al posto di quello del box '
+                '(che resta come riserva). Può evitare blocchi '
+                'dell\'immagine su alcuni chip, ma pesa sul processore: oltre '
+                'il 720p può andare a scatti. Vale dalla prossima '
+                'riproduzione.',
+            softwareDecoder: true,
+          ),
+          SizedBox(height: AppScale.space(context, 4)),
+          const _AndroidVideoPrefRow(
+            label: 'Rendering video compatibile',
+            caption: 'Disegna il video con il metodo delle versioni '
+                'precedenti. Da provare se il video resta nero, si blocca '
+                'o va a scatti mentre l\'audio continua. Vale dalla '
+                'prossima riproduzione.',
+            softwareDecoder: false,
+          ),
+        ],
         if (!kIsWeb && Platform.isAndroid) ...[
           SizedBox(height: AppScale.space(context, 12)),
           const SettingsSectionHeader('Schermo TV'),
@@ -256,6 +280,144 @@ class _DiagnosticsPrefRowState extends State<_DiagnosticsPrefRow> {
             'Scrive i log di performance del player in "adb logcat" '
             '(pileus/perf, pileus/jank). Solo per debug su un box specifico. '
             'Richiede il riavvio dell\'app.',
+            style: TextStyle(color: Colors.white38, fontSize: captionFs * 0.9),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+/// "Qualità video massima" — see SettingsRepository.getMaxVideoHeight.
+/// Left/right (or OK, which cycles) steps through the options; applied to
+/// the next player created.
+class _MaxVideoHeightPrefRow extends StatefulWidget {
+  const _MaxVideoHeightPrefRow();
+
+  @override
+  State<_MaxVideoHeightPrefRow> createState() => _MaxVideoHeightPrefRowState();
+}
+
+class _MaxVideoHeightPrefRowState extends State<_MaxVideoHeightPrefRow> {
+  final _repo = getIt<SettingsRepository>();
+  static const _options = SettingsRepository.maxVideoHeightOptions;
+  late int _value = _repo.getMaxVideoHeight();
+
+  static String _label(int h) => h == 0 ? 'Automatica' : '${h}p';
+
+  void _step(int dir, {bool wrap = false}) {
+    var i = _options.indexOf(_value) + dir;
+    if (wrap) {
+      i %= _options.length;
+    } else if (i < 0 || i >= _options.length) {
+      return;
+    }
+    final next = _options[i];
+    setState(() => _value = next);
+    _repo
+        .setMaxVideoHeight(next)
+        .then((_) => applyAndroidVideoSettings(_repo, tvSwitches: true));
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final captionFs =
+        (AppScale.sh(context) * (13.0 / 1080.0)).clamp(10.0, 20.0);
+    return Padding(
+      padding: EdgeInsets.symmetric(
+          horizontal: AppScale.space(context, 20),
+          vertical: AppScale.space(context, 6)),
+      child: TvFocusable(
+        onLeft: () => _step(-1),
+        onRight: () => _step(1),
+        onActivate: () => _step(1, wrap: true),
+        onFocusChange: (f) {
+          if (f && context.mounted && Scrollable.maybeOf(context) != null) {
+            Scrollable.ensureVisible(context,
+                alignment: 0.5, duration: const Duration(milliseconds: 200));
+          }
+        },
+        builder: (context, focused) {
+          final color = focused ? Colors.white : Colors.white54;
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Text('Qualità video massima',
+                      style: TextStyle(color: color, fontSize: captionFs)),
+                  const Spacer(),
+                  Text('‹  ${_label(_value)}  ›',
+                      style: TextStyle(color: color, fontSize: captionFs)),
+                ],
+              ),
+              SizedBox(height: AppScale.space(context, 4)),
+              Text(
+                'Limita la qualità scelta in automatico. Utile con una '
+                'connessione lenta o un box poco potente; una qualità scelta '
+                'a mano nel player resta possibile. Vale dalla prossima '
+                'riproduzione.',
+                style: TextStyle(
+                    color: Colors.white38, fontSize: captionFs * 0.9),
+              ),
+            ],
+          );
+        },
+      ),
+    );
+  }
+}
+
+/// The two Android video escape hatches — see
+/// SettingsRepository.getSoftwareVideoDecoder / getCompatVideoSurface.
+/// Self-contained like _LowPowerPrefRow; the native player reads the new
+/// value when the next one is created.
+class _AndroidVideoPrefRow extends StatefulWidget {
+  final String label;
+  final String caption;
+
+  /// true: "decodifica software"; false: "rendering compatibile".
+  final bool softwareDecoder;
+
+  const _AndroidVideoPrefRow({
+    required this.label,
+    required this.caption,
+    required this.softwareDecoder,
+  });
+
+  @override
+  State<_AndroidVideoPrefRow> createState() => _AndroidVideoPrefRowState();
+}
+
+class _AndroidVideoPrefRowState extends State<_AndroidVideoPrefRow> {
+  final _repo = getIt<SettingsRepository>();
+  late bool _on = widget.softwareDecoder
+      ? _repo.getSoftwareVideoDecoder()
+      : _repo.getCompatVideoSurface();
+
+  Future<void> _set(bool v) async {
+    setState(() => _on = v);
+    if (widget.softwareDecoder) {
+      await _repo.setSoftwareVideoDecoder(v);
+    } else {
+      await _repo.setCompatVideoSurface(v);
+    }
+    applyAndroidVideoSettings(_repo, tvSwitches: true);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final captionFs =
+        (AppScale.sh(context) * (13.0 / 1080.0)).clamp(10.0, 20.0);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        SettingsToggleRow(label: widget.label, value: _on, onChanged: _set),
+        Padding(
+          padding: EdgeInsets.fromLTRB(AppScale.space(context, 24),
+              AppScale.space(context, 4), AppScale.space(context, 24), 0),
+          child: Text(
+            widget.caption,
             style: TextStyle(color: Colors.white38, fontSize: captionFs * 0.9),
           ),
         ),

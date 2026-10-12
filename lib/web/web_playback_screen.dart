@@ -152,7 +152,8 @@ class WebPlaybackScreen extends StatelessWidget {
             resolveStartPositionSec(isLive: args.isLive, seekTo: args.seekTo);
         if (directUrl != null && directUrl.isNotEmpty) {
           bloc.add(UseDirectUrlEvent(
-              url: directUrl, httpHeaders: args.directUrlHeaders));
+              url: directUrl, httpHeaders: args.directUrlHeaders,
+              format: args.directUrlFormat));
         } else if (direct != null && direct.isNotEmpty) {
           bloc.add(SelectStreamEvent(
               pluginId: pluginId,
@@ -519,7 +520,8 @@ class _ViewState extends State<_View> {
     final directUrl = sameTitle ? widget.args.directUrl : null;
     if (directUrl != null && directUrl.isNotEmpty) {
       context.read<PlaybackBloc>().add(UseDirectUrlEvent(
-          url: directUrl, httpHeaders: widget.args.directUrlHeaders));
+          url: directUrl, httpHeaders: widget.args.directUrlHeaders,
+              format: widget.args.directUrlFormat));
       return;
     }
     context.read<PlaybackBloc>().add(InitializeVideoEvent(

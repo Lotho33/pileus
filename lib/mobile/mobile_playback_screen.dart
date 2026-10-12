@@ -22,6 +22,7 @@ import '../features/player/episode_prefetch.dart';
 import '../features/player/live_stall_watchdog.dart';
 import '../features/player/models/playback_args.dart';
 import '../features/player/models/skip_interval.dart';
+import '../core/utils/perf_log.dart';
 import '../features/player/player_tuning.dart';
 import '../features/player/resume_seek.dart' show resolveStartPositionSec;
 import '../features/player/playback_episode_cache.dart';
@@ -62,7 +63,8 @@ class MobilePlaybackScreen extends StatelessWidget {
             resolveStartPositionSec(isLive: args.isLive, seekTo: args.seekTo);
         if (directUrl != null && directUrl.isNotEmpty) {
           bloc.add(UseDirectUrlEvent(
-              url: directUrl, httpHeaders: args.directUrlHeaders));
+              url: directUrl, httpHeaders: args.directUrlHeaders,
+              format: args.directUrlFormat));
         } else if (direct != null && direct.isNotEmpty) {
           bloc.add(SelectStreamEvent(
               pluginId: pluginId,
@@ -280,6 +282,7 @@ class _MobilePlayerViewState extends State<_MobilePlayerView> {
 
     _engine = PlayerEngine.create();
     _engine.onError = _onEngineError;
+    _engine.onVideoFrozen = _onVideoFrozen;
     _engine.addListener(_onEngine);
     _posSub = _engine.positionStream.listen(_onPosition);
     final live = widget.args.isLive;
@@ -574,7 +577,9 @@ class _MobilePlayerViewState extends State<_MobilePlayerView> {
     _progress.onStreamOpened();
     _armResumeCoverSafetyTimer();
     await _engine.open(s.resolvedUrl,
-        headers: s.httpHeaders, startPosition: _progress.pendingStartPosition);
+        headers: s.httpHeaders,
+        startPosition: _progress.pendingStartPosition,
+        format: s.format);
     _progress.markStarted(_engine);
     // The cold path's counterpart to the warm path's own clear in
     // _resolveEpisodeAt — this is the "new stream confirmed open" signal
@@ -583,6 +588,35 @@ class _MobilePlayerViewState extends State<_MobilePlayerView> {
   }
 
   void _retry() => _reopenCurrent();
+
+  // Picture frozen while audio goes on, after the native surface re-attach
+  // already failed (see PlayerEngine.onVideoFrozen). No restart-in-place
+  // here like on TV: re-resolving gives the decoder a new source, which is
+  // the strongest reset this screen has. Same budget as TV.
+  final List<DateTime> _autoRestarts = [];
+
+  void _onVideoFrozen() {
+    // Same gates as the stall watchdog's isHealthy.
+    if (!mounted ||
+        !_opened ||
+        !_started ||
+        _transitioningEpisode ||
+        _resolvingEpisode ||
+        _takeoverPrompt != null ||
+        _playbackError != null) {
+      return;
+    }
+    final now = DateTime.now();
+    _autoRestarts.removeWhere(
+        (t) => now.difference(t) > kVideoFrozenRestartWindow);
+    if (_autoRestarts.length >= kVideoFrozenRestartBudget) {
+      perf('mobile: video frozen — auto-reopen budget used up');
+      return;
+    }
+    _autoRestarts.add(now);
+    perf('mobile: video frozen — reopening (#${_autoRestarts.length})');
+    _reopenCurrent();
+  }
 
   /// Re-resolves and reopens what is playing now — "Riprova", the stall
   /// watchdog's second tier, and "Riprendi qui" after a take-over all land
@@ -627,7 +661,8 @@ class _MobilePlayerViewState extends State<_MobilePlayerView> {
     final stream = _curStreamId;
     if (directUrl != null && directUrl.isNotEmpty) {
       bloc.add(UseDirectUrlEvent(
-          url: directUrl, httpHeaders: widget.args.directUrlHeaders));
+          url: directUrl, httpHeaders: widget.args.directUrlHeaders,
+              format: widget.args.directUrlFormat));
     } else if (stream != null && stream.isNotEmpty) {
       bloc.add(SelectStreamEvent(
           pluginId: widget.args.epPluginId,

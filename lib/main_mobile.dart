@@ -7,6 +7,7 @@ import 'core/di/injection.dart';
 import 'core/perf_profile.dart';
 import 'core/utils/error_hooks.dart';
 import 'core/utils/perf_log.dart';
+import 'features/player/android_video_settings.dart';
 import 'features/settings/data/settings_repository.dart';
 import 'mobile/mobile_app.dart';
 
@@ -58,6 +59,9 @@ Future<void> runMobileApp() async {
   // both are TV-box concerns. Force the full-fidelity UI path.
   isAndroidTv = false;
   lowPowerUi = false;
+  // No software-decoder / compat-rendering switches on the phone UI (TV-box
+  // workarounds); the quality cap and the diagnostics stats do apply.
+  applyAndroidVideoSettings(settings, tvSwitches: false);
 
   runApp(const PileusMobileApp());
 }

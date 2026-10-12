@@ -1,8 +1,11 @@
+import 'dart:io' show Platform;
+
 import 'package:flutter/material.dart';
 
 import '../core/di/injection.dart';
 import '../core/theme/app_theme.dart';
 import '../features/media/data/media_repository.dart';
+import '../features/player/android_video_settings.dart';
 import '../features/settings/data/settings_repository.dart';
 import '../shared/utils/tap_guard.dart';
 
@@ -24,6 +27,7 @@ class _MobilePreferencesScreenState extends State<MobilePreferencesScreen> {
   late bool _subBg = _s.getSubtitleBgEnabled();
   late double _subPad = _s.getSubtitleBottomPadding();
   late bool _diag = _s.getDiagnostics();
+  late int _maxHeight = _s.getMaxVideoHeight();
 
   static const _swatches = <Color>[
     Colors.white,
@@ -67,6 +71,34 @@ class _MobilePreferencesScreenState extends State<MobilePreferencesScreen> {
               _s.setLiveBufferMiB(_liveBuf);
             }),
           ),
+          // ExoPlayer-only (patched better_player_plus): no effect on iOS.
+          if (Platform.isAndroid)
+            ListTile(
+              title: const Text('Qualità video massima',
+                  style: TextStyle(color: AppTheme.textHigh)),
+              subtitle: const Text(
+                  'Limita la qualità scelta in automatico (connessione lenta).',
+                  style: TextStyle(color: AppTheme.textLow, fontSize: 12)),
+              trailing: DropdownButton<int>(
+                value: _maxHeight,
+                dropdownColor: AppTheme.bg,
+                underline: const SizedBox.shrink(),
+                items: [
+                  for (final h in SettingsRepository.maxVideoHeightOptions)
+                    DropdownMenuItem(
+                      value: h,
+                      child: Text(h == 0 ? 'Automatica' : '${h}p',
+                          style: const TextStyle(color: AppTheme.textHigh)),
+                    ),
+                ],
+                onChanged: (v) async {
+                  if (v == null) return;
+                  setState(() => _maxHeight = v);
+                  await _s.setMaxVideoHeight(v);
+                  applyAndroidVideoSettings(_s, tvSwitches: false);
+                },
+              ),
+            ),
           _note('Si applica alla prossima riproduzione.'),
           _header('Sottotitoli'),
           _sliderTile(

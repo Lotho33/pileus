@@ -92,3 +92,10 @@ const kResumeCoverSafetyTimeout = Duration(seconds: 5);
 /// long enough that a brief trip to the launcher/input switch doesn't give
 /// up a lease the user still wants this device to hold.
 const kBackgroundReleaseTimeout = Duration(seconds: 60);
+
+/// Frozen picture (audio and position still going, reported by the ExoPlayer
+/// backend): at most this many automatic player rebuilds per
+/// [kVideoFrozenRestartWindow]. Past it the box is freezing on everything —
+/// stop churning and leave the manual restart.
+const kVideoFrozenRestartBudget = 2;
+const kVideoFrozenRestartWindow = Duration(minutes: 5);

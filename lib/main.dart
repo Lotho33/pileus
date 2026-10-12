@@ -22,6 +22,7 @@ import 'core/device_profile.dart';
 import 'core/perf_profile.dart';
 import 'core/utils/error_hooks.dart';
 import 'core/utils/perf_log.dart';
+import 'features/player/android_video_settings.dart';
 import 'shared/widgets/pileus_spinner.dart';
 
 // kIsWeb must come first: on Flutter Web, defaultTargetPlatform reflects the
@@ -135,6 +136,7 @@ void main() async {
     await settings.setLowPowerMode(true);
   }
   lowPowerUi = settings.getLowPowerMode();
+  applyAndroidVideoSettings(settings, tvSwitches: true);
   if (lowPowerUi) {
     PaintingBinding.instance.imageCache.maximumSizeBytes = 40 << 20;
     PaintingBinding.instance.imageCache.maximumSize = 140;
