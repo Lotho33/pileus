@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
 import '../perf_profile.dart';
+import '../utils/perf_probes.dart';
 import 'auth_guard.dart';
 
 import '../../features/auth/presentation/device_pairing_screen.dart';
@@ -32,6 +33,8 @@ import '../../shared/presentation/splash_screen.dart';
 Page<T> _fadePage<T>(GoRouterState state, Widget child) =>
     CustomTransitionPage<T>(
       key: state.pageKey,
+      // Route name = location: what PerfNavigatorObserver logs.
+      name: state.matchedLocation,
       child: child,
       // "Hardware modesto": no route transition at all. The fade/scale
       // composites the incoming screen into an offscreen layer for 200ms
@@ -56,6 +59,7 @@ Page<T> _fadePage<T>(GoRouterState state, Widget child) =>
 
 final GoRouter appRouter = GoRouter(
   initialLocation: '/splash',
+  observers: [PerfNavigatorObserver()],
   routes: [
     GoRoute(
       path: '/splash',

@@ -22,6 +22,7 @@ import 'core/device_profile.dart';
 import 'core/perf_profile.dart';
 import 'core/utils/error_hooks.dart';
 import 'core/utils/perf_log.dart';
+import 'core/utils/perf_probes.dart';
 import 'features/player/android_video_settings.dart';
 import 'shared/widgets/pileus_spinner.dart';
 
@@ -120,6 +121,7 @@ void main() async {
   // Slow-frame sampler → `adb logcat` (grep `pileus/jank`); rate-limited,
   // no-ops when kPerfDiagnostics is false.
   installJankLogger();
+  installMemoryProbe();
   // Never toggled by hand → let the hardware decide. Amlogic S905W/X-class
   // boxes (Tanix W2 & co., GLES2 Mali-450) can't sustain 1080p video +
   // Flutter compositing — the Vulkan path faults or the A/V clock drifts

@@ -7,6 +7,7 @@ import 'core/di/injection.dart';
 import 'core/perf_profile.dart';
 import 'core/utils/error_hooks.dart';
 import 'core/utils/perf_log.dart';
+import 'core/utils/perf_probes.dart';
 import 'features/player/android_video_settings.dart';
 import 'features/settings/data/settings_repository.dart';
 import 'mobile/mobile_app.dart';
@@ -54,6 +55,7 @@ Future<void> runMobileApp() async {
   final settings = getIt<SettingsRepository>();
   kPerfDiagnostics = kDebugMode || settings.getDiagnostics();
   installJankLogger();
+  installMemoryProbe();
 
   // The phone build has no "hardware modesto" mode and no HDMI overscan —
   // both are TV-box concerns. Force the full-fidelity UI path.

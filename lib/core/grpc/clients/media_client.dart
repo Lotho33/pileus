@@ -110,24 +110,35 @@ final RequestGate? _contentGate = kIsWeb ? RequestGate(3) : null;
 // instead of leaving the screen for the user to tap again. A timeout is
 // NOT retried: that one is a slow server/upstream, and a second identical
 // request would just pile a second plugin call on top of the first.
+// Content reads currently awaiting a reply — printed on each `rpc` perf
+// line, so a startup burst (dozens of catalog calls at once) is visible.
+int _rpcInFlight = 0;
+
 Future<T> _gated<T>(String name, String pluginId, Future<T> Function() call,
     {bool urgent = false}) {
   Future<T> timed() async {
     final sw = Stopwatch()..start();
-    for (var attempt = 1;; attempt++) {
-      try {
-        final r = await call();
-        perf('rpc $name $pluginId ok ${sw.elapsedMilliseconds}ms'
-            '${attempt > 1 ? ' (retry)' : ''}');
-        return r;
-      } catch (e) {
-        final retry =
-            attempt == 1 && e is GrpcError && e.code == StatusCode.unavailable;
-        perf('rpc $name $pluginId FAIL ${sw.elapsedMilliseconds}ms '
-            '${e is GrpcError ? '${e.codeName} ${e.message}' : e}'
-            '${retry ? ' -> retrying' : ''}');
-        if (!retry) rethrow;
+    _rpcInFlight++;
+    try {
+      for (var attempt = 1;; attempt++) {
+        try {
+          final r = await call();
+          perf('rpc $name $pluginId ok ${sw.elapsedMilliseconds}ms'
+              ' (in flight $_rpcInFlight)'
+              '${attempt > 1 ? ' (retry)' : ''}');
+          return r;
+        } catch (e) {
+          final retry = attempt == 1 &&
+              e is GrpcError &&
+              e.code == StatusCode.unavailable;
+          perf('rpc $name $pluginId FAIL ${sw.elapsedMilliseconds}ms '
+              '${e is GrpcError ? '${e.codeName} ${e.message}' : e}'
+              '${retry ? ' -> retrying' : ''}');
+          if (!retry) rethrow;
+        }
       }
+    } finally {
+      _rpcInFlight--;
     }
   }
 
@@ -209,8 +220,8 @@ class MediaGrpcClient {
   /// playback lease right away — see ReleasePlaybackRequest's own doc.
   /// Always called best-effort (see MediaRepository.releasePlayback): never
   /// worth retrying or blocking an exit on.
-  Future<ReleasePlaybackResponse> releasePlayback() => _mediaStub
-      .releasePlayback(ReleasePlaybackRequest(),
+  Future<ReleasePlaybackResponse> releasePlayback() =>
+      _mediaStub.releasePlayback(ReleasePlaybackRequest(),
           options: CallOptions(timeout: _defaultRpcTimeout));
 
   Future<ContinueWatchingResponse> getContinueWatching(

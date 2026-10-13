@@ -20,6 +20,7 @@ import 'mobile_profiles_screen.dart';
 import 'mobile_settings_screen.dart';
 import 'mobile_shell.dart';
 import 'mobile_splash_screen.dart';
+import '../core/utils/perf_probes.dart';
 
 /// Mobile router. `/home` is the bottom-nav shell (Home / Cerca /
 /// Impostazioni). Splash, discovery, pairing, profiles, home, search,
@@ -29,7 +30,7 @@ import 'mobile_splash_screen.dart';
 /// phone even though they're D-pad-tuned).
 final GoRouter mobileRouter = GoRouter(
   initialLocation: '/splash',
-  observers: [MobileOrientationObserver()],
+  observers: [MobileOrientationObserver(), PerfNavigatorObserver()],
   routes: [
     GoRoute(path: '/splash', builder: (_, __) => const MobileSplashScreen()),
     GoRoute(

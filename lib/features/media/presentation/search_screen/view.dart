@@ -62,6 +62,13 @@ class _SearchViewState extends State<_SearchView> {
   bool _keyboardVisible = true;
 
   List<SearchFilter> _availableFilters = [];
+
+  // Last non-empty result set — kept on screen (with a small spinner over
+  // it) while the next search loads. Swapping the whole carousel for a
+  // full-screen spinner on every query tore down and rebuilt every card and
+  // re-decoded every poster per keystroke pause: 30–150ms build frames on
+  // the 1 GB Mi TV Stick.
+  DiscoveryLoaded? _lastResults;
   final Map<String, String> _activeFilters = {};
   bool _filterPanelOpen = false;
 
@@ -117,14 +124,59 @@ class _SearchViewState extends State<_SearchView> {
     }
   }
 
-  Future<void> _loadFilters() async {
+  // The first GetSearchFilters for a plugin can come back empty (or fail)
+  // while the plugin is still warming up server-side — the Filtri button
+  // then stayed disabled on the first visit and only worked on the second
+  // (empty answers aren't cached, so the later visit asked again). Retry a
+  // few times, backing off, while this screen is open.
+  static const _filterRetryDelays = [
+    Duration(milliseconds: 1500),
+    Duration(seconds: 4),
+    Duration(seconds: 10),
+  ];
+
+  Future<void> _loadFilters([int attempt = 0]) async {
+    String outcome;
     try {
       final repo = getIt<MediaRepository>();
       final resp = await repo.getSearchFilters(widget.pluginId);
       if (!mounted) return;
-      setState(() => _availableFilters = resp.filters);
-    } catch (_) {}
+      if (resp.filters.isNotEmpty) {
+        perf('search: filters ${widget.pluginId} → ${resp.filters.length} '
+            '(attempt ${attempt + 1})');
+        setState(() => _availableFilters = resp.filters);
+        return;
+      }
+      outcome = 'empty';
+    } catch (e) {
+      outcome = 'error: $e';
+    }
+    if (!mounted) return;
+    perf('search: filters ${widget.pluginId} $outcome '
+        '(attempt ${attempt + 1})');
+    if (attempt < _filterRetryDelays.length) {
+      Future.delayed(_filterRetryDelays[attempt], () {
+        if (mounted && _availableFilters.isEmpty) _loadFilters(attempt + 1);
+      });
+    }
   }
+
+  // One builder for the live results and the ones kept up while the next
+  // search loads (same widget type and position, so Flutter keeps the
+  // carousel's element and its cards instead of rebuilding them).
+  Widget _buildResults(DiscoveryLoaded state, double h) => _SearchCarousel(
+        pluginId: widget.pluginId,
+        items: state.items.cast<CatalogItem>(),
+        hasMore: state.hasMore,
+        isLoadingMore: state.isLoadingMore,
+        screenH: h,
+        onFirstCardFocus: (fn) => _firstResultFocus.set(fn),
+        onNavigateUp: () {
+          // Back up out of the results → land on the keyboard (re-shown),
+          // the natural place to keep refining the query.
+          _focusKeyboard();
+        },
+      );
 
   @override
   void dispose() {
@@ -514,6 +566,22 @@ class _SearchViewState extends State<_SearchView> {
                                   pluginName: widget.pluginName);
                             }
                             if (state is DiscoveryLoading) {
+                              final prev = _lastResults;
+                              if (prev != null) {
+                                return Stack(
+                                  fit: StackFit.expand,
+                                  children: [
+                                    _buildResults(prev, h),
+                                    Positioned(
+                                      top: AppScale.space(context, 8),
+                                      right: AppScale.screenHPad(context),
+                                      child: PileusSpinner(
+                                          size: AppScale.spinnerS(context),
+                                          color: Colors.white54),
+                                    ),
+                                  ],
+                                );
+                              }
                               _firstResultFocus.clear();
                               return Center(
                                   child: PileusSpinner(
@@ -521,6 +589,7 @@ class _SearchViewState extends State<_SearchView> {
                                       color: Colors.white54));
                             }
                             if (state is DiscoveryError) {
+                              _lastResults = null;
                               _firstResultFocus.clear();
                               return ErrorRetryView(
                                 message: 'Ricerca non riuscita.',
@@ -539,6 +608,7 @@ class _SearchViewState extends State<_SearchView> {
                             }
                             if (state is DiscoveryLoaded) {
                               if (state.items.isEmpty) {
+                                _lastResults = null;
                                 _firstResultFocus.clear();
                                 return ErrorRetryView(
                                   title: 'Nessun risultato',
@@ -549,21 +619,13 @@ class _SearchViewState extends State<_SearchView> {
                                   autofocus: false,
                                 );
                               }
-                              return _SearchCarousel(
-                                pluginId: widget.pluginId,
-                                items: state.items.cast<CatalogItem>(),
-                                hasMore: state.hasMore,
-                                isLoadingMore: state.isLoadingMore,
-                                screenH: h,
-                                onFirstCardFocus: (fn) =>
-                                    _firstResultFocus.set(fn),
-                                onNavigateUp: () {
-                                  // Back up out of the results → land on the
-                                  // keyboard (re-shown), the natural place to
-                                  // keep refining the query.
-                                  _focusKeyboard();
-                                },
-                              );
+                              _lastResults = state;
+                              // Same Stack shape as the loading branch above
+                              // — the carousel must sit at the same tree
+                              // position in both, or it's rebuilt anyway.
+                              return Stack(
+                                  fit: StackFit.expand,
+                                  children: [_buildResults(state, h)]);
                             }
                             return const SizedBox.shrink();
                           },

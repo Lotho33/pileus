@@ -9,6 +9,7 @@ import '../../../core/di/injection.dart';
 import '../../../core/grpc/clients/media_client.dart'
     show CatalogItem, SearchFilter;
 import '../../../core/theme/app_scale.dart';
+import '../../../core/utils/perf_log.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../shared/sdui/blocks/card_carousel_block_view.dart';
 import '../../../shared/sdui/sdui_block.dart';

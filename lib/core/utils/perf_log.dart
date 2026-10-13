@@ -41,28 +41,46 @@ void perfReset(String reason) {
   debugPrint('[pileus/perf] ===================== $reason');
 }
 
+/// The screen the user is on, kept current by [PerfNavigatorObserver] —
+/// stamped on every `pileus/jank` line so a slow frame can be pinned to the
+/// screen that produced it.
+String perfScreen = '?';
+
 /// Sample frame timings and log the slow ones to `adb logcat`
-/// (`pileus/jank`). Rate-limited to one line/second so it can't flood the
-/// log or become the jank itself. Call once from `main()` after
+/// (`pileus/jank`). One line per second at most, so it can't flood the log
+/// or become the jank itself — but that line summarises the whole second:
+/// how many frames were slow out of how many, the worst one, and the
+/// screen. Call once from `main()` after
 /// `WidgetsFlutterBinding.ensureInitialized()`.
 void installJankLogger({
   Duration threshold = const Duration(milliseconds: 32),
 }) {
   if (!kPerfDiagnostics) return;
-  var lastLogMs = 0;
+  var windowStartMs = 0;
+  var frames = 0;
+  var slow = 0;
+  FrameTiming? worst;
   SchedulerBinding.instance.addTimingsCallback((timings) {
-    // Worst frame in this batch.
-    FrameTiming? worst;
     for (final t in timings) {
-      if (worst == null || t.totalSpan > worst.totalSpan) worst = t;
+      frames++;
+      if (t.totalSpan >= threshold) {
+        slow++;
+        if (worst == null || t.totalSpan > worst!.totalSpan) worst = t;
+      }
     }
-    if (worst == null || worst.totalSpan < threshold) return;
     final nowMs = DateTime.now().millisecondsSinceEpoch;
-    if (nowMs - lastLogMs < 1000) return; // at most one line/second
-    lastLogMs = nowMs;
-    debugPrint('[pileus/jank] frame ${worst.totalSpan.inMilliseconds}ms'
-        '  build ${worst.buildDuration.inMilliseconds}ms'
-        '  raster ${worst.rasterDuration.inMilliseconds}ms'
-        '  #${worst.frameNumber}');
+    if (nowMs - windowStartMs < 1000) return;
+    final w = worst;
+    if (w != null) {
+      debugPrint('[pileus/jank] @$perfScreen  slow $slow/$frames'
+          '  worst ${w.totalSpan.inMilliseconds}ms'
+          ' (build ${w.buildDuration.inMilliseconds}ms'
+          ' raster ${w.rasterDuration.inMilliseconds}ms)'
+          '  #${w.frameNumber}');
+    }
+    windowStartMs = nowMs;
+    frames = 0;
+    slow = 0;
+    worst = null;
   });
 }

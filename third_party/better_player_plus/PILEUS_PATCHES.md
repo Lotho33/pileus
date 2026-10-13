@@ -60,6 +60,12 @@ the verbatim upstream backport (3):
     source (`BetterPlayerEventType.decoderStalled`, width/height/bitrate):
     a decoder that silently can't take the video (no exception).
 
+13. `BetterPlayerController.pinTrackForNextSource`: a one-shot track
+    constraint applied to the track selector *before* the next source is
+    prepared and kept at the end of `setupDataSource` (instead of the reset
+    to "auto"). A cap set with setTrack() afterwards came too late: on a
+    fast LAN ExoPlayer had already picked the top variant at prepare.
+
 Upgrading to 2.0.0+: patch 3 is upstream there; re-apply all the others.
 Upgrading: re-copy the new upstream release here and re-apply both patches
 (or drop the fork once upstream fixes 1.).

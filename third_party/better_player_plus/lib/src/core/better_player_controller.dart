@@ -220,7 +220,22 @@ class BetterPlayerController {
   }
 
   ///Setup new data source in Better Player.
+  // PILEUS PATCH: see pinTrackForNextSource.
+  BetterPlayerAsmsTrack? _pinnedTrack;
+
+  /// PILEUS PATCH: constrain the *next* [setupDataSource] to [track] from
+  /// the start. Applied to the track selector before the source is
+  /// prepared (ExoPlayer picks its first variant right at prepare — on a
+  /// fast LAN, the highest), and kept at the end instead of the usual reset
+  /// to "auto". One-shot. Setting it with setTrack() after setupDataSource
+  /// came too late: the decoder had already failed on the top variant again.
+  void pinTrackForNextSource(BetterPlayerAsmsTrack? track) {
+    _pinnedTrack = track;
+  }
+
   Future<void> setupDataSource(BetterPlayerDataSource betterPlayerDataSource) async {
+    final pinned = _pinnedTrack;
+    _pinnedTrack = null;
     postEvent(
       BetterPlayerEvent(
         BetterPlayerEventType.setupDataSource,
@@ -260,9 +275,13 @@ class BetterPlayerController {
       _setupSubtitles();
     }
 
+    if (pinned != null) {
+      await videoPlayerController?.setTrackParameters(pinned.width, pinned.height, pinned.bitrate);
+    }
+
     ///Process data source
     await _setupDataSource(betterPlayerDataSource);
-    await setTrack(BetterPlayerAsmsTrack.defaultTrack());
+    await setTrack(pinned ?? BetterPlayerAsmsTrack.defaultTrack());
   }
 
   ///Configure subtitles based on subtitles source.

@@ -535,14 +535,17 @@ class _ExoPlayerEngine extends PlayerEngine {
         return;
       }
       try {
+        // Pinned *before* the reopen: the cap must be on the track selector
+        // when the source is prepared. Applied afterwards (as it was), the
+        // player had already picked the top variant again on a fast LAN —
+        // the same decoder error a second later, and a needless drop to an
+        // even lower quality (seen on the Mi TV Stick with Monster).
+        _c.pinTrackForNextSource(track);
         await _open(url,
             headers: _lastHeaders,
             startPosition: resumeAt,
             format: _lastFormat);
         if (_controller == null) return; // disposed meanwhile
-        // After setupDataSource, which resets the selector to "auto" on its
-        // way out. setTrack only caps the selector (max size/bitrate).
-        await _c.setTrack(track);
         // Built here, not looked up: setupDataSource re-parses the playlist
         // asynchronously, so videoTracks may still be empty. Same id scheme
         // as videoTracks, so the settings panel highlights it.
