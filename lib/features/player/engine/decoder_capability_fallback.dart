@@ -74,6 +74,11 @@ int? pickDecoderFallback(
 }) {
   bool isLower(VideoVariant v) {
     final fh = failed.height, fb = failed.bitrate;
+    // The playlist's declared RESOLUTION can lie (a "1080p" variant that is
+    // really 1920x1440 — exactly what fails): when bitrates are known, a
+    // variant at or above the failed one's is the same or a bigger stream,
+    // whatever height it claims.
+    if (fb != null && v.bitrate > 0 && v.bitrate >= fb) return false;
     if (fh != null && v.height > 0) return v.height < fh;
     if (fb != null && v.bitrate > 0) return v.bitrate < fb;
     if (v.height > 0) return v.height <= maxHeight;

@@ -49,6 +49,17 @@ the verbatim upstream backport (3):
 10. `better_player_with_controls.dart` `_BetterPlayerVideoFitWidget`
     rebuilds when `controller.value.size` changes (it read it only at build).
 
+11. `video_player.dart`: native play/pause events only sync the Dart state
+    (`_syncPlayingFromNative`) instead of calling play()/pause(), which sent
+    the command back to native — two opposite commands close together
+    echoed into an endless pause/play flicker (TV D-pad seek). `seekTo`
+    re-applies the play state as it is after the seek, not the one captured
+    before it (a scrub resume was being undone).
+12. `BetterPlayer.kt` `checkDecoderStall`: STATE_BUFFERING with ≥8s
+    buffered and no new frame for ~8s → one `decoderStalled` event per
+    source (`BetterPlayerEventType.decoderStalled`, width/height/bitrate):
+    a decoder that silently can't take the video (no exception).
+
 Upgrading to 2.0.0+: patch 3 is upstream there; re-apply all the others.
 Upgrading: re-copy the new upstream release here and re-apply both patches
 (or drop the fork once upstream fixes 1.).

@@ -37,4 +37,9 @@ enum BetterPlayerEventType {
   /// (Duration), rendered, dropped, skipped (cumulative frame counts),
   /// width, height, bitrate (current video format), bufferedMs, playing.
   videoStats,
+
+  /// PILEUS PATCH (Android): stuck buffering with a full buffer and no new
+  /// frame — the decoder can't handle the current video. Parameters: width,
+  /// height, bitrate of the video format (ExoPlayer's -1 = unknown).
+  decoderStalled,
 }

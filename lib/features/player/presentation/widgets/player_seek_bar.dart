@@ -128,6 +128,11 @@ class _PlayerSeekBarState extends State<PlayerSeekBar> {
   Timer? _commitTimer;
   int _holdTicks = 0;
   LogicalKeyboardKey? _holdingKey;
+  // Direction of the scrub still waiting to commit. A press continuing it
+  // in the same direction keeps the acceleration going (_holdTicks) — some
+  // remotes (HDMI-CEC) turn one long hold into a stream of short
+  // press/release pairs, which otherwise restarted at 5s steps every time.
+  LogicalKeyboardKey? _pendingKey;
 
   // True between an onScrubStart and its matching onScrubEnd — guards against
   // firing the pair more than once (a hold and a drag can't overlap in
@@ -166,11 +171,12 @@ class _PlayerSeekBarState extends State<PlayerSeekBar> {
 
   // Key down: first step right away (preview only), then the hold ticks.
   void _press(LogicalKeyboardKey key, double sign, double dur) {
+    final continuing = _commitTimer != null && _pendingKey == key;
     _commitTimer?.cancel();
     _commitTimer = null;
     _beginScrub();
     _holdingKey = key;
-    _holdTicks = 0;
+    if (!continuing) _holdTicks = 0;
     _holdTimer?.cancel();
     _holdTimer = Timer.periodic(_holdTickInterval, (_) {
       _holdTicks++;
@@ -188,7 +194,8 @@ class _PlayerSeekBarState extends State<PlayerSeekBar> {
     _holdTimer?.cancel();
     _holdTimer = null;
     _holdingKey = null;
-    _holdTicks = 0;
+    // _holdTicks kept: a press continuing this scrub resumes the ramp.
+    _pendingKey = key;
     _commitTimer?.cancel();
     _commitTimer = Timer(_commitDelay, _commitPending);
   }
@@ -197,6 +204,8 @@ class _PlayerSeekBarState extends State<PlayerSeekBar> {
   void _commitPending() {
     _commitTimer?.cancel();
     _commitTimer = null;
+    _pendingKey = null;
+    _holdTicks = 0;
     if (!_scrubbing) return;
     final target = _dragPos;
     if (target != null) widget.onSeek(target);
@@ -217,6 +226,7 @@ class _PlayerSeekBarState extends State<PlayerSeekBar> {
     } else {
       _commitTimer?.cancel();
       _commitTimer = null;
+      _pendingKey = null;
       _endScrub(resume: false);
     }
   }

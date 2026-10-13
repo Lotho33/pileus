@@ -242,10 +242,16 @@ class VideoPlayerController extends ValueNotifier<VideoPlayerValue> {
             value = value.copyWith(isBuffering: false);
           }
 
+        // PILEUS PATCH: a play/pause *reported* by the native player only
+        // syncs the Dart state — it used to call play()/pause(), which sent
+        // the same command straight back to native. Two opposite commands
+        // close together (a seek ending with the pre-seek play state, plus
+        // the scrub resume) then echoed into each other forever: playback
+        // flickering between paused and playing after every D-pad seek.
         case VideoEventType.play:
-          play();
+          _syncPlayingFromNative(true);
         case VideoEventType.pause:
-          pause();
+          _syncPlayingFromNative(false);
         case VideoEventType.seek:
           seekTo(event.position);
         case VideoEventType.pipStart:
@@ -258,6 +264,7 @@ class VideoPlayerController extends ValueNotifier<VideoPlayerValue> {
             value = value.copyWith(size: event.size);
           }
         case VideoEventType.videoFrozen:
+        case VideoEventType.decoderStalled:
         case VideoEventType.videoStats:
         case VideoEventType.unknown:
           break;
@@ -469,13 +476,24 @@ class VideoPlayerController extends ValueNotifier<VideoPlayerValue> {
     }
   }
 
-  Future<void> _applyPlayPause() async {
+  // PILEUS PATCH: see the play/pause event handling in _create().
+  void _syncPlayingFromNative(bool playing) {
+    if (value.isPlaying == playing) {
+      return;
+    }
+    value = value.copyWith(isPlaying: playing);
+    _applyPlayPause(toNative: false);
+  }
+
+  Future<void> _applyPlayPause({bool toNative = true}) async {
     if (!_created || _isDisposed) {
       return;
     }
     _timer?.cancel();
     if (value.isPlaying) {
-      await _videoPlayerPlatform.play(_textureId);
+      if (toNative) {
+        await _videoPlayerPlatform.play(_textureId);
+      }
       _timer = Timer.periodic(const Duration(milliseconds: 300), (Timer timer) async {
         if (_isDisposed) {
           return;
@@ -493,7 +511,7 @@ class VideoPlayerController extends ValueNotifier<VideoPlayerValue> {
           }
         }
       });
-    } else {
+    } else if (toNative) {
       await _videoPlayerPlatform.pause(_textureId);
     }
   }
@@ -536,13 +554,10 @@ class VideoPlayerController extends ValueNotifier<VideoPlayerValue> {
   /// and silently clamped.
   Future<void> seekTo(Duration? position) async {
     _timer?.cancel();
-    bool isPlaying = value.isPlaying;
     final int positionInMs = value.position.inMilliseconds;
     final int durationInMs = value.duration?.inMilliseconds ?? 0;
-
-    if (positionInMs >= durationInMs && position?.inMilliseconds == 0) {
-      isPlaying = true;
-    }
+    // Seeking back to 0 from the end restarts playback.
+    final bool restart = positionInMs >= durationInMs && position?.inMilliseconds == 0;
     if (_isDisposed) {
       return;
     }
@@ -558,10 +573,14 @@ class VideoPlayerController extends ValueNotifier<VideoPlayerValue> {
     await _videoPlayerPlatform.seekTo(_textureId, positionToSeek);
     _updatePosition(position);
 
-    if (isPlaying) {
+    // PILEUS PATCH: re-apply the play state as it is *now*, not the one
+    // captured before the (async) native seek — a play() issued meanwhile
+    // (scrub resume) was being undone by a stale pause() here. The
+    // "seek back to 0 after completion" restart still forces play.
+    if (restart) {
       await play();
     } else {
-      await pause();
+      await _applyPlayPause();
     }
   }
 

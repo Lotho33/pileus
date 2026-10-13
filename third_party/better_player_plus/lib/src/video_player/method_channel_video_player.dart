@@ -289,6 +289,13 @@ class MethodChannelVideoPlayer extends VideoPlayerPlatform {
               size: Size((map['width'] as num).toDouble(), (map['height'] as num).toDouble()),
             );
 
+          case 'decoderStalled':
+            return VideoEvent(
+              eventType: VideoEventType.decoderStalled,
+              key: key,
+              extras: Map<String, Object?>.from(map),
+            );
+
           case 'videoStats':
             return VideoEvent(
               eventType: VideoEventType.videoStats,

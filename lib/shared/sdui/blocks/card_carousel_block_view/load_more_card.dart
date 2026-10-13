@@ -54,6 +54,33 @@ class _LoadMoreCardView extends StatefulWidget {
 class _LoadMoreCardViewState extends State<_LoadMoreCardView> {
   bool _focused = false;
 
+  // The carousel reuses a FocusNode across a widget swap — the load-more
+  // card's node becomes the first freshly loaded card's after an append. A
+  // node that already holds focus when this card mounts never fires
+  // onFocusChange, so the card stayed undrawn as focused (no purple border)
+  // and its item was never reported focused (hero metadata stale), even
+  // though D-pad keys already acted on it. Start from the node's real state.
+  @override
+  void initState() {
+    super.initState();
+    _syncInitialFocus();
+  }
+
+  @override
+  void didUpdateWidget(_LoadMoreCardView oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.focusNode != widget.focusNode) _syncInitialFocus();
+  }
+
+  void _syncInitialFocus() {
+    _focused = widget.focusNode.hasFocus;
+    if (_focused) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted && widget.focusNode.hasFocus) widget.onFocused();
+      });
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final glyph = widget.width * 0.32;

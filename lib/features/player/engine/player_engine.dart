@@ -397,6 +397,8 @@ class _ExoPlayerEngine extends PlayerEngine {
       case BetterPlayerEventType.changedTrack:
         perf('exo: changedTrack');
         _emit();
+      case BetterPlayerEventType.decoderStalled:
+        _onDecoderStalled(e.parameters);
       case BetterPlayerEventType.videoStats:
         _logVideoStats(e.parameters);
       case BetterPlayerEventType.videoFrozen:
@@ -445,6 +447,28 @@ class _ExoPlayerEngine extends PlayerEngine {
         'playing=${p['playing']}');
     _statsRendered = rendered;
     _statsDropped = dropped;
+  }
+
+  // Native "decoderStalled" (patched better_player_plus): no exception, the
+  // player just never leaves buffering with a full buffer — the decoder
+  // can't take this video. Same recovery as an explicit capability error.
+  void _onDecoderStalled(Map<String, dynamic>? p) {
+    int? known(Object? v) => (v is int && v > 0) ? v : null;
+    final failed = FailedVideoFormat(
+      width: known(p?['width']),
+      height: known(p?['height']),
+      bitrate: known(p?['bitrate']),
+    );
+    perf('exo: decoder stalled on ${failed.sizeLabel ?? '?'}'
+        '@${failed.bitrate ?? '?'} (full buffer, no frames)');
+    if (_capRecovering) return;
+    if (_tryDecoderFallback(failed)) return;
+    _buffering = false;
+    _failed = true;
+    final size = failed.sizeLabel;
+    onError?.call('Il dispositivo non riesce a riprodurre questo video'
+        '${size == null ? '' : ' ($size)'}');
+    _emit();
   }
 
   /// Both error paths (the `exception` event and the value listener's

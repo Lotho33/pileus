@@ -117,6 +117,7 @@ internal class BetterPlayer(
     private val frozenRunnable = object : Runnable {
         override fun run() {
             checkVideoFrozen()
+            checkDecoderStall()
             maybeSendVideoStats()
             frozenHandler.postDelayed(this, FROZEN_CHECK_INTERVAL_MS)
         }
@@ -126,6 +127,10 @@ internal class BetterPlayer(
     private var frozenTicks = 0
     private var frozenReattached = false
     private var statsElapsedMs = 0L
+    // PILEUS PATCH: decoder-stall detector, see checkDecoderStall().
+    private var stallTicks = 0
+    private var stallLastRendered = -1
+    private var stallReported = false
     // PILEUS PATCH: BehindLiveWindowException recoveries, see onPlayerError.
     private val liveWindowRecoveries = ArrayDeque<Long>()
 
@@ -185,6 +190,9 @@ internal class BetterPlayer(
     ) {
         this.key = key
         isInitialized = false
+        stallTicks = 0
+        stallLastRendered = -1
+        stallReported = false
         val uri = dataSource?.toUri()
         var dataSourceFactory: DataSource.Factory?
         val userAgent = getUserAgent(headers)
@@ -887,6 +895,44 @@ internal class BetterPlayer(
         player.seekToDefaultPosition()
         player.prepare()
         return true
+    }
+
+    // PILEUS PATCH. A decoder that silently can't handle the stream (no
+    // exception: e.g. a variant declared 1920x1080 in the playlist that is
+    // really 1920x1440, on a stick whose decoder claims to cope) leaves
+    // ExoPlayer in STATE_BUFFERING forever with a full buffer — the video
+    // renderer never becomes ready. That combination is not the network:
+    // ≥8s already buffered, wanting to play, and not one new frame for
+    // ~8s. Reported once per source as "decoderStalled" so Dart can fall
+    // back to a lower quality.
+    private fun checkDecoderStall() {
+        val player = exoPlayer ?: return
+        val format = player.videoFormat
+        val counters = player.videoDecoderCounters
+        counters?.ensureUpdated()
+        val rendered = counters?.renderedOutputBufferCount ?: 0
+        val stuck = format != null && player.playWhenReady &&
+            player.playbackState == Player.STATE_BUFFERING &&
+            player.totalBufferedDuration >= 8000 &&
+            rendered == stallLastRendered
+        stallLastRendered = rendered
+        if (!stuck) {
+            stallTicks = 0
+            return
+        }
+        stallTicks++
+        if (stallTicks < 4 || stallReported || format == null) return
+        stallReported = true
+        Log.w(
+            TAG, "decoder stalled: ${format.width}x${format.height} @${format.bitrate} " +
+                "buffered=${player.totalBufferedDuration}ms rendered=$rendered"
+        )
+        val event: MutableMap<String, Any> = HashMap()
+        event["event"] = "decoderStalled"
+        event["width"] = format.width
+        event["height"] = format.height
+        event["bitrate"] = format.bitrate
+        eventSink.success(event)
     }
 
     // PILEUS PATCH: field diagnostics. Cumulative decoder counters and the

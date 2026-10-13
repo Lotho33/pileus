@@ -118,4 +118,19 @@ void main() {
     await tester.pump(const Duration(seconds: 2));
     expect(seeks, [95]);
   });
+
+  testWidgets('press/release bursts (CEC) keep accelerating', (tester) async {
+    await pumpBar(tester);
+    // 8 short press/release pairs, 360ms apart: each press lands within the
+    // commit window, so the ramp's ticks carry over instead of restarting.
+    for (var i = 0; i < 8; i++) {
+      await tester.sendKeyDownEvent(LogicalKeyboardKey.arrowRight);
+      await tester.pump(const Duration(milliseconds: 360));
+      await tester.sendKeyUpEvent(LogicalKeyboardKey.arrowRight);
+    }
+    await tester.pump(const Duration(milliseconds: 800));
+    expect(seeks.length, 1);
+    // 8 presses × 5s + ticks 1..8 (5,5,10,10,10,30,30,30) = 40 + 130.
+    expect(seeks.single, 270);
+  });
 }

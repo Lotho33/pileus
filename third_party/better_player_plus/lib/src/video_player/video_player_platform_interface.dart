@@ -483,6 +483,9 @@ enum VideoEventType {
   /// PILEUS PATCH (Android): the video's display size changed ([VideoEvent.size]).
   videoSizeChanged,
 
+  /// PILEUS PATCH (Android): decoder stalled ([VideoEvent.extras]).
+  decoderStalled,
+
   /// An unknown event has been received.
   unknown,
 }

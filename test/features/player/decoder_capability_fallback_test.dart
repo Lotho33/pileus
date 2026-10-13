@@ -105,5 +105,16 @@ void main() {
       ];
       expect(pickDecoderFallback(variants, failed2160, {}), 1);
     });
+
+    test('a variant that lies about its height is skipped by bitrate', () {
+      // Declared "1080p" @4.5M is the stream that really is 1920x1440.
+      const failed = FailedVideoFormat(height: 1440, bitrate: 4500000);
+      final variants = [
+        (height: 1080, bitrate: 4500000),
+        (height: 720, bitrate: 2500000),
+        (height: 480, bitrate: 1000000),
+      ];
+      expect(pickDecoderFallback(variants, failed, {}), 1);
+    });
   });
 }

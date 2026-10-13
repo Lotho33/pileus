@@ -65,6 +65,15 @@ class _TvFocusableState extends State<TvFocusable> {
 
   FocusNode get _node => widget.focusNode ?? (_ownNode ??= FocusNode());
 
+  // A caller-supplied node can already hold focus when this mounts (a node
+  // reused across a widget swap) — no onFocusChange fires for that, so start
+  // from its real state instead of an unfocused highlight.
+  @override
+  void initState() {
+    super.initState();
+    _focused = widget.focusNode?.hasFocus ?? false;
+  }
+
   @override
   void didUpdateWidget(TvFocusable old) {
     super.didUpdateWidget(old);

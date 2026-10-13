@@ -79,7 +79,11 @@ class _ContinueWatchingStripState extends State<_ContinueWatchingStrip> {
       // firing while the user has since moved into the side nav or elsewhere)
       // yanks focus back into this strip out from under them. Same guard as
       // card_carousel_block_view.dart's _FixedCarouselView/_LiveRowView.
-      final hadFocus = anyHasFocus(_fns);
+      // A removal started from this strip's own context menu counts as
+      // "had focus" even if the dialog's focus hand-back hasn't landed yet
+      // when the shorter list arrives.
+      final hadFocus = anyHasFocus(_fns) || _removalPending;
+      _removalPending = false;
       for (final n in _fns) {
         n.dispose();
       }
@@ -89,8 +93,16 @@ class _ContinueWatchingStripState extends State<_ContinueWatchingStrip> {
       if (widget.items.isNotEmpty && hadFocus) {
         final target = prevFocused.clamp(0, widget.items.length - 1);
         if (target < _fns.length) {
+          _focusedIndex = target;
+          final item = widget.items[target];
           WidgetsBinding.instance.addPostFrameCallback((_) {
-            if (mounted) _fns[target].requestFocus();
+            if (!mounted) return;
+            _fns[target].requestFocus();
+            // Explicitly: the node listener only reports a *changed* index,
+            // and after removing the focused entry the index is usually the
+            // same — just holding a different item now. Without this the
+            // hero kept showing the removed entry's metadata.
+            widget.onItemFocused?.call(item);
           });
         }
       }
@@ -197,7 +209,13 @@ class _ContinueWatchingStripState extends State<_ContinueWatchingStrip> {
     );
   }
 
+  bool _removalPending = false;
+
   void _onDelete(BuildContext ctx, ContinueWatchingItem item) {
+    _removalPending = true;
+    // A removal that fails never shortens the list — don't let the flag
+    // linger and pull focus back here on some later background reload.
+    Future.delayed(const Duration(seconds: 5), () => _removalPending = false);
     ctx.read<ContinueWatchingBloc>().add(
           RemoveContinueWatchingEvent(item.providerID, item.playableID),
         );

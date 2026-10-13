@@ -1105,6 +1105,8 @@ class BetterPlayerController {
         );
       case VideoEventType.bufferingEnd:
         _postEvent(BetterPlayerEvent(BetterPlayerEventType.bufferingEnd));
+      case VideoEventType.decoderStalled:
+        _postEvent(BetterPlayerEvent(BetterPlayerEventType.decoderStalled, parameters: <String, dynamic>{...?event.extras}));
       case VideoEventType.videoStats:
         _postEvent(
           BetterPlayerEvent(
