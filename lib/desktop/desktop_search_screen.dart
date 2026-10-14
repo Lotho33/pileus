@@ -14,6 +14,7 @@ import '../features/media/bloc/discovery_state.dart';
 import '../features/media/bloc/plugin_bloc.dart';
 import '../features/media/bloc/plugin_state.dart';
 import '../features/media/data/media_repository.dart';
+import '../features/media/data/search_filters_loader.dart';
 import '../features/media/presentation/widgets/plugin_nav.dart'
     show pluginLabel;
 import '../shared/widgets/filter_sheet.dart';
@@ -25,7 +26,10 @@ const _kMinLen = 2;
 /// Desktop search pane: a wide search field + plugin selector + filter
 /// sheet, results in a responsive grid.
 class DesktopSearchScreen extends StatefulWidget {
-  const DesktopSearchScreen({super.key});
+  /// Whether this section is on screen (desktop_shell.dart's IndexedStack
+  /// keeps it alive while hidden) — see SearchFiltersLoader.setVisible.
+  final bool visible;
+  const DesktopSearchScreen({super.key, this.visible = true});
 
   @override
   State<DesktopSearchScreen> createState() => _DesktopSearchScreenState();
@@ -43,8 +47,10 @@ class _DesktopSearchScreenState extends State<DesktopSearchScreen> {
 
   String? _pluginId;
   String _submitted = '';
-  List<SearchFilter> _filters = const [];
-  int _filtersToken = 0;
+  // See SearchFiltersLoader — same retrying loader as mobile/TV.
+  late final _filtersLoader = SearchFiltersLoader(getIt<MediaRepository>())
+    ..addListener(_onFiltersChanged);
+  List<SearchFilter> get _filters => _filtersLoader.filters;
   final Map<String, String> _active = {};
   // Live-as-you-type search, matching TV's quick-search/search screens —
   // same 350ms debounce as those and as the mobile search screen.
@@ -60,10 +66,22 @@ class _DesktopSearchScreenState extends State<DesktopSearchScreen> {
           getIt<AuthBloc>().add(const SessionExpiredEvent()),
     );
     _scrollCtrl.addListener(_onScroll);
+    _filtersLoader.setVisible(widget.visible);
+  }
+
+  @override
+  void didUpdateWidget(DesktopSearchScreen oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    _filtersLoader.setVisible(widget.visible);
+  }
+
+  void _onFiltersChanged() {
+    if (mounted) setState(() {});
   }
 
   @override
   void dispose() {
+    _filtersLoader.dispose();
     _debounce?.cancel();
     _scrollCtrl.removeListener(_onScroll);
     _scrollCtrl.dispose();
@@ -111,24 +129,11 @@ class _DesktopSearchScreenState extends State<DesktopSearchScreen> {
     setState(() {
       _pluginId = id;
       _active.clear();
-      _filters = const [];
       _submitted = '';
     });
     _ctrl.clear();
     _bloc.add(const ClearSearchEvent());
-    _loadFilters(id);
-  }
-
-  Future<void> _loadFilters(String pluginId) async {
-    final token = ++_filtersToken;
-    try {
-      final resp = await getIt<MediaRepository>().getSearchFilters(pluginId);
-      if (!mounted || token != _filtersToken) return;
-      setState(() => _filters = resp.filters);
-    } catch (_) {
-      if (!mounted || token != _filtersToken) return;
-      setState(() => _filters = const []);
-    }
+    _filtersLoader.setPlugin(id);
   }
 
   /// [unfocus] dismisses the field's focus — right for an explicit submit/
@@ -166,23 +171,21 @@ class _DesktopSearchScreenState extends State<DesktopSearchScreen> {
     'range',
   };
 
-  /// Always re-fetches right before opening — see mobile_search_screen.dart's
-  /// identical `_openFilters` for the full reasoning: `DesktopSearchScreen`
-  /// is the same kind of persistent `IndexedStack` tab (`desktop_shell.dart`)
-  /// as mobile's, so `initState`/the one plugin-resolution-triggered
-  /// `_loadFilters` call only ever runs once per cold start, with no retry if
-  /// that attempt raced the app's own startup. A plugin that genuinely
-  /// implements filters must always be able to show them.
+  /// Opens the filter sheet; while the filters are missing (loading or the
+  /// last attempt failed) a click retries right away — see
+  /// mobile_search_screen.dart's identical method.
   Future<void> _openFilters() async {
-    final id = _pluginId;
-    if (id == null) return;
-    await _loadFilters(id);
-    if (!mounted) return;
+    if (_pluginId == null) return;
+    if (!_filtersLoader.hasFilters) {
+      await _filtersLoader.retryNow();
+      if (!mounted) return;
+    }
     if (!_filters.any((f) => _supportedFilterTypes.contains(f.type))) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-            content: Text('Questo plugin non ha filtri di ricerca.')),
-      );
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text(_filtersLoader.status == FiltersStatus.error
+            ? 'Filtri non disponibili al momento: riprovo in automatico.'
+            : 'Questo plugin non ha filtri di ricerca.'),
+      ));
       return;
     }
     final result = await showFilterSheet(context,
@@ -236,16 +239,22 @@ class _DesktopSearchScreenState extends State<DesktopSearchScreen> {
                         ),
                       const SizedBox(width: 8),
                       // Always present so the toolbar doesn't reflow between
-                      // plugins. Enabled whenever a plugin is selected, not
-                      // gated on `hasFilters` — see _openFilters' doc
-                      // comment; tapping it always re-fetches and tells the
-                      // user plainly if this plugin genuinely has none.
+                      // plugins, and enabled whenever a plugin is selected:
+                      // a spinner while the filters load, and a click while
+                      // loading/failed retries at once (see _openFilters).
                       Badge(
                         isLabelVisible: _active.isNotEmpty,
                         label: Text('${_active.length}'),
                         child: OutlinedButton.icon(
                           onPressed: active != null ? _openFilters : null,
-                          icon: const Icon(Icons.tune_rounded, size: 18),
+                          icon: _filtersLoader.isLoading
+                              ? const SizedBox(
+                                  width: 16,
+                                  height: 16,
+                                  child: CircularProgressIndicator(
+                                      strokeWidth: 2),
+                                )
+                              : const Icon(Icons.tune_rounded, size: 18),
                           label: const Text('Filtri'),
                         ),
                       ),

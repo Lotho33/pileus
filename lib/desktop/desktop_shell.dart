@@ -197,7 +197,8 @@ class _DesktopShellState extends State<DesktopShell> {
                           index: _section.index,
                           children: [
                             _homePane(ps, active),
-                            const DesktopSearchScreen(),
+                            DesktopSearchScreen(
+                                visible: _section == DesktopSection.search),
                             const DesktopSettingsPane(),
                           ],
                         ),

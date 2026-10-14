@@ -51,10 +51,10 @@ class _MobileShellState extends State<MobileShell> {
         backgroundColor: AppTheme.bg,
         body: IndexedStack(
           index: _tab,
-          children: const [
-            MobileHomeScreen(),
-            MobileSearchScreen(),
-            MobileSettingsScreen(),
+          children: [
+            const MobileHomeScreen(),
+            MobileSearchScreen(visible: _tab == 1),
+            const MobileSettingsScreen(),
           ],
         ),
         bottomNavigationBar: NavigationBarTheme(

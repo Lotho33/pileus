@@ -92,6 +92,9 @@ class _FilterBtn extends StatefulWidget {
   final int activeCount;
   final VoidCallback onTap;
   final bool enabled;
+  // Filters still loading: a small spinner in place of the icon (the button
+  // stays focusable — OK retries, see _onFilterBtn).
+  final bool loading;
   final FocusNode? focusNode;
   final VoidCallback? onNavigateLeft;
   final VoidCallback? onNavigateDown;
@@ -100,6 +103,7 @@ class _FilterBtn extends StatefulWidget {
     required this.activeCount,
     required this.onTap,
     this.enabled = true,
+    this.loading = false,
     this.focusNode,
     this.onNavigateLeft,
     this.onNavigateDown,
@@ -159,11 +163,16 @@ class _FilterBtnState extends State<_FilterBtn> {
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(Icons.tune_rounded,
-                size: widget.barH * 0.32,
-                color: focused || hasActive
-                    ? AppTheme.textHigh
-                    : AppTheme.textMid),
+            if (widget.loading)
+              PileusSpinner(
+                  size: widget.barH * 0.32,
+                  color: focused ? AppTheme.textHigh : AppTheme.textMid)
+            else
+              Icon(Icons.tune_rounded,
+                  size: widget.barH * 0.32,
+                  color: focused || hasActive
+                      ? AppTheme.textHigh
+                      : AppTheme.textMid),
             if (hasActive) ...[
               SizedBox(width: widget.barH * 0.10),
               Text(

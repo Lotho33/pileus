@@ -61,7 +61,15 @@ class _SearchViewState extends State<_SearchView> {
   // focused-item info panel below it need to be readable.
   bool _keyboardVisible = true;
 
-  List<SearchFilter> _availableFilters = [];
+  // Retries until the plugin's filters arrive — see SearchFiltersLoader
+  // (shared with mobile/desktop).
+  late final _filtersLoader = SearchFiltersLoader(getIt<MediaRepository>())
+    ..addListener(_onFiltersChanged);
+  List<SearchFilter> get _availableFilters => _filtersLoader.filters;
+
+  void _onFiltersChanged() {
+    if (mounted) setState(() {});
+  }
 
   // Last non-empty result set — kept on screen (with a small spinner over
   // it) while the next search loads. Swapping the whole carousel for a
@@ -83,7 +91,7 @@ class _SearchViewState extends State<_SearchView> {
     // keystroke came from — this is also why the display field below no
     // longer needs to be a real TextField/EditableText at all.
     _controller.addListener(_onControllerChanged);
-    _loadFilters();
+    _filtersLoader.setPlugin(widget.pluginId);
     // Open with results already on screen: an empty query is a valid
     // request — every plugin answers it with its default (popularity)
     // ordering — so fire it now rather than showing a bare prompt until
@@ -124,43 +132,6 @@ class _SearchViewState extends State<_SearchView> {
     }
   }
 
-  // The first GetSearchFilters for a plugin can come back empty (or fail)
-  // while the plugin is still warming up server-side — the Filtri button
-  // then stayed disabled on the first visit and only worked on the second
-  // (empty answers aren't cached, so the later visit asked again). Retry a
-  // few times, backing off, while this screen is open.
-  static const _filterRetryDelays = [
-    Duration(milliseconds: 1500),
-    Duration(seconds: 4),
-    Duration(seconds: 10),
-  ];
-
-  Future<void> _loadFilters([int attempt = 0]) async {
-    String outcome;
-    try {
-      final repo = getIt<MediaRepository>();
-      final resp = await repo.getSearchFilters(widget.pluginId);
-      if (!mounted) return;
-      if (resp.filters.isNotEmpty) {
-        perf('search: filters ${widget.pluginId} → ${resp.filters.length} '
-            '(attempt ${attempt + 1})');
-        setState(() => _availableFilters = resp.filters);
-        return;
-      }
-      outcome = 'empty';
-    } catch (e) {
-      outcome = 'error: $e';
-    }
-    if (!mounted) return;
-    perf('search: filters ${widget.pluginId} $outcome '
-        '(attempt ${attempt + 1})');
-    if (attempt < _filterRetryDelays.length) {
-      Future.delayed(_filterRetryDelays[attempt], () {
-        if (mounted && _availableFilters.isEmpty) _loadFilters(attempt + 1);
-      });
-    }
-  }
-
   // One builder for the live results and the ones kept up while the next
   // search loads (same widget type and position, so Flutter keeps the
   // carousel's element and its cards instead of rebuilding them).
@@ -180,6 +151,7 @@ class _SearchViewState extends State<_SearchView> {
 
   @override
   void dispose() {
+    _filtersLoader.dispose();
     _debounceTimer?.cancel();
     _controller.removeListener(_onControllerChanged);
     _controller.dispose();
@@ -272,6 +244,17 @@ class _SearchViewState extends State<_SearchView> {
           query: _lastQuery,
           filters: Map.from(_activeFilters)));
     }
+  }
+
+  Future<void> _onFilterBtn() async {
+    // Filters not there yet (loading, or the last attempt failed): OK
+    // retries right away and opens the panel if they arrive, instead of the
+    // button being a dead control.
+    if (!_filtersLoader.hasFilters) {
+      await _filtersLoader.retryNow();
+      if (!mounted || !_filtersLoader.hasFilters) return;
+    }
+    _toggleFilterPanel();
   }
 
   void _toggleFilterPanel() {
@@ -418,9 +401,13 @@ class _SearchViewState extends State<_SearchView> {
                                 SizedBox(width: w * 0.006),
                                 _FilterBtn(
                                   barH: barH,
-                                  enabled: _availableFilters.isNotEmpty,
+                                  // Only a plugin that answered "no filters"
+                                  // dims it; loading/failed stays usable.
+                                  enabled: _filtersLoader.status !=
+                                      FiltersStatus.none,
+                                  loading: _filtersLoader.isLoading,
                                   activeCount: _activeFilters.length,
-                                  onTap: _toggleFilterPanel,
+                                  onTap: _onFilterBtn,
                                   focusNode: _filterBtnFn,
                                   onNavigateLeft: () =>
                                       _backBtnFn.requestFocus(),

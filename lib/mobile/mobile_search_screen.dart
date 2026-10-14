@@ -16,6 +16,7 @@ import '../features/media/bloc/plugin_bloc.dart';
 import '../features/media/bloc/plugin_event.dart';
 import '../features/media/bloc/plugin_state.dart';
 import '../features/media/data/media_repository.dart';
+import '../features/media/data/search_filters_loader.dart';
 import '../features/media/presentation/widgets/plugin_nav.dart'
     show pluginLabel;
 import '../shared/widgets/filter_sheet.dart';
@@ -28,7 +29,11 @@ const _kMinLen = 2;
 /// Tab-hosted search (the "Cerca" destination of [MobileShell]). Own plugin
 /// picker + a filter sheet; no route arguments.
 class MobileSearchScreen extends StatefulWidget {
-  const MobileSearchScreen({super.key});
+  /// Whether this tab is the one on screen (MobileShell's IndexedStack keeps
+  /// it alive while hidden). Filter retries pause while hidden and fire
+  /// again when it comes back.
+  final bool visible;
+  const MobileSearchScreen({super.key, this.visible = true});
 
   @override
   State<MobileSearchScreen> createState() => _MobileSearchScreenState();
@@ -62,8 +67,13 @@ class _MobileSearchScreenState extends State<MobileSearchScreen> {
   String? _pluginId;
   String _submitted = '';
 
-  List<SearchFilter> _filters = const [];
-  int _filtersToken = 0; // guards against a stale getSearchFilters response
+  // Retries until the plugin's filters actually arrive — see
+  // SearchFiltersLoader. This tab's initState runs at app start, often
+  // before gRPC/auth is ready; the single attempt it used to make could
+  // leave the filters empty for the whole session.
+  late final _filtersLoader = SearchFiltersLoader(getIt<MediaRepository>())
+    ..addListener(_onFiltersChanged);
+  List<SearchFilter> get _filters => _filtersLoader.filters;
   final Map<String, String> _active = {};
   // Live-as-you-type search, matching TV (quick_search_area/area_state.dart)
   // and the desktop search screen — this used to only fire on submit/enter,
@@ -90,14 +100,25 @@ class _MobileSearchScreenState extends State<MobileSearchScreen> {
     // case), its filters were never fetched at all: the filter button
     // stayed permanently disabled for that plugin, even when it genuinely
     // has filters, until the user happened to switch plugins from Home.
-    final id = _pluginId;
-    if (id != null) _loadFilters(id);
+    _filtersLoader.setVisible(widget.visible);
+    _filtersLoader.setPlugin(_pluginId);
     _activePlugin.addListener(_onActiveChanged);
     _scrollCtrl.addListener(_onScroll);
   }
 
   @override
+  void didUpdateWidget(MobileSearchScreen oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    _filtersLoader.setVisible(widget.visible);
+  }
+
+  void _onFiltersChanged() {
+    if (mounted) setState(() {});
+  }
+
+  @override
   void dispose() {
+    _filtersLoader.dispose();
     _debounce?.cancel();
     _activePlugin.removeListener(_onActiveChanged);
     _scrollCtrl.removeListener(_onScroll);
@@ -159,24 +180,11 @@ class _MobileSearchScreenState extends State<MobileSearchScreen> {
     setState(() {
       _pluginId = id;
       _active.clear();
-      _filters = const [];
       _submitted = '';
     });
     _ctrl.clear();
     _bloc.add(const ClearSearchEvent());
-    if (id != null) _loadFilters(id);
-  }
-
-  Future<void> _loadFilters(String pluginId) async {
-    final token = ++_filtersToken;
-    try {
-      final resp = await getIt<MediaRepository>().getSearchFilters(pluginId);
-      if (!mounted || token != _filtersToken) return;
-      setState(() => _filters = resp.filters);
-    } catch (_) {
-      if (!mounted || token != _filtersToken) return;
-      setState(() => _filters = const []);
-    }
+    _filtersLoader.setPlugin(id);
   }
 
   /// [unfocus] dismisses the keyboard — right for an explicit submit/clear/
@@ -226,30 +234,22 @@ class _MobileSearchScreenState extends State<MobileSearchScreen> {
     'range',
   };
 
-  /// Always re-fetches right before opening, rather than trusting whatever
-  /// `_filters` snapshot happens to be sitting around. `MobileSearchScreen`
-  /// is a persistent tab in `MobileShell`'s `IndexedStack` — unlike TV/
-  /// desktop's routed search screens, which get a brand new `_loadFilters`
-  /// call every single time the user navigates in, this screen's `initState`
-  /// only ever runs once, at cold app start — a single proactive load
-  /// attempt racing the app's own startup (e.g. the gRPC connection still
-  /// warming up) can leave `_filters` empty for the rest of the session
-  /// with nothing to ever retry it: filters would then stay unselectable
-  /// until the next search. A
-  /// plugin that genuinely implements filters must always be able to show
-  /// them, not just if that one early attempt happened to land after
-  /// everything else was ready.
+  /// Opens the filter sheet. If the filters aren't there yet (still
+  /// loading, or the last attempt failed) the tap retries right away instead
+  /// of being a dead button, and opens the sheet if they arrive.
   Future<void> _openFilters() async {
     if (!TapGuard.acquire()) return; // double tap — see tap_guard.dart
-    final id = _pluginId;
-    if (id == null) return;
-    await _loadFilters(id);
-    if (!mounted) return;
+    if (_pluginId == null) return;
+    if (!_filtersLoader.hasFilters) {
+      await _filtersLoader.retryNow();
+      if (!mounted) return;
+    }
     if (!_filters.any((f) => _supportedFilterTypes.contains(f.type))) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-            content: Text('Questo plugin non ha filtri di ricerca.')),
-      );
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text(_filtersLoader.status == FiltersStatus.error
+            ? 'Filtri non disponibili al momento: riprovo in automatico.'
+            : 'Questo plugin non ha filtri di ricerca.'),
+      ));
       return;
     }
     final result = await showFilterSheet(
@@ -341,14 +341,10 @@ class _MobileSearchScreenState extends State<MobileSearchScreen> {
                       ),
                     ),
                     // Always rendered so the search bar doesn't reflow when
-                    // switching between plugins. Enabled whenever a plugin is
-                    // selected, not gated on `hasFilters` — that reflects
-                    // only whatever `_filters` snapshot happened to load
-                    // (see _openFilters' doc comment for why that's not
-                    // reliable enough to gate on); tapping it always
-                    // re-fetches and tells the user plainly if this plugin
-                    // genuinely has none, rather than leaving a
-                    // never-explained disabled button.
+                    // switching between plugins, and enabled whenever a
+                    // plugin is selected: while the filters are loading it
+                    // shows a spinner, and a tap while loading/failed retries
+                    // at once (see _openFilters).
                     Padding(
                       padding: const EdgeInsets.only(left: 4),
                       child: Badge(
@@ -357,7 +353,14 @@ class _MobileSearchScreenState extends State<MobileSearchScreen> {
                         child: IconButton(
                           tooltip: 'Filtri',
                           onPressed: active != null ? _openFilters : null,
-                          icon: const Icon(Icons.tune_rounded),
+                          icon: _filtersLoader.isLoading
+                              ? const SizedBox(
+                                  width: 20,
+                                  height: 20,
+                                  child: CircularProgressIndicator(
+                                      strokeWidth: 2),
+                                )
+                              : const Icon(Icons.tune_rounded),
                         ),
                       ),
                     ),
