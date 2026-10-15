@@ -11,6 +11,7 @@ import '../../../core/grpc/auth_interceptor.dart';
 import '../../../core/grpc/clients/media_client.dart' hide ContinueWatchingItem;
 import '../../../core/grpc/grpc_errors.dart';
 import '../../auth/data/auth_repository.dart';
+import '../../player/content_view_mode.dart';
 import '../../settings/data/settings_repository.dart';
 import 'continue_watching_item.dart';
 import 'plugin_prefs.dart';
@@ -722,7 +723,7 @@ class MediaRepository {
         parentId: parentId,
         pluginId: pluginId,
       ));
-      return resp.items
+      final items = resp.items
           .map((i) => ContinueWatchingItem(
                 providerID: i.pluginId,
                 playableID: i.mediaId,
@@ -740,6 +741,13 @@ class MediaRepository {
                 episodeNumber: i.episodeNumber,
               ))
           .toList();
+      // A format remembered for a content lasts as long as its Continue
+      // Watching row — only a successful, unfiltered fetch can say which
+      // rows are gone (never the [] an error returns below).
+      if (parentId == null && pluginId == null) {
+        contentViewModes.prune(items, complete: items.length < limit);
+      }
+      return items;
     } catch (e) {
       if (_handledSessionExpiry(e)) return [];
       if (_handledProfileLock(e)) return [];

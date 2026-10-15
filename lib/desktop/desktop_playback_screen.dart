@@ -338,6 +338,7 @@ class _ViewState extends State<_View> with WindowListener {
         _saveProgressGuarded();
       } catch (_) {}
     }
+    _progress.close(); // per-content "Formato", see content_view_mode.dart
     // Best-effort, never blocks teardown — see ReleasePlaybackRequest's own
     // doc (contract "One device playing per profile"): frees this device's
     // hold on the lease at once instead of leaving it to lapse by itself
@@ -654,6 +655,7 @@ class _ViewState extends State<_View> with WindowListener {
         _error = null;
       });
       _progress = PlaybackProgress(
+          replacing: _progress,
           args: _currentArgs(),
           mediaId: streamId,
           onPlaybackElsewhere: _onPlaybackTakenOver);
@@ -726,6 +728,7 @@ class _ViewState extends State<_View> with WindowListener {
         _error = null;
       });
       _progress = PlaybackProgress(
+          replacing: _progress,
           args: _currentArgs(),
           mediaId: match.id,
           onPlaybackElsewhere: _onPlaybackTakenOver);
@@ -796,6 +799,7 @@ class _ViewState extends State<_View> with WindowListener {
                 ? _lastPos.inSeconds
                 : (sameTitle ? widget.args.seekTo : 0)));
     _progress = PlaybackProgress(
+        replacing: _progress,
         args: _currentArgs(seekTo: retrySec),
         mediaId: _curStreamId ?? _curMediaId,
         onPlaybackElsewhere: _onPlaybackTakenOver);

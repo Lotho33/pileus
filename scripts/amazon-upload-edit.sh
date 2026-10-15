@@ -5,7 +5,8 @@
 #
 #   scripts/amazon-upload-edit.sh path/to/app-*.apk
 #
-# Three calls, in order: get an OAuth2 access token, create an edit, upload
+# Three steps, in order: get an OAuth2 access token, reuse the open edit or
+# create one (see step 2), upload
 # each APK to it. Deliberately stops there — it never commits/submits the
 # edit. The edit is left in the Developer Console as IN_PROGRESS; open it,
 # review it, and submit it for review by hand. release.yml's amazon-submit
@@ -86,15 +87,59 @@ if [ -z "$ACCESS_TOKEN" ]; then
 fi
 echo "Token ok (scade in $(echo "$token_response" | jq -r '.expires_in // "?"')s)."
 
-echo "== 2/3: creo un nuovo edit per app $AMAZON_APP_ID =="
-edit_response="$(req POST "$API/edits")"
-EDIT_ID="$(echo "$edit_response" | jq -r '.id // empty')"
-if [ -z "$EDIT_ID" ]; then
-  echo "::error::editId non trovato nella risposta:" >&2
-  echo "$edit_response" >&2
+echo "== 2/3: edit per app $AMAZON_APP_ID =="
+# Amazon allows only ONE open edit per app: POST /edits answers 412
+# error_new_version_creation_not_allowed while one exists (e.g. left by a
+# previous release that was never submitted) AND while a submitted version
+# is still under review. So: reuse the open edit if there is one (dropping
+# the APKs a previous run put in it), otherwise create a new one.
+# (no open edit = 200 with an empty body/object or 404, depending on which
+# doc you trust — both mean "none" here; anything else fails loud.)
+tmp="$(mktemp)"
+status="$(curl -sS -o "$tmp" -w '%{http_code}' "$API/edits" \
+  -H "Authorization: Bearer $ACCESS_TOKEN")"
+active_edit="$(cat "$tmp")"; rm -f "$tmp"
+if [ "$status" != 200 ] && [ "$status" != 404 ]; then
+  echo "::error::GET $API/edits -> HTTP $status" >&2
+  echo "$active_edit" >&2
   exit 1
 fi
-echo "Edit creato: $EDIT_ID ($(echo "$edit_response" | jq -r '.status // "?"'))"
+EDIT_ID=""
+[ "$status" = 200 ] && EDIT_ID="$(echo "$active_edit" | jq -r '.id // empty' 2>/dev/null || true)"
+if [ -n "$EDIT_ID" ]; then
+  echo "Edit aperto esistente: $EDIT_ID ($(echo "$active_edit" | jq -r '.status // "?"')) — lo riuso."
+  for apk_id in $(req GET "$API/edits/$EDIT_ID/apks" | jq -r '.[]?.id // empty'); do
+    etag="$(curl -sS -D - -o /dev/null "$API/edits/$EDIT_ID/apks/$apk_id" \
+      -H "Authorization: Bearer $ACCESS_TOKEN" | tr -d '\r' | awk 'tolower($1)=="etag:"{print $2}')"
+    echo "  rimuovo APK precedente $apk_id"
+    req DELETE "$API/edits/$EDIT_ID/apks/$apk_id" -H "If-Match: $etag" >/dev/null
+  done
+else
+  tmp="$(mktemp)"
+  status="$(curl -sS -o "$tmp" -w '%{http_code}' -X POST "$API/edits" \
+    -H "Authorization: Bearer $ACCESS_TOKEN")"
+  edit_response="$(cat "$tmp")"; rm -f "$tmp"
+  if [ "$status" = 412 ] && echo "$edit_response" | grep -q error_new_version_creation_not_allowed; then
+    # No open edit and still no new one allowed: the last submitted version
+    # is under review (or awaiting publication). Nothing this job can fix —
+    # warn instead of failing every release until Amazon finishes.
+    echo "::warning::Amazon non permette un nuovo edit: una versione è ancora in revisione/in attesa di pubblicazione. APK NON caricati — ricarica questo tag (workflow_dispatch) a revisione conclusa."
+    echo "$edit_response"
+    exit 0
+  fi
+  if [ "$status" -lt 200 ] || [ "$status" -ge 300 ]; then
+    echo "::error::POST $API/edits -> HTTP $status" >&2
+    echo "$edit_response" >&2
+    exit 1
+  fi
+  EDIT_ID="$(echo "$edit_response" | jq -r '.id // empty')"
+  if [ -z "$EDIT_ID" ]; then
+    echo "::error::editId non trovato nella risposta:" >&2
+    echo "$edit_response" >&2
+    exit 1
+  fi
+  echo "Edit creato: $EDIT_ID ($(echo "$edit_response" | jq -r '.status // "?"'))"
+fi
 
 echo "== 3/3: carico $# APK =="
 for apk in "$@"; do

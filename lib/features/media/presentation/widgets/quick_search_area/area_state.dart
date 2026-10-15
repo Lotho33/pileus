@@ -62,6 +62,14 @@ class _QuickSearchAreaState extends State<QuickSearchArea> {
     widget.barFocusNode.addListener(_onBarFocusRequested);
     FocusManager.instance.addListener(_onGlobalFocusChange);
     _attachController(widget.controller);
+    // This area is rebuilt (keyed) for each plugin the home switches to:
+    // ask for its search filters now, so they're in MediaRepository's cache
+    // (and mycelium's) by the time the search screen opens, instead of that
+    // screen's first request racing the home's catalogs/details for the
+    // plugin. Best effort — the search screen's loader retries on its own.
+    unawaited(getIt<MediaRepository>()
+        .getSearchFilters(widget.pluginId)
+        .then((_) {}, onError: (_) {}));
   }
 
   @override

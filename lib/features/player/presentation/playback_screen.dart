@@ -27,6 +27,7 @@ import '../bloc/playback_state.dart';
 import '../bloc/player_ui_cubit.dart';
 import '../bloc/player_ui_state.dart';
 import '../audio_lang_pref.dart';
+import '../content_view_mode.dart';
 import '../engine/player_engine.dart';
 import '../episode_poster.dart';
 import '../episode_prefetch.dart';

@@ -31,18 +31,10 @@ enum VideoViewMode {
 }
 
 /// The current mode, shared by every player screen and engine — so it
-/// survives episode changes and player rebuilds. Persisted per device by
-/// [bindVideoViewModeSetting].
+/// survives episode changes and player rebuilds. Remembered per content (not
+/// per device) by ContentViewModeMemory (content_view_mode.dart), which sets
+/// it whenever a player opens a title.
 final videoViewMode = ValueNotifier<VideoViewMode>(VideoViewMode.fit);
-
-/// Loads the stored mode and saves every later change.
-void bindVideoViewModeSetting({
-  required String? stored,
-  required void Function(String name) save,
-}) {
-  videoViewMode.value = VideoViewMode.fromName(stored);
-  videoViewMode.addListener(() => save(videoViewMode.value.name));
-}
 
 /// The largest box with [aspect] that fits inside [area], centred by the
 /// caller — used for the forced-ratio modes.

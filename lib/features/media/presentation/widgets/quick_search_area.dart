@@ -21,6 +21,7 @@ import '../../../../shared/widgets/open_catalog_item.dart';
 import '../../../../shared/widgets/pileus_spinner.dart';
 import '../../../../shared/widgets/tv_focusable.dart';
 import '../../bloc/discovery_bloc.dart';
+import '../../data/media_repository.dart';
 import '../../bloc/discovery_event.dart';
 import '../../bloc/discovery_state.dart';
 

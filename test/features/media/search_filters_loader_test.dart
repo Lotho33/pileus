@@ -25,7 +25,7 @@ class _FakeRepo implements MediaRepository {
 }
 
 void main() {
-  final unavailable = GrpcError.unavailable('warming up');
+  const unavailable = GrpcError.unavailable('warming up');
 
   testWidgets('UNAVAILABLE is retried with backoff until filters arrive',
       (tester) async {

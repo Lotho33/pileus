@@ -179,6 +179,9 @@ class _PlaybackViewState extends State<_PlaybackView> {
   // them (details/direct-play, an /episode/ deep link) a one-shot lookup
   // fills them in so the stored CW entry is complete.
   String _parentId = '';
+  // This title's slot in the per-content "Formato" memory — see
+  // content_view_mode.dart. Null for live (no Continue Watching row).
+  Object? _viewModeToken;
   String _plot = '';
   // Also part of the continue-watching card/hero metadata. Same rule as
   // _plot/_showTitle: seeded from args, backfilled by the one-shot
@@ -243,6 +246,14 @@ class _PlaybackViewState extends State<_PlaybackView> {
     _currentSeasonNumbers = args.seasonNumbers;
     _showTitle = args.showTitle;
     _parentId = args.parentId;
+    if (!args.isLive) {
+      // Before the first frame: the engine view reads videoViewMode.
+      _viewModeToken = contentViewModes.open(
+        pluginId: args.epPluginId,
+        parentId: args.parentId,
+        ids: [widget.mediaId, if (launchStream != null) launchStream],
+      );
+    }
     _plot = args.plot;
     _rating = args.rating;
     _genres = args.genres;
@@ -907,6 +918,8 @@ class _PlaybackViewState extends State<_PlaybackView> {
     _engine.removeListener(_onEngineChanged);
     _uiCubit.close(); // cancella internamente il suo _hideTimer
     if (!widget.args.isLive) _saveProgress();
+    final viewModeToken = _viewModeToken;
+    if (viewModeToken != null) contentViewModes.close(viewModeToken);
     // Best-effort, never blocks teardown — catches any exit path that
     // doesn't go through _exitPlayer (e.g. a profile switch/logout popping
     // the whole nav stack while the player is open). Harmless to call twice
@@ -975,6 +988,7 @@ class _PlaybackViewState extends State<_PlaybackView> {
     final pos = _engine.position;
     final dur = _engine.duration;
     if (pos.inSeconds <= 0) return;
+    _trackViewMode();
     final resp = await getIt<MediaRepository>().updateProgress(
       pluginId: widget.args.epPluginId,
       mediaId: _cwId,
@@ -1021,6 +1035,7 @@ class _PlaybackViewState extends State<_PlaybackView> {
   /// hasn't caught up yet.
   Future<void> _markOpened() async {
     if (_progressCleared) return;
+    _trackViewMode();
     final resp = await getIt<MediaRepository>().updateProgress(
       pluginId: widget.args.epPluginId,
       mediaId: _cwId,
@@ -1038,6 +1053,17 @@ class _PlaybackViewState extends State<_PlaybackView> {
       episodeNumber: _currentEpisodeNumber(),
     );
     _checkElsewhere(resp);
+  }
+
+  /// Feeds the ids Continue Watching is about to store for this title (the
+  /// stream id once resolved, the series id once looked up) to the
+  /// per-content "Formato" memory, so it still recognises the title when it
+  /// is reopened from Continue Watching.
+  void _trackViewMode() {
+    final t = _viewModeToken;
+    if (t == null) return;
+    contentViewModes
+        .track(t, parentId: _parentId, ids: [_cwId, _currentMediaId]);
   }
 
   // Once per instance — a later heartbeat after this device has already

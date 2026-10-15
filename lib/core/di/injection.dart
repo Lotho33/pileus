@@ -22,6 +22,7 @@ import '../../features/media/bloc/discovery_bloc.dart';
 import '../../features/media/bloc/plugin_bloc.dart';
 import '../../features/media/data/media_repository.dart';
 import '../../features/player/bloc/playback_bloc.dart';
+import '../../features/player/content_view_mode.dart';
 import '../../features/player/playback_episode_cache.dart';
 import '../../features/settings/bloc/profile_management_cubit.dart';
 import '../../features/settings/bloc/settings_cubit.dart';
@@ -55,6 +56,8 @@ Future<void> configureDependencies() async {
   // 2. Interceptor JWT (singleton — aggiornato post-login)
   final interceptor = AuthInterceptor();
   getIt.registerSingleton<AuthInterceptor>(interceptor);
+  // Player "Formato" remembered per content, per profile.
+  contentViewModes.bind(prefs, () => interceptor.profileId);
 
   // 3. Canale gRPC — risolve host LAN/VPN in background
   final host = await resolveGrpcHost();

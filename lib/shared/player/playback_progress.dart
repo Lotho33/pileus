@@ -2,6 +2,7 @@ import '../../core/di/injection.dart';
 import '../../core/grpc/clients/media_client.dart' show ProgressResponse;
 import '../../features/media/data/media_repository.dart';
 import '../../features/player/audio_lang_pref.dart';
+import '../../features/player/content_view_mode.dart';
 import '../../features/player/engine/player_engine.dart';
 import '../../features/player/episode_poster.dart';
 import '../../features/player/episode_prefetch.dart';
@@ -50,8 +51,24 @@ class PlaybackProgress {
     required this.args,
     required this.mediaId,
     this.onPlaybackElsewhere,
+    PlaybackProgress? replacing,
   }) : _resumeSeek =
-            ResumeSeekController(targetSec: args.seekTo, isLive: args.isLive);
+            ResumeSeekController(targetSec: args.seekTo, isLive: args.isLive) {
+    // Applies this title's remembered "Formato" (content_view_mode.dart)
+    // before the player's first frame. [replacing]: the instance this one
+    // takes over from in the same screen (retry, source/language or episode
+    // switch) — the title goes on in the mode it was in.
+    if (!args.isLive) {
+      _viewModeToken = contentViewModes.open(
+        pluginId: args.epPluginId,
+        parentId: args.parentId,
+        ids: [mediaId, args.directStreamId ?? ''],
+        continuing: replacing?._viewModeToken,
+      );
+    }
+  }
+
+  Object? _viewModeToken;
 
   /// Not final: refreshed in place when the screen learns more mid-session
   /// without starting a new stream — e.g. the episode list backfilled after
@@ -120,6 +137,7 @@ class PlaybackProgress {
   /// position). Same fix the TV player's _markOpened already carries.
   Future<void> markStarted(PlayerEngine engine) async {
     if (_progressCleared || args.isLive) return;
+    _trackViewMode();
     final a = args;
     final target = Duration(seconds: _resumeSeek.targetSec);
     final resp = await getIt<MediaRepository>().updateProgress(
@@ -145,6 +163,7 @@ class PlaybackProgress {
     if (_progressCleared || args.isLive) return;
     final pos = engine.position;
     if (pos.inSeconds <= 0) return;
+    _trackViewMode();
     final a = args;
     final resp = await getIt<MediaRepository>().updateProgress(
       pluginId: a.epPluginId,
@@ -163,6 +182,24 @@ class PlaybackProgress {
       episodeNumber: numberForEpisode(a.episodeNumbers, a.episodeIndex),
     );
     _checkElsewhere(resp);
+  }
+
+  /// The ids Continue Watching is about to store (the stream id once known,
+  /// the series id once backfilled) — so the remembered "Formato" still
+  /// recognises this title when it's reopened from Continue Watching.
+  void _trackViewMode() {
+    final t = _viewModeToken;
+    if (t != null) {
+      contentViewModes.track(t, parentId: args.parentId, ids: [mediaId]);
+    }
+  }
+
+  /// The player screen is going away (call after its final [save]): later
+  /// format changes no longer belong to this title. No-op on an instance a
+  /// newer one already replaced.
+  void close() {
+    final t = _viewModeToken;
+    if (t != null) contentViewModes.close(t);
   }
 
   void _checkElsewhere(ProgressResponse? resp) {
