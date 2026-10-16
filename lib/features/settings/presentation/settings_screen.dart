@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../core/di/injection.dart';
+import '../../../core/utils/app_exit.dart';
 import '../../../core/theme/app_scale.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../features/auth/bloc/auth_bloc.dart';
@@ -209,9 +209,9 @@ Future<void> _showChangeServerDialog(BuildContext context) async {
   );
 }
 
-// Closes the app. SystemNavigator.pop() is the platform-correct way — on
+// Closes the app via exitApp(): SystemNavigator.pop() natively — on
 // Android it finishes the Activity (what Back at the root does), on desktop
-// it closes the window.
+// it closes the window — and the webOS/Tizen exit hook on TV web.
 Future<void> _showExitDialog(BuildContext context) async {
   await showDialog<void>(
     context: context,
@@ -236,7 +236,7 @@ Future<void> _showExitDialog(BuildContext context) async {
             label: 'Esci',
             primary: true,
             primaryColor: Colors.red[700],
-            onPressed: () => SystemNavigator.pop(),
+            onPressed: () => exitApp(),
           ),
         ],
       ),

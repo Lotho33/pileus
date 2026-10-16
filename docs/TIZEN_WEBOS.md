@@ -19,7 +19,7 @@ Tizen `.wgt` (Samsung) or webOS `.ipk` (LG) app.
 | UI | `lib/main.dart`'s TV screens via `appRouter` (D-pad, on-screen keyboard, TvFocusable) |
 | Entry point | `lib/main_web_tv.dart` → `PileusApp` → `appRouter` |
 | Transport | gRPC-Web, same as `main_web.dart` — `lib/core/grpc/grpc_channel_web.dart` |
-| Discovery | `ServerDiscoveryScreen` (TV's own) — its LAN auto-scan degrades harmlessly to manual entry on web (see below); no UDP/mDNS ever runs here |
+| Discovery | `ServerDiscoveryScreen` (TV's own) — no UDP/mDNS on web, but the `/24` HTTP sweep of `/pileus/info` does run: the TV's own IP comes from `pileusLocalIps` in `web/index.html` (webOS Luna connection manager → Tizen `webapis.network` → WebRTC), else a few common home subnets are tried (2026-10, unverified on a real TV) |
 | Server modes | LAN (plain `http://`) and remote/HTTPS (`https://host[:port]`, see `lib/core/grpc/server_address.dart`) — both work from the same manual field |
 | Remote-control input | standard arrows/Enter/Escape (already handled — any browser reports these normally) + a JS bridge in `web/index.html` for Tizen/webOS-specific keyCodes (Back, media transport) |
 
@@ -82,7 +82,7 @@ What's TV-remote-specific and *not* standard:
 
 | Button | Tizen keyCode | webOS keyCode | Bridged to |
 |---|---|---|---|
-| Back/Return | 10009 | 461 | `Escape` (every `onEsc`/`LogicalKeyboardKey.goBack` handler in the app already also checks `.escape` — see `back_dispatch.dart`) |
+| Back/Return | 10009 | 461 | `GoBack` (same key as an Android TV remote; `main.dart` adds the Android-style router pop after the key path — see `back_dispatch.dart`) |
 | Play | 415 | — | `MediaPlay` |
 | Pause | 19 | — | `MediaPause` |
 | Play/Pause | 10252 | — | `MediaPlayPause` |
@@ -162,10 +162,21 @@ cp packaging/tizen/config.xml packaging/tizen/icon.png build/web/
 # then open build/web/ as a Tizen Web project in Tizen Studio, or:
 tizen package -t wgt -s <your-certificate-profile> -- build/web
 
-# webOS
-cp packaging/webos/appinfo.json packaging/webos/icon.png packaging/webos/largeIcon.png build/web/
-ares-package build/web
+# webOS — use the script, not these steps by hand:
+scripts/build-webos.sh               # → build/webos/app/ + build/webos/com.lotho33.pileus_<ver>_all.ipk
+scripts/build-webos.sh --simulator   # …then opens it in the webOS TV 26 Simulator
 ```
+
+**Verified on the webOS TV 26 Simulator (2026-10):** a packaged app is
+loaded from `file://`, so the `--base-href /` above makes every asset
+resolve against the filesystem root and the app never leaves its boot
+spinner — the script rewrites it to `<base href="./">` (Flutter itself only
+accepts a base href starting with `/`). It also builds with
+`--no-web-resources-cdn` (CanvasKit from the package instead of
+`www.gstatic.com`), syncs `appinfo.json`'s `version` from `pubspec.yaml`
+and keeps `inspectable` off unless `--debug`. The same base-href issue
+almost certainly applies to Tizen's `.wgt` (also `file://`-style) —
+unverified.
 
 `packaging/tizen/config.xml` has a placeholder `PLACEHOLDERAUTH` author/
 package ID — Tizen requires a real author certificate (Tizen Studio >
@@ -223,7 +234,7 @@ verify, not a guaranteed-working script.
    generation you're targeting — the SDK ships several).
 4. `ares-install -d <simulator-device-name> <path-to>.ipk` (or drag the
    `.ipk` onto the Simulator window, if that build supports it), then
-   `ares-launch -d <simulator-device-name> tv.pileus.app`.
+   `ares-launch -d <simulator-device-name> com.lotho33.pileus`.
 5. The Simulator's remote-control overlay sends real webOS keyCodes
    (including 461 for Back) the same way the Tizen emulator does.
 

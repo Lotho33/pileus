@@ -12,6 +12,7 @@ import '../../../core/di/injection.dart';
 import '../../../core/grpc/remote_server_connect.dart';
 import '../../../core/grpc/server_address.dart';
 import '../../../core/theme/app_scale.dart';
+import '../../../core/utils/web_local_ip.dart';
 import '../../../shared/widgets/on_screen_keyboard.dart';
 import '../../../shared/widgets/on_screen_text_display.dart';
 import '../../../shared/widgets/pileus_spinner.dart';
@@ -94,8 +95,12 @@ class _ServerDiscoveryScreenState extends State<ServerDiscoveryScreen> {
   /// real gRPC port (`grpc_port`; null on an older server that
   /// doesn't report it, in which case ServerPorts.grpc is the fallback).
   Future<_ProbeResult?> _probe(String host, {Duration? timeout}) async {
+    // Own client, closed in `finally`: closing is what actually aborts a
+    // request the timeout gave up on. On web a dangling XHR per dead sweep
+    // address would otherwise pile up against the browser's socket cap.
+    final client = http.Client();
     try {
-      final res = await http
+      final res = await client
           .get(Uri.http('$host:$_port', '/pileus/info'))
           .timeout(timeout ?? _timeout);
       if (res.statusCode != 200) return null;
@@ -111,6 +116,8 @@ class _ServerDiscoveryScreenState extends State<ServerDiscoveryScreen> {
       );
     } catch (_) {
       return null;
+    } finally {
+      client.close();
     }
   }
 
@@ -165,7 +172,6 @@ class _ServerDiscoveryScreenState extends State<ServerDiscoveryScreen> {
   /// Mycelium, or null. No mDNS, no server-side support needed — just the
   /// `/pileus/info` endpoint that's already the liveness check.
   Future<({String host, _ProbeResult result})?> _sweepLan() async {
-    if (kIsWeb) return null;
     final prefixes = await _localV24Prefixes();
     if (prefixes.isEmpty) return null;
 
@@ -220,29 +226,42 @@ class _ServerDiscoveryScreenState extends State<ServerDiscoveryScreen> {
     return res;
   }
 
+  // TV web, when the page can't learn its own IP (no webOS/Tizen network
+  // API answered, WebRTC hides host candidates): the usual home-router
+  // subnets, most common first.
+  static const _webFallbackPrefixes = [
+    '192.168.1',
+    '192.168.0',
+    '10.0.0',
+    '192.168.178',
+  ];
+
   /// Private-range /24 prefixes for every up, non-loopback IPv4 interface
   /// (e.g. `192.168.1`). /24 covers essentially every home network.
   Future<List<String>> _localV24Prefixes() async {
     final out = <String>[];
     try {
-      final ifaces = await NetworkInterface.list(
-        type: InternetAddressType.IPv4,
-        includeLoopback: false,
-        includeLinkLocal: false,
-      );
-      for (final iface in ifaces) {
-        for (final addr in iface.addresses) {
-          final ip = addr.address;
-          final isPrivate = ip.startsWith('10.') ||
-              ip.startsWith('192.168.') ||
-              RegExp(r'^172\.(1[6-9]|2\d|3[01])\.').hasMatch(ip);
-          if (!isPrivate) continue;
-          final dot = ip.lastIndexOf('.');
-          final prefix = ip.substring(0, dot);
-          if (!out.contains(prefix)) out.add(prefix);
-        }
+      final ips = kIsWeb
+          ? await webLocalIpv4()
+          : [
+              for (final iface in await NetworkInterface.list(
+                type: InternetAddressType.IPv4,
+                includeLoopback: false,
+                includeLinkLocal: false,
+              ))
+                for (final addr in iface.addresses) addr.address,
+            ];
+      for (final ip in ips) {
+        final isPrivate = ip.startsWith('10.') ||
+            ip.startsWith('192.168.') ||
+            RegExp(r'^172\.(1[6-9]|2\d|3[01])\.').hasMatch(ip);
+        if (!isPrivate) continue;
+        final dot = ip.lastIndexOf('.');
+        final prefix = ip.substring(0, dot);
+        if (!out.contains(prefix)) out.add(prefix);
       }
     } catch (_) {}
+    if (kIsWeb && out.isEmpty) return _webFallbackPrefixes;
     return out;
   }
 
@@ -315,8 +334,8 @@ class _ServerDiscoveryScreenState extends State<ServerDiscoveryScreen> {
   }
 
   Future<void> _saveHost(String host, _ProbeResult result) async {
-    await getIt<AuthRepository>().saveHostInfo(host, result.tlsFingerprint,
-        grpcPort: result.grpcPort);
+    await getIt<AuthRepository>()
+        .saveHostInfo(host, result.tlsFingerprint, grpcPort: result.grpcPort);
     await rebuildGrpcClients(host,
         tlsFingerprint: result.tlsFingerprint, grpcPort: result.grpcPort);
   }
@@ -468,7 +487,8 @@ class _ServerDiscoveryScreenState extends State<ServerDiscoveryScreen> {
                 focusNode: _continuaFocusNode,
                 loading: busy,
                 label: busy ? '' : 'Continua',
-                onDown: busy ? null : () => _useDifferentFocusNode.requestFocus(),
+                onDown:
+                    busy ? null : () => _useDifferentFocusNode.requestFocus(),
                 // splashFloor: false — this is a direct button press, not a
                 // cold start, so skip the 2 s splash hold. The button stays
                 // in its loading state until the bloc resolves and the

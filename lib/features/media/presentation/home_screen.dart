@@ -18,6 +18,7 @@ import '../../auth/bloc/auth_event.dart';
 import '../../auth/friendly_error.dart';
 import '../../../core/di/injection.dart';
 import '../../../core/grpc/auth_interceptor.dart';
+import '../../../core/utils/app_exit.dart';
 import '../../../core/grpc/clients/media_client.dart' hide ContinueWatchingItem;
 import '../../../core/grpc/grpc_errors.dart';
 import '../../../core/perf_profile.dart';

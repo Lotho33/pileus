@@ -69,8 +69,10 @@
     // Tizen Studio / webOS TV Simulator session before relying on it.
     (function () {
       var REMOTE_KEYCODE_MAP = {
-        10009: 'Escape', // Tizen: Back
-        461: 'Escape',   // webOS: Back
+        // Back → GoBack, the key Android TV remotes send: main.dart gives it
+        // Android's "key path + router pop" pair (keyboard Escape doesn't).
+        10009: 'GoBack', // Tizen: Back
+        461: 'GoBack',   // webOS: Back
         415: 'MediaPlay',
         19: 'MediaPause',
         10252: 'MediaPlayPause', // Tizen: Play/Pause
@@ -78,18 +80,96 @@
         412: 'MediaRewind',      // Tizen: Rewind
         417: 'MediaFastForward'  // Tizen: Fast-forward
       };
-      window.addEventListener('keydown', function (e) {
+      // keyup must be bridged too: with only a synthetic keydown, Flutter
+      // keeps the mapped key "pressed" forever and its key state drifts.
+      function bridge(e) {
         var mappedKey = REMOTE_KEYCODE_MAP[e.keyCode];
         if (!mappedKey) return;
         e.stopImmediatePropagation();
         e.preventDefault();
-        window.dispatchEvent(new KeyboardEvent('keydown', {
+        window.dispatchEvent(new KeyboardEvent(e.type, {
           key: mappedKey,
-          code: mappedKey,
+          code: mappedKey === 'GoBack' ? 'BrowserBack' : mappedKey,
+          repeat: e.repeat,
           bubbles: true,
           cancelable: true
         }));
-      }, true);
+      }
+      window.addEventListener('keydown', bridge, true);
+      window.addEventListener('keyup', bridge, true);
+
+      // Called by lib/core/utils/app_exit_web.dart — SystemNavigator.pop()
+      // is a no-op on web. A plain browser tab ignores window.close().
+      window.pileusExitApp = function () {
+        try {
+          if (window.tizen && tizen.application) {
+            tizen.application.getCurrentApplication().exit();
+            return;
+          }
+        } catch (_) {}
+        window.close(); // webOS: terminates the app
+      };
+
+      // LAN IPv4 addresses of this TV, for the discovery screen's /24 sweep
+      // (lib/core/utils/web_local_ip_web.dart) — a page has no
+      // NetworkInterface.list. Resolves [] rather than failing.
+      window.pileusLocalIps = function () {
+        var PRIVATE = /^(10\.|192\.168\.|172\.(1[6-9]|2\d|3[01])\.)/;
+        var found = [];
+        function add(ip) {
+          if (ip && PRIVATE.test(ip) && found.indexOf(ip) < 0) found.push(ip);
+        }
+        function viaLuna() {
+          return new Promise(function (resolve) {
+            if (typeof PalmServiceBridge === 'undefined') return resolve();
+            try {
+              var bridge = new PalmServiceBridge();
+              bridge.onservicecallback = function (msg) {
+                try {
+                  var r = JSON.parse(msg);
+                  if (r.wired) add(r.wired.ipAddress);
+                  if (r.wifi) add(r.wifi.ipAddress);
+                } catch (_) {}
+                resolve();
+              };
+              bridge.call('luna://com.palm.connectionmanager/getStatus', '{}');
+            } catch (_) { resolve(); }
+          });
+        }
+        function viaTizen() {
+          try {
+            if (window.webapis && webapis.network && webapis.network.getIp) {
+              add(webapis.network.getIp());
+            }
+          } catch (_) {}
+          return Promise.resolve();
+        }
+        function viaWebRtc() {
+          return new Promise(function (resolve) {
+            if (typeof RTCPeerConnection === 'undefined') return resolve();
+            try {
+              var pc = new RTCPeerConnection({ iceServers: [] });
+              pc.createDataChannel('');
+              pc.onicecandidate = function (e) {
+                if (!e.candidate) { pc.close(); return resolve(); }
+                var m = /(\d+\.\d+\.\d+\.\d+)/.exec(e.candidate.candidate);
+                if (m) add(m[1]);
+              };
+              pc.createOffer().then(function (o) { return pc.setLocalDescription(o); })
+                .catch(function () { resolve(); });
+            } catch (_) { resolve(); }
+          });
+        }
+        function withTimeout(p, ms) {
+          return Promise.race([p, new Promise(function (r) { setTimeout(r, ms); })]);
+        }
+        return withTimeout(viaLuna(), 1500)
+          .then(viaTizen)
+          .then(function () {
+            return found.length ? null : withTimeout(viaWebRtc(), 1500);
+          })
+          .then(function () { return found; });
+      };
     })();
   </script>
   <!-- Bundled locally (not a CDN) so the PWA works offline and no external

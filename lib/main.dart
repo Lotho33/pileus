@@ -1,8 +1,9 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart' show appFlavor;
+import 'package:flutter/services.dart' show KeyDownEvent, KeyEvent, LogicalKeyboardKey, appFlavor;
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:window_manager/window_manager.dart';
 
@@ -258,12 +259,55 @@ class _PileusAppState extends State<PileusApp> with WidgetsBindingObserver {
     // key event the focus tree already handled — so a single press
     // otherwise pops twice (only on Android; Linux has no platform back).
     WidgetsBinding.instance.addObserver(this);
+    if (kIsWeb) {
+      FocusManager.instance.addEarlyKeyEventHandler(_webRemoteBack);
+      FocusManager.instance.addLateKeyEventHandler(_webBackFallback);
+    }
   }
 
   @override
   void dispose() {
+    if (kIsWeb) {
+      FocusManager.instance.removeEarlyKeyEventHandler(_webRemoteBack);
+      FocusManager.instance.removeLateKeyEventHandler(_webBackFallback);
+    }
     WidgetsBinding.instance.removeObserver(this);
     super.dispose();
+  }
+
+  /// TV web only. On Android a Back no focused widget handles still reaches
+  /// the Router through the platform channel (`System.popRoute`); a TV
+  /// browser has no such path, so with nothing (or the wrong thing) focused
+  /// Back did nothing and the user was stuck. Late handlers run only when
+  /// the focus tree left the event unhandled, so this never doubles a
+  /// screen's own `onEsc`.
+  KeyEventResult _webBackFallback(KeyEvent event) {
+    if (event is! KeyDownEvent) return KeyEventResult.ignored;
+    if (event.logicalKey != LogicalKeyboardKey.escape) {
+      return KeyEventResult.ignored;
+    }
+    // Same call the Router's BackButtonDispatcher makes; honours PopScope.
+    appRouter.routerDelegate.popRoute();
+    return KeyEventResult.handled;
+  }
+
+  /// TV web: the remote's Back (bridged to `GoBack`, like Android TV's)
+  /// gets Android's second path too — a router pop once the focus tree has
+  /// run, unless a handler already acted on it through consumeBackEvent().
+  /// Without it, Back on e.g. a home card only moved focus and the app
+  /// could never reach "premi di nuovo per uscire". Keyboard Escape keeps
+  /// the plain [_webBackFallback] (it also drives DismissIntent, which
+  /// would pop twice here).
+  KeyEventResult _webRemoteBack(KeyEvent event) {
+    if (event is! KeyDownEvent ||
+        event.logicalKey != LogicalKeyboardKey.goBack) {
+      return KeyEventResult.ignored;
+    }
+    beginWebBackPress();
+    scheduleMicrotask(() {
+      if (!endWebBackPress()) appRouter.routerDelegate.popRoute();
+    });
+    return KeyEventResult.ignored;
   }
 
   @override
@@ -388,6 +432,9 @@ class _PileusAppState extends State<PileusApp> with WidgetsBindingObserver {
               },
             );
           },
+          // On web this app is only ever the TV build (main_web_tv.dart), so
+          // it needs the native D-pad key map, not Flutter's web one.
+          shortcuts: kIsWeb ? _tvWebShortcuts : null,
           theme: AppTheme.dark(),
           routerConfig: appRouter,
         ),
@@ -395,3 +442,25 @@ class _PileusAppState extends State<PileusApp> with WidgetsBindingObserver {
     );
   }
 }
+
+/// Flutter's web defaults map the arrows to [ScrollIntent] (browser-page
+/// parity) instead of [DirectionalFocusIntent]. Every TV screen leans on the
+/// latter for any arrow its `onKeyEvent`/`TvFocusable` leaves `ignored` — on
+/// webOS/Tizen those arrows scrolled the enclosing list instead, pushing the
+/// focused card off-screen ("nothing focused") or doing nothing at all
+/// outside a Scrollable ("can't reach that part of the screen"). Enter/Select
+/// also only fired [ButtonActivateIntent] there, not [ActivateIntent].
+final Map<ShortcutActivator, Intent> _tvWebShortcuts = {
+  ...WidgetsApp.defaultShortcuts,
+  const SingleActivator(LogicalKeyboardKey.arrowUp):
+      const DirectionalFocusIntent(TraversalDirection.up),
+  const SingleActivator(LogicalKeyboardKey.arrowDown):
+      const DirectionalFocusIntent(TraversalDirection.down),
+  const SingleActivator(LogicalKeyboardKey.arrowLeft):
+      const DirectionalFocusIntent(TraversalDirection.left),
+  const SingleActivator(LogicalKeyboardKey.arrowRight):
+      const DirectionalFocusIntent(TraversalDirection.right),
+  const SingleActivator(LogicalKeyboardKey.enter): const ActivateIntent(),
+  const SingleActivator(LogicalKeyboardKey.numpadEnter): const ActivateIntent(),
+  const SingleActivator(LogicalKeyboardKey.select): const ActivateIntent(),
+};

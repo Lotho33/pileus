@@ -3,6 +3,7 @@ import 'package:go_router/go_router.dart';
 
 import '../perf_profile.dart';
 import '../utils/perf_probes.dart';
+import '../../shared/utils/back_dispatch.dart';
 import 'auth_guard.dart';
 
 import '../../features/auth/presentation/device_pairing_screen.dart';
@@ -59,7 +60,7 @@ Page<T> _fadePage<T>(GoRouterState state, Widget child) =>
 
 final GoRouter appRouter = GoRouter(
   initialLocation: '/splash',
-  observers: [PerfNavigatorObserver()],
+  observers: [PerfNavigatorObserver(), BackPressNavObserver()],
   routes: [
     GoRoute(
       path: '/splash',

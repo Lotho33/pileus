@@ -245,7 +245,7 @@ class _HomeViewState extends State<_HomeView> {
     final now = DateTime.now();
     final last = _lastBackPressAt;
     if (last != null && now.difference(last) < _exitConfirmWindow) {
-      SystemNavigator.pop();
+      exitApp();
       return;
     }
     _lastBackPressAt = now;
