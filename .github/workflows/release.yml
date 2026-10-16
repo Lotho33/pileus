@@ -31,6 +31,19 @@
 # (scripts/set-amazon-secrets.sh) and repo variable AMAZON_APP_ID; runs
 # independently of the other two jobs (no shared GitHub Release to race)
 # and is best-effort — a failure here never blocks the sideload release.
+#
+# Store jobs only run for targets this tag actually changed (job `targets`,
+# scripts/release-targets.py — Dart import closure per entry point since the
+# previous tag; workflow_dispatch's `force` input overrides):
+#   tv     -> amazon-submit (submitted for review) + play (Android TV app)
+#   mobile -> play (mobile app)
+#   webos  -> webos: both .ipk attached to the GitHub Release; LG's Seller
+#             Lounge has no upload API, so that upload stays manual.
+# play needs secret PLAY_SERVICE_ACCOUNT_JSON (RELEASE.md); without it the
+# job warns and skips instead of failing.
+#
+# versionCode = scripts/version-code.sh <version> in every job (not the run
+# number, which differs per workflow and per store).
 
 name: release
 
@@ -42,11 +55,36 @@ on:
       tag:
         description: "existing tag to (re)build, e.g. v1.4.0"
         required: true
+      force:
+        description: "store targets to publish even if unchanged: comma list of tv,mobile,webos or 'all'"
+        required: false
+        default: ""
 
 permissions:
   contents: write # create the GitHub Release
 
 jobs:
+  # Which store targets this tag changed — see the header and
+  # scripts/release-targets.py. Gates amazon-submit / play / webos.
+  targets:
+    runs-on: ubuntu-latest
+    outputs:
+      tv: ${{ steps.t.outputs.tv }}
+      mobile: ${{ steps.t.outputs.mobile }}
+      webos: ${{ steps.t.outputs.webos }}
+      play_matrix: ${{ steps.t.outputs.play_matrix }}
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ github.event.inputs.tag || github.ref }}
+          fetch-depth: 0 # previous tags, for the diff
+
+      - id: t
+        run: |
+          python3 scripts/release-targets.py --github-output \
+            --head "${{ github.event.inputs.tag || github.ref_name }}" \
+            --force "${{ github.event.inputs.force }}"
+
   android:
     runs-on: ubuntu-latest
     steps:
@@ -64,7 +102,12 @@ jobs:
         run: |
           ref="${{ github.event.inputs.tag || github.ref_name }}"
           echo "name=${ref#v}" >> "$GITHUB_OUTPUT"
-          echo "build=${{ github.run_number }}" >> "$GITHUB_OUTPUT"
+          # Older tags predate the script: keep their run-number versionCode.
+          if [ -x scripts/version-code.sh ]; then
+            echo "build=$(scripts/version-code.sh "${ref#v}")" >> "$GITHUB_OUTPUT"
+          else
+            echo "build=${{ github.run_number }}" >> "$GITHUB_OUTPUT"
+          fi
 
       - run: flutter pub get
 
@@ -196,7 +239,12 @@ jobs:
         run: |
           ref="${{ github.event.inputs.tag || github.ref_name }}"
           echo "name=${ref#v}" >> "$GITHUB_OUTPUT"
-          echo "build=${{ github.run_number }}" >> "$GITHUB_OUTPUT"
+          # Older tags predate the script: keep their run-number versionCode.
+          if [ -x scripts/version-code.sh ]; then
+            echo "build=$(scripts/version-code.sh "${ref#v}")" >> "$GITHUB_OUTPUT"
+          else
+            echo "build=${{ github.run_number }}" >> "$GITHUB_OUTPUT"
+          fi
 
       - run: flutter pub get
 
@@ -231,6 +279,8 @@ jobs:
   # loud instead, same as every other job here, since "Amazon upload
   # silently didn't happen" is exactly the failure mode worth noticing.
   amazon-submit:
+    needs: targets
+    if: needs.targets.outputs.tv == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
@@ -247,7 +297,12 @@ jobs:
         run: |
           ref="${{ github.event.inputs.tag || github.ref_name }}"
           echo "name=${ref#v}" >> "$GITHUB_OUTPUT"
-          echo "build=${{ github.run_number }}" >> "$GITHUB_OUTPUT"
+          # Older tags predate the script: keep their run-number versionCode.
+          if [ -x scripts/version-code.sh ]; then
+            echo "build=$(scripts/version-code.sh "${ref#v}")" >> "$GITHUB_OUTPUT"
+          else
+            echo "build=${{ github.run_number }}" >> "$GITHUB_OUTPUT"
+          fi
 
       - run: flutter pub get
 
@@ -286,7 +341,7 @@ jobs:
           cp build/app/outputs/flutter-apk/app-*-tv-release.apk amazon-apks/
           ls -la amazon-apks
 
-      - name: Upload to a new Amazon Appstore edit (draft — never submitted automatically)
+      - name: Upload to Amazon Appstore and submit for review
         env:
           AMAZON_CLIENT_ID: ${{ secrets.AMAZON_CLIENT_ID }}
           AMAZON_CLIENT_SECRET: ${{ secrets.AMAZON_CLIENT_SECRET }}
@@ -297,4 +352,149 @@ jobs:
             echo "::error::set secrets AMAZON_CLIENT_ID / AMAZON_CLIENT_SECRET (scripts/set-amazon-secrets.sh) and repo variable AMAZON_APP_ID first."
             exit 1
           fi
-          scripts/amazon-upload-edit.sh amazon-apks/*.apk
+          scripts/amazon-upload-edit.sh --submit amazon-apks/*.apk
+
+  # Play Store: the Android TV app (tv flavor) and the mobile app are two
+  # listings; each is built and sent to the production track (= submitted
+  # for review) only when its target changed. Flags: keep in sync with
+  # store.yml.
+  play:
+    needs: targets
+    if: needs.targets.outputs.play_matrix != '[]'
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        flavor: ${{ fromJSON(needs.targets.outputs.play_matrix) }}
+    steps:
+      - name: Service account present?
+        id: sa
+        env:
+          SA: ${{ secrets.PLAY_SERVICE_ACCOUNT_JSON }}
+        run: |
+          if [ -z "${SA:-}" ]; then
+            echo "::warning::PLAY_SERVICE_ACCOUNT_JSON not set — ${{ matrix.flavor }} NOT uploaded to Play (see RELEASE.md, Play API). Re-run this tag with force=${{ matrix.flavor }} once it is."
+            echo "ok=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "ok=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - uses: actions/checkout@v5
+        if: steps.sa.outputs.ok == 'true'
+        with:
+          ref: ${{ github.event.inputs.tag || github.ref }}
+
+      - uses: subosito/flutter-action@v2
+        if: steps.sa.outputs.ok == 'true'
+        with:
+          channel: stable
+          cache: true
+
+      - name: Derive version
+        if: steps.sa.outputs.ok == 'true'
+        id: v
+        run: |
+          ref="${{ github.event.inputs.tag || github.ref_name }}"
+          echo "name=${ref#v}" >> "$GITHUB_OUTPUT"
+          echo "build=$(scripts/version-code.sh "${ref#v}")" >> "$GITHUB_OUTPUT"
+          if [ "${{ matrix.flavor }}" = tv ]; then
+            echo "package=com.lotho33.pileus" >> "$GITHUB_OUTPUT"
+            echo "target=lib/main.dart" >> "$GITHUB_OUTPUT"
+          else
+            echo "package=com.lotho33.pileus.mobile" >> "$GITHUB_OUTPUT"
+            echo "target=lib/main_mobile.dart" >> "$GITHUB_OUTPUT"
+          fi
+
+      - if: steps.sa.outputs.ok == 'true'
+        run: flutter pub get
+
+      - name: Android signing config (mandatory — same secrets as store.yml)
+        if: steps.sa.outputs.ok == 'true'
+        env:
+          KS_B64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          KS_PASS: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          KEY_PASS: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          set -eu
+          if [ -z "${KS_B64:-}" ] || [ -z "${KS_PASS:-}" ] || [ -z "${KEY_ALIAS:-}" ] || [ -z "${KEY_PASS:-}" ]; then
+            echo "::error::play requires the same ANDROID_KEYSTORE_* secrets as store.yml — refusing to upload a debug-signed bundle."
+            exit 1
+          fi
+          echo "$KS_B64" | base64 -d > android/app/release.jks
+          keytool -list -keystore android/app/release.jks -storepass "$KS_PASS" -alias "$KEY_ALIAS" >/dev/null
+          {
+            echo "storeFile=release.jks"
+            echo "storePassword=$KS_PASS"
+            echo "keyAlias=$KEY_ALIAS"
+            echo "keyPassword=$KEY_PASS"
+          } > android/key.properties
+
+      - name: Build AAB (${{ matrix.flavor }})
+        if: steps.sa.outputs.ok == 'true'
+        run: |
+          set -eu
+          flutter build appbundle --release --flavor "${{ matrix.flavor }}" \
+            -t "${{ steps.v.outputs.target }}" \
+            -PpileusRequireSigning=true -PpileusExcludeMpv=true -PpileusR8=true \
+            --obfuscate --split-debug-info=build/symbols \
+            --dart-define=PILEUS_STORE_BUILD=true \
+            --build-name="${{ steps.v.outputs.name }}" \
+            --build-number="${{ steps.v.outputs.build }}"
+
+      - name: Upload to Play (production track, submitted for review)
+        if: steps.sa.outputs.ok == 'true'
+        uses: r0adkll/upload-google-play@v1
+        with:
+          serviceAccountJsonPlainText: ${{ secrets.PLAY_SERVICE_ACCOUNT_JSON }}
+          packageName: ${{ steps.v.outputs.package }}
+          releaseFiles: build/app/outputs/bundle/${{ matrix.flavor }}Release/app-${{ matrix.flavor }}-release.aab
+          releaseName: ${{ steps.v.outputs.name }}
+          track: production
+          status: completed
+          mappingFile: build/app/outputs/mapping/${{ matrix.flavor }}Release/mapping.txt
+
+  # LG webOS: both resolution packages (1080p + 720p, see
+  # scripts/build-webos.sh) attached to the GitHub Release. LG's Seller
+  # Lounge has no upload API, so uploading them there stays manual. After
+  # `android` so the release already exists (same reason as `web`).
+  webos:
+    needs: [targets, android]
+    if: needs.targets.outputs.webos == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ github.event.inputs.tag || github.ref }}
+
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - run: npm install -g @webos-tools/cli@3.2.6
+
+      - name: Build .ipk (1080p + 720p)
+        run: |
+          set -eu
+          ref="${{ github.event.inputs.tag || github.ref_name }}"
+          V="${ref#v}"
+          flutter pub get
+          PILEUS_BUILD_NUMBER="$(scripts/version-code.sh "$V")"
+          export PILEUS_BUILD_NUMBER
+          scripts/build-webos.sh
+          scripts/build-webos.sh --720p
+          mkdir -p dist
+          cp build/webos/*.ipk "dist/pileus-$V-webos-1080p.ipk"
+          cp build/webos-720p/*.ipk "dist/pileus-$V-webos-720p.ipk"
+          ( cd dist && sha256sum * > SHA256SUMS-webos.txt )
+
+      - name: GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.event.inputs.tag || github.ref_name }}
+          files: dist/*

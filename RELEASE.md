@@ -99,12 +99,13 @@ Appstore edit via the
 `amazon-submit` job, independent of the sideload `android`/`web` jobs (a
 failure here never blocks the GitHub Release).
 
-**It only uploads — it never submits the edit for review.** The job stops
-with the edit `IN_PROGRESS` in the Developer Console; open *Apps & Games →
-your app → App Submission*, review the uploaded build, and submit it by
-hand. "L'ultima release è sempre pronta ad essere pubblicata su Amazon" —
-not "si pubblica da sola" — is the deliberate contract here, so a bad build
-never reaches Amazon's review queue unattended.
+**It uploads and submits the edit for review** (`--submit`, since
+v1.6.8 — before that it stopped at a draft). Smoke-test the sideload APK of
+the same tag on a Fire TV before the review finishes. If a previous version
+is still under review, Amazon refuses any change: the job warns and uploads
+nothing — re-run the tag (Actions → release → Run workflow, `force=tv`)
+once the review is over. Runs only when the `tv` target changed (see
+"Per-store publishing" below).
 
 One-time setup, beyond the signing secrets this job also reuses:
 
@@ -150,7 +151,51 @@ flutter build appbundle --release --flavor mobile -t lib/main_mobile.dart \
 
 Result: arm64 mobile release APK ≈ 23.5 MB (vs ~36 MB unoptimised).
 
+### Per-store publishing (`release.yml`)
+
+Each store job runs only when the tag changed what that store ships —
+`scripts/release-targets.py` diffs the tag against the previous one and,
+for Dart, follows the import graph from each entry point (so a change under
+`lib/mobile/` doesn't republish the TV apps; one in a shared bloc does):
+
+| Target | Entry point | Store job |
+|---|---|---|
+| `tv` | `lib/main.dart` (+ `android/` minus `src/mobile`, `third_party/`) | `amazon-submit` + `play` (Android TV app, `com.lotho33.pileus`) |
+| `mobile` | `lib/main_mobile.dart` (+ `android/` minus `src/tv`, `third_party/`) | `play` (`com.lotho33.pileus.mobile`) |
+| `webos` | `lib/main_web_tv.dart` (+ `web/`, `packaging/webos/`) | `webos`: 1080p + 720p `.ipk` on the GitHub Release |
+
+`pubspec.yaml`/`pubspec.lock`/`assets/` count for every target (the
+`version:` bump alone doesn't). `scripts/release.sh` prints the same verdict
+before tagging, also on `-n`. Force an unchanged target: Actions → release
+→ Run workflow, tag + `force` (`tv,mobile,webos` or `all`).
+
+**Play** (`play` job): builds the AAB of each changed flavor and sends it to
+the **production** track with status completed — i.e. submitted for
+review, published when Google approves. Needs secret
+`PLAY_SERVICE_ACCOUNT_JSON` (below); without it the job only warns.
+
+**LG webOS**: the Seller Lounge has no upload API. Download both `.ipk`
+from the release and upload them by hand (File Ver. = the release version).
+
+**versionCode** is `scripts/version-code.sh X.Y.Z` (MAJOR·10⁸ + MINOR·10⁶ +
+PATCH·10⁴) in every workflow, not the run number — per-workflow run
+counters drifted apart between Play (store.yml) and Amazon (release.yml).
+
 ## One-time setup
+
+### Google Play API (`PLAY_SERVICE_ACCOUNT_JSON`)
+
+1. Google Cloud Console → a project (any) → *APIs & Services* → enable
+   **Google Play Android Developer API**.
+2. *IAM & Admin → Service accounts* → create one → *Keys* → *Add key* →
+   JSON → download it.
+3. Play Console → *Users and permissions* → *Invite new users* → the
+   service account's e-mail → app permissions for **both** Pileus apps
+   (TV + mobile): *Release to production…*, *Manage testing tracks…*, *View
+   app information*.
+4. `gh secret set PLAY_SERVICE_ACCOUNT_JSON < downloaded-key.json`, then
+   delete the downloaded file.
+
 
 ### Repo secrets (GitHub → Settings → Secrets and variables → Actions)
 
@@ -162,6 +207,7 @@ Result: arm64 mobile release APK ≈ 23.5 MB (vs ~36 MB unoptimised).
 | `ANDROID_KEY_PASSWORD` | key password |
 | `AMAZON_CLIENT_ID` | App Submission API client id (Console → Settings → API Access) — set via `scripts/set-amazon-secrets.sh`, not by hand |
 | `AMAZON_CLIENT_SECRET` | App Submission API client secret — same script |
+| `PLAY_SERVICE_ACCOUNT_JSON` | Play Developer API service-account key (JSON) — see "Google Play API" above |
 
 No extra token needed — the builtin `GITHUB_TOKEN` (`contents: write`,
 already set in each workflow) covers creating the release and uploading

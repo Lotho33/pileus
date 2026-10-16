@@ -26,6 +26,14 @@
 # packaging/README.md for the remaining (one-time, not per-release)
 # Flathub submission steps.
 #
+# Store publishing is per target and only for what this release changed
+# (scripts/release-targets.py — shown below before anything is pushed, also
+# on a dry-run): tv -> Amazon + Play TV, mobile -> Play mobile, webos -> two
+# .ipk on the GitHub Release for a manual LG Seller Lounge upload (no API).
+# The uploads themselves happen in release.yml on the tag push; to publish
+# an unchanged target anyway, re-run it: Actions > release > Run workflow,
+# tag + force=tv,mobile,webos (or all).
+#
 # Override via env:
 #   PILEUS_RELEASE_REMOTE      git remote to push to       (default: origin)
 #   PILEUS_RELEASE_BRANCH      branch to push               (default: main)
@@ -78,6 +86,18 @@ old_line=$(grep -E '^version:' pubspec.yaml)
 echo "pubspec: '$old_line'  ->  '$new_line'"
 echo "commit + tag $tag, then push '$BRANCH' and '$tag' to '$REMOTE'"
 
+# --- which stores this release touches --------------------------------------
+echo
+targets_out=$(mktemp)
+trap 'rm -f "$targets_out"' EXIT
+GITHUB_OUTPUT="$targets_out" python3 -I scripts/release-targets.py --github-output
+target() { grep -q "^$1=true$" "$targets_out"; }
+echo
+target tv && echo "  -> Amazon Appstore + Play (Android TV): build, upload, submit for review"
+target mobile && echo "  -> Play (mobile): build, upload, submit for review"
+target webos && echo "  -> LG webOS: .ipk on the GitHub Release, upload by hand to the Seller Lounge"
+target tv || target mobile || target webos || echo "  -> no store target changed: GitHub Release only"
+
 if $dry; then echo "(dry-run, nothing done)"; exit 0; fi
 
 sed -i -E "s/^version:.*/${new_line}/" pubspec.yaml
@@ -129,6 +149,17 @@ dispatch_workflow linux.yml "$SKIP_LINUX" \
 dispatch_workflow windows.yml "$SKIP_WINDOWS" \
   "the Windows installer + portable zip, attached to the $tag release" \
   PILEUS_SKIP_WINDOWS_BUILD
+# store.yml only produces downloadable AAB/APKs for a manual upload — with
+# release.yml's play/amazon-submit jobs that's a fallback, so only when an
+# Android target changed.
+if ! target tv && ! target mobile; then SKIP_STORE=1; fi
 dispatch_workflow store.yml "$SKIP_STORE" \
   "the signed AAB + per-ABI APKs for Play/Amazon, as a downloadable workflow artifact (pileus-${ver}-store)" \
   PILEUS_SKIP_STORE_BUILD
+
+if target webos; then
+  echo
+  echo "LG webOS changed: once release.yml's webos job finishes, download"
+  echo "pileus-${ver}-webos-1080p.ipk and -720p.ipk from the $tag release and"
+  echo "upload them in the LG Seller Lounge (File Ver. ${ver})."
+fi

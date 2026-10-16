@@ -3,15 +3,18 @@
 # App Submission API:
 # https://developer.amazon.com/docs/app-submission-api/
 #
-#   scripts/amazon-upload-edit.sh path/to/app-*.apk
+#   scripts/amazon-upload-edit.sh path/to/app-*.apk            # draft only
+#   scripts/amazon-upload-edit.sh --submit path/to/app-*.apk   # + submit for review
 #
-# Three steps, in order: get an OAuth2 access token, reuse the open edit or
-# create one (see step 2), upload
-# each APK to it. Deliberately stops there — it never commits/submits the
-# edit. The edit is left in the Developer Console as IN_PROGRESS; open it,
-# review it, and submit it for review by hand. release.yml's amazon-submit
-# job is the only caller; see that job's own comment for why auto-submit is
-# intentionally not wired up.
+# Steps, in order: get an OAuth2 access token, reuse the open edit or
+# create one (see step 2), upload each APK to it and — only with --submit —
+# commit the edit, which is what submits it for Amazon's review. Without
+# --submit the edit stays IN_PROGRESS in the Developer Console for a human
+# to review and submit. release.yml's amazon-submit job is the caller.
+#
+# A version still under review blocks any upload (Amazon allows one edit,
+# and a submitted one can't be modified): that ends with a warning and
+# exit 0, not a failure — re-run the tag once the review is over.
 #
 # Needs env:
 #   AMAZON_CLIENT_ID / AMAZON_CLIENT_SECRET   App Submission API credentials
@@ -38,8 +41,14 @@ set -euo pipefail
 : "${AMAZON_CLIENT_SECRET:?set AMAZON_CLIENT_SECRET}"
 : "${AMAZON_APP_ID:?set AMAZON_APP_ID}"
 
+SUBMIT=0
+if [ "${1:-}" = "--submit" ]; then
+  SUBMIT=1
+  shift
+fi
+
 if [ "$#" -eq 0 ]; then
-  echo "Uso: $0 path/to/app1.apk [app2.apk ...]" >&2
+  echo "Uso: $0 [--submit] path/to/app1.apk [app2.apk ...]" >&2
   exit 1
 fi
 for apk in "$@"; do
@@ -107,7 +116,14 @@ fi
 EDIT_ID=""
 [ "$status" = 200 ] && EDIT_ID="$(echo "$active_edit" | jq -r '.id // empty' 2>/dev/null || true)"
 if [ -n "$EDIT_ID" ]; then
-  echo "Edit aperto esistente: $EDIT_ID ($(echo "$active_edit" | jq -r '.status // "?"')) — lo riuso."
+  edit_status="$(echo "$active_edit" | jq -r '.status // "?"')"
+  if [ "$edit_status" != IN_PROGRESS ]; then
+    # Submitted (e.g. REVIEW): every change to it answers 412
+    # error_cannot_be_modified_in_state — v1.6.7's run died on exactly that.
+    echo "::warning::L'edit Amazon aperto ($EDIT_ID) è in stato $edit_status: una versione è ancora in revisione e non si può modificare. APK NON caricati — rilancia questo tag (Actions > release > Run workflow) a revisione conclusa."
+    exit 0
+  fi
+  echo "Edit aperto esistente: $EDIT_ID ($edit_status) — lo riuso."
   for apk_id in $(req GET "$API/edits/$EDIT_ID/apks" | jq -r '.[]?.id // empty'); do
     etag="$(curl -sS -D - -o /dev/null "$API/edits/$EDIT_ID/apks/$apk_id" \
       -H "Authorization: Bearer $ACCESS_TOKEN" | tr -d '\r' | awk 'tolower($1)=="etag:"{print $2}')"
@@ -151,9 +167,19 @@ for apk in "$@"; do
     --data-binary "@$apk" >/dev/null
 done
 
+if [ "$SUBMIT" = 1 ]; then
+  echo "== commit: invio in revisione =="
+  etag="$(curl -sS -D - -o /dev/null "$API/edits/$EDIT_ID" \
+    -H "Authorization: Bearer $ACCESS_TOKEN" | tr -d '\r' | awk 'tolower($1)=="etag:"{print $2}')"
+  req POST "$API/edits/$EDIT_ID/commit" -H "If-Match: $etag" >/dev/null
+  echo
+  echo "Fatto — edit $EDIT_ID su app $AMAZON_APP_ID, $# APK caricati e INVIATI in revisione."
+  exit 0
+fi
+
 cat <<EOF
 
 Fatto — edit $EDIT_ID su app $AMAZON_APP_ID, $# APK caricati.
-Stato: IN_PROGRESS — NON inviato in revisione (questo script non fa commit).
+Stato: IN_PROGRESS — NON inviato in revisione (senza --submit).
 Rivedilo e invialo da: Amazon Developer Console > Apps & Games > la tua app > App Submission.
 EOF

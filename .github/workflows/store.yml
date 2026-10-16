@@ -54,7 +54,12 @@ jobs:
         run: |
           tag="${{ inputs.tag }}"
           echo "name=${tag#v}" >> "$GITHUB_OUTPUT"
-          echo "build=${{ github.run_number }}" >> "$GITHUB_OUTPUT"
+          # Older tags predate the script: keep their run-number versionCode.
+          if [ -x scripts/version-code.sh ]; then
+            echo "build=$(scripts/version-code.sh "${tag#v}")" >> "$GITHUB_OUTPUT"
+          else
+            echo "build=${{ github.run_number }}" >> "$GITHUB_OUTPUT"
+          fi
 
       - run: flutter pub get
 

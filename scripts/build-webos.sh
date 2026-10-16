@@ -8,8 +8,9 @@
 #                                        # Seller Lounge wants one per resolution; the UI
 #                                        # itself is resolution-independent
 #
-# Runs flutter through `devc` (devcontainer) and ares-* through the
-# fedora-toolbox-44 toolbox. Output lives in its own build/webos/ so the
+# Uses flutter / ares-package directly when they're on PATH (CI); otherwise
+# flutter through `devc` (devcontainer) and ares-* through the
+# fedora-toolbox-44 toolbox (local Aurora host). Output lives in its own build/webos/ so the
 # Android/PWA/Tizen builds never leak into the package (they share build/web).
 # What it fixes up after `flutter build web`, each of which otherwise ships a
 # broken app — see docs/TIZEN_WEBOS.md:
@@ -40,15 +41,23 @@ VERSION=$(sed -n 's/^version: *\([0-9]*\.[0-9]*\.[0-9]*\).*/\1/p' pubspec.yaml)
 [ -n "$VERSION" ] || { echo "no version in pubspec.yaml" >&2; exit 1; }
 
 APP=$OUT/app
-# The container runs as root, so what it wrote last time is root-owned.
-devc rm -rf "$OUT"
-mkdir -p "$APP"
+FLUTTER_ARGS="-t lib/main_web_tv.dart --release --base-href / --no-web-resources-cdn"
+[ -n "${PILEUS_BUILD_NUMBER:-}" ] && FLUTTER_ARGS="$FLUTTER_ARGS --build-number=$PILEUS_BUILD_NUMBER"
 
 echo "==> flutter build web (TV UI) $VERSION $RESOLUTION"
-# -o must be absolute and is resolved inside the container, hence $PWD there.
-devc bash -c "flutter build web -t lib/main_web_tv.dart --release \
-  --base-href / --no-web-resources-cdn -o \"\$PWD/$APP\" \
-  && chown -R $(id -u):$(id -g) \"$OUT\""
+if command -v flutter >/dev/null 2>&1; then
+  rm -rf "$OUT"
+  mkdir -p "$APP"
+  # shellcheck disable=SC2086
+  flutter build web $FLUTTER_ARGS -o "$PWD/$APP"
+else
+  # The container runs as root, so what it wrote last time is root-owned.
+  devc rm -rf "$OUT"
+  mkdir -p "$APP"
+  # -o must be absolute and is resolved inside the container, hence $PWD there.
+  devc bash -c "flutter build web $FLUTTER_ARGS -o \"\$PWD/$APP\" \
+    && chown -R $(id -u):$(id -g) \"$OUT\""
+fi
 
 echo "==> webOS fix-ups"
 sed -i 's|<base href="/">|<base href="./">|' "$APP/index.html"
@@ -65,12 +74,22 @@ info["resolution"] = resolution
 json.dump(info, open(dst, "w"), indent=2)
 PY
 
+ares() {
+  # ares-* are node scripts: on PATH without node (the Aurora host sees the
+  # toolbox's ~/.npm-global/bin) they can't run, so go through the toolbox.
+  if command -v node >/dev/null 2>&1 && command -v "$1" >/dev/null 2>&1; then
+    "$@"
+  else
+    toolbox run -c fedora-toolbox-44 "$@"
+  fi
+}
+
 echo "==> ares-package"
-toolbox run -c fedora-toolbox-44 ares-package "$APP" -o "$OUT"
+ares ares-package "$APP" -o "$OUT"
 ls -1 "$OUT"/*.ipk
 
 if [ "$SIMULATOR" = 1 ]; then
   echo "==> webOS TV 26 Simulator"
-  toolbox run -c fedora-toolbox-44 ares-launch -s 26 \
+  ares ares-launch -s 26 \
     -sp "$HOME/.local/share/webos-tv-simulator" "$PWD/$APP"
 fi
