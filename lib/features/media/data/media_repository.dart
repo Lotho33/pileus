@@ -248,14 +248,26 @@ class MediaRepository {
         DateTime.now().difference(cached.$2) < _filtersCacheTtl) {
       return Future.value(cached.$1);
     }
-    return _filtersInFlight[pluginId] ??= _client
-        .getSearchFilters(SearchFiltersRequest(pluginId: pluginId))
-        .then((resp) {
+    return _filtersInFlight[pluginId] ??= _fetchAndCacheFilters(pluginId);
+  }
+
+  // Not a `.then().whenComplete(() => _filtersInFlight.remove(id))` chain:
+  // `remove` returns the removed value — that very chain's future — and
+  // whenComplete waits on a Future its callback returns, so the future
+  // waited on itself and never completed. Every first open of a plugin's
+  // search sat on the Filtri spinner (retryNow joined the stuck call); only
+  // a later screen, served from _filtersCache, saw the filters.
+  Future<SearchFiltersResponse> _fetchAndCacheFilters(String pluginId) async {
+    try {
+      final resp = await _client
+          .getSearchFilters(SearchFiltersRequest(pluginId: pluginId));
       if (resp.filters.isNotEmpty) {
         _filtersCache[pluginId] = (resp, DateTime.now());
       }
       return resp;
-    }).whenComplete(() => _filtersInFlight.remove(pluginId));
+    } finally {
+      _filtersInFlight.remove(pluginId);
+    }
   }
 
   Future<SearchResponse> search(
