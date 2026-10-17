@@ -7,17 +7,14 @@
 #
 # Downloads the tarball, computes its sha256, and rewrites the manifest's
 # <TARBALL_URL>/<TARBALL_SHA256> placeholders in place. Also bumps the
-# <release version> line in the appstream metainfo so Flathub's own
+# <release version> line in the appstream metainfo so appstream
 # validation sees a matching version.
 #
 # What this does NOT do (one-time setup, not per-release — see
 # packaging/README.md):
 #   - pin/build the libmpv module (still a stub in the manifest)
-#   - the actual Flathub submission/update, which happens in a SEPARATE
-#     git repo Flathub hosts once your app is accepted there, never in
-#     this one — see https://docs.flathub.org/docs/for-app-authors/submission
-#     for first-time submission, and packaging/README.md for how an
-#     update push normally looks once accepted.
+#   - publishing the built Flatpak anywhere (not on Flathub — see
+#     packaging/README.md).
 set -euo pipefail
 
 ver=${1:-}
@@ -100,7 +97,4 @@ else
 fi
 
 echo
-echo "git diff shows the change; commit it, then (once accepted on Flathub)"
-echo "push the equivalent manifest update to Flathub's own repo for this"
-echo "app — that push is what actually triggers Flathub's rebuild, not"
-echo "anything in this repo. See packaging/README.md."
+echo "git diff shows the change; commit it. See packaging/README.md."

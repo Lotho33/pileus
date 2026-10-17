@@ -23,8 +23,8 @@
 # Once linux.yml's run finishes and the tarball is attached to the
 # release, run `scripts/update-flatpak-manifest.sh X.Y.Z` to point the
 # Flatpak manifest (packaging/linux/) at it — see that script and
-# packaging/README.md for the remaining (one-time, not per-release)
-# Flathub submission steps.
+# packaging/README.md. (Not on Flathub: its generative-AI policy rules this
+# project out — see packaging/README.md.)
 #
 # Store publishing is per target and only for what this release changed
 # (scripts/release-targets.py — shown below before anything is pushed, also
@@ -97,39 +97,6 @@ target tv && echo "  -> Amazon Appstore + Play (Android TV): build, upload, subm
 target mobile && echo "  -> Play (mobile): build, upload, submit for review"
 target webos && echo "  -> LG webOS: .ipk on the GitHub Release, upload by hand to the Seller Lounge"
 target tv || target mobile || target webos || echo "  -> no store target changed: GitHub Release only"
-
-# --- Flathub status (informational, never blocks) ---------------------------
-# Before acceptance the app lives as a submission PR on flathub/flathub;
-# after it, Flathub hosts flathub/<app-id>, which takes the per-release
-# update (scripts/update-flatpak-manifest.sh, then a PR/push there).
-flathub_status() {
-  local app=io.github.lotho33.Pileus
-  echo
-  if ! command -v gh >/dev/null 2>&1; then
-    echo "flathub: gh not found — status not checked"
-    return
-  fi
-  if gh repo view "flathub/$app" >/dev/null 2>&1; then
-    echo "flathub: published (github.com/flathub/$app). Open update PRs:"
-    gh pr list --repo "flathub/$app" --state open \
-      --json number,title,url -q '.[] | "  #\(.number) \(.title)  \(.url)"' || true
-    echo "  -> after linux.yml: scripts/update-flatpak-manifest.sh $ver, then update flathub/$app"
-    return
-  fi
-  local pr
-  pr=$(gh pr list --repo flathub/flathub --state all --search "$app in:title" -L 1 \
-    --json number,state,url,labels \
-    -q '.[0] | select(.) | "#\(.number) \(.state) \([.labels[].name] | join(",")) \(.url)"' 2>/dev/null || true)
-  if [[ -z "$pr" ]]; then
-    echo "flathub: not published, no submission PR found (packaging/README.md, Flathub section)"
-  elif [[ "$pr" == *" OPEN "* ]]; then
-    echo "flathub: submission under review — $pr"
-  else
-    echo "flathub: NOT published — last submission PR is closed: $pr"
-    echo "  -> a new submission is needed (packaging/README.md, Flathub section)"
-  fi
-}
-flathub_status
 
 if $dry; then echo "(dry-run, nothing done)"; exit 0; fi
 

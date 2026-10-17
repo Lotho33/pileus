@@ -20,8 +20,7 @@
 #
 # The `url`/`sha256` below are kept current per release by
 # `scripts/update-flatpak-manifest.sh <version>` — run that after a release
-# instead of editing them by hand. Remaining one-time work (not per-release)
-# before this is Flathub-submittable: see packaging/README.md.
+# instead of editing them by hand. Not on Flathub — see packaging/README.md.
 #
 #   flatpak-builder --user --install --force-clean build-dir \
 #     packaging/linux/io.github.lotho33.Pileus.yml

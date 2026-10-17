@@ -35,7 +35,7 @@ is on PATH — also dispatches `linux.yml` for that tag, so the desktop
 Linux tarball gets built and attached without a separate manual step. Once
 that run finishes, `scripts/update-flatpak-manifest.sh <X.Y.Z>` points the
 Flatpak manifest (`packaging/linux/`) at the new tarball — see
-`packaging/README.md` for the remaining one-time Flathub setup.
+`packaging/README.md` (Pileus is not on Flathub — see there why).
 
 Manually, the equivalent is:
 
