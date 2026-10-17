@@ -11,6 +11,7 @@ media-server backend — Android TV/Fire TV, mobile, desktop, and web.
 - [Self-hosting Mycelium](SELF_HOSTING.html)
 - [Building Pileus](BUILD.html)
 - [Architecture](ARCHITECTURE.html)
+- [Linux (Flatpak)](LINUX.html)
 - [Web build](WEB.html)
 - [Samsung Tizen / LG webOS](TIZEN_WEBOS.html)
 

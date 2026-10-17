@@ -1,0 +1,79 @@
+# Deploys GitHub Pages (https://lotho33.github.io/pileus/): docs/ rendered
+# by Jekyll exactly as the old "deploy from main /docs" setting did (the
+# privacy policy the stores link to lives there), plus the self-hosted
+# Flatpak repo under /flatpak/ (see flatpak.yml).
+#
+# A Pages deploy replaces the whole site, so every run — a docs change
+# included — re-adds the newest flatpak-repo.tar.gz found on the GitHub
+# Releases; the repo itself is never committed to git.
+#
+# Requires Settings -> Pages -> Source: "GitHub Actions".
+
+name: pages
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "docs/**"
+      - "packaging/linux/flatpak/**"
+      - ".github/workflows/pages.yml"
+  workflow_dispatch:
+  workflow_call:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: main
+
+      - uses: actions/configure-pages@v5
+
+      - uses: actions/jekyll-build-pages@v1
+        with:
+          source: ./docs
+          destination: ./_site
+
+      - name: Add the Flatpak repo
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          sudo chown -R "$(id -u):$(id -g)" _site
+          out=_site/flatpak
+          mkdir -p "$out"
+          cp packaging/linux/flatpak/* packaging/linux/icon-256.png "$out/"
+          # newest release that has a repo attached (the latest release may
+          # still be building it)
+          for tag in $(gh release list -R "$GITHUB_REPOSITORY" -L 20 --json tagName -q '.[].tagName'); do
+            if gh release download "$tag" -R "$GITHUB_REPOSITORY" -p flatpak-repo.tar.gz -D /tmp 2>/dev/null; then
+              tar xzf /tmp/flatpak-repo.tar.gz -C "$out"
+              echo "flatpak repo from $tag"
+              break
+            fi
+          done
+          [ -f "$out/repo/summary" ] || echo "::warning::no flatpak-repo.tar.gz on any recent release — site deployed without the Flatpak repo"
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.d.outputs.page_url }}
+    steps:
+      - id: d
+        uses: actions/deploy-pages@v4

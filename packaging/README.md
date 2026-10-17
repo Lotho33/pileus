@@ -27,46 +27,41 @@ Desktop integration + Flatpak:
 | `io.github.lotho33.Pileus.desktop` | ready |
 | `io.github.lotho33.Pileus.metainfo.xml` | ready except **screenshots** (real images referenced by a stable URL — app stores read them from there) |
 | `icon-256.png` | ready — rasterised from `web/icons/Icon-512.png` |
-| `io.github.lotho33.Pileus.yml` | tarball source auto-filled per release (see below) — **libmpv built from source and verified** (libass → ffmpeg → libdisplay-info/libXpresent/libplacebo → mpv → pileus, in that dependency order); smoke-tested with `flatpak-builder --run`, `media_kit_libs_linux registered.` confirms libmpv.so.2 actually resolves and loads in the sandbox |
+| `io.github.lotho33.Pileus.yml` | tarball source swapped in per release by `flatpak.yml` (see below) — **libmpv built from source and verified** (libass → ffmpeg → libdisplay-info/libXpresent/libplacebo → mpv → pileus, in that dependency order); smoke-tested with `flatpak-builder --run`, `media_kit_libs_linux registered.` confirms libmpv.so.2 actually resolves and loads in the sandbox |
 | `pileus-update.{sh,service,timer}` | systemd auto-update units for a tarball install (unrelated to Flatpak) |
 
-### Per-release: point the manifest at the new tarball
+### Self-hosted Flatpak repo
 
-After `scripts/release.sh` (which also dispatches the `linux.yml` build —
-see its own header) finishes and the tarball is attached to the GitHub
-Release:
+Published at **https://lotho33.github.io/pileus/flatpak/** — install
+instructions for users in `docs/LINUX.md`. Per release, nothing to do by
+hand: `scripts/release.sh` dispatches `linux.yml`, which chains
+`.github/workflows/flatpak.yml`:
 
-```sh
-scripts/update-flatpak-manifest.sh <X.Y.Z>
-```
+1. downloads the tag's `pileus-<ver>-linux-x64.tar.gz` and swaps it into
+   the manifest as a local `path:` source (plus the metainfo `<release>`);
+2. builds with `flatpak-builder` (libmpv modules cached between runs) into
+   an OSTree repo on branch `stable`, GPG-signed;
+3. attaches `pileus-<ver>-linux-x64.flatpak` (single-file bundle) and
+   `flatpak-repo.tar.gz` to the GitHub Release;
+4. runs `pages.yml`, which deploys `docs/` (Jekyll, as before) plus the
+   newest `flatpak-repo.tar.gz` under `/flatpak/repo/` and the files in
+   `linux/flatpak/` (`pileus.flatpakrepo`, the `.flatpakref`, the public
+   key). Pages source must be set to "GitHub Actions".
 
-Rewrites the manifest's `url`/`sha256` and the metainfo's `<release>` tag,
-and runs `flatpak-builder` for you if it's installed. Commit the diff.
+The repo keeps only the latest build; clients update without the older
+commit.
 
-**Then, a second manual step** (unavoidable chicken-and-egg with the step
-above): the `pileus` module's three small `type: file` sources
-(`.desktop`/metainfo/icon) are fetched from this repo's own `main` branch
-pinned to a commit, so the manifest builds from upstream sources only.
-`metainfo.xml`'s content just changed (new `<release>` tag) by the step
-above, so its sha256 changed too — but the new commit containing that
-change doesn't exist on GitHub until *after* you push. So: push first,
-then re-pin:
+**Signing key**: RSA 4096, fingerprint
+`AD5C6DA0755AEEFA6A69E1B8BCFBA0FFC89C0C4B`, private half in the
+`FLATPAK_GPG_PRIVATE_KEY` secret (and backed up outside GitHub). The public
+half is `linux/flatpak/pileus-flatpak.gpg` and the base64 `GPGKey=` line of
+both `.flatpak*` files — replacing the key means every installed client
+has to re-add the remote.
 
-```sh
-commit=$(git rev-parse HEAD)
-for f in io.github.lotho33.Pileus.desktop io.github.lotho33.Pileus.metainfo.xml icon-256.png; do
-  sha256sum "packaging/linux/$f"
-done
-```
-
-and update the three `url`/`sha256` pairs in the `pileus` module by hand
-(the commit hash is the same for all three; `.desktop`/icon rarely
-actually change, only their hash *claim* needs touching when the commit
-hash moves — but a stale one just fails the build loudly, so it's safe to
-always refresh all three). Commit+push that as a tiny follow-up. A future
-cleanup worth doing: have `linux.yml` copy these three files into the
-release tarball itself alongside the binary, so this whole manual step
-goes away — same single already-fetched archive source as the binary.
+Local build (no publishing): `scripts/update-flatpak-manifest.sh <X.Y.Z>`
+points the manifest at a released tarball, then
+`flatpak-builder --user --install --force-clean build-dir
+linux/io.github.lotho33.Pileus.yml`.
 
 ### Not on Flathub
 

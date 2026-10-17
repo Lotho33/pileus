@@ -3,12 +3,14 @@
 # hasn't made it yet). `scripts/release.sh` dispatches this automatically
 # after pushing a tag (set PILEUS_SKIP_LINUX_BUILD=1 to skip that); it can
 # also be run by hand from Actions -> linux -> Run workflow, with the tag
-# as input.
+# as input. Then flatpak.yml packages that tarball and publishes it to the
+# self-hosted Flatpak repo on GitHub Pages.
 #
-# GitHub-hosted `ubuntu-latest` runner, no self-hosted infra, no extra
-# secret — GITHUB_TOKEN (builtin, `contents: write` below) covers release
-# creation + asset upload via softprops/action-gh-release, same as the
-# android/web jobs in release.yml and windows.yml.
+# GitHub-hosted `ubuntu-latest` runner, no self-hosted infra.
+# GITHUB_TOKEN (builtin, `contents: write` below) covers release creation +
+# asset upload via softprops/action-gh-release, same as the android/web
+# jobs in release.yml and windows.yml; the Flatpak step also needs secret
+# FLATPAK_GPG_PRIVATE_KEY (see flatpak.yml).
 
 name: linux
 
@@ -21,6 +23,8 @@ on:
 
 permissions:
   contents: write # create/update the GitHub Release
+  pages: write # flatpak.yml -> pages.yml
+  id-token: write # flatpak.yml -> pages.yml
 
 jobs:
   build:
@@ -70,3 +74,10 @@ jobs:
         with:
           tag_name: ${{ inputs.tag }}
           files: dist/*
+
+  flatpak:
+    needs: build
+    uses: ./.github/workflows/flatpak.yml
+    with:
+      tag: ${{ inputs.tag }}
+    secrets: inherit

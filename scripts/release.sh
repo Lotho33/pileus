@@ -15,16 +15,12 @@
 # env overrides below) for a release that genuinely doesn't need one of
 # them (e.g. no store submission is due this cycle).
 #
-# GitHub Pages (the privacy policy / docs site, lotho33.github.io/pileus)
-# needs nothing here — it's GitHub's own branch-deploy from /docs on
-# main, not a workflow this repo defines; it redeploys on its own the
-# moment the version-bump commit below lands on main.
-#
-# Once linux.yml's run finishes and the tarball is attached to the
-# release, run `scripts/update-flatpak-manifest.sh X.Y.Z` to point the
-# Flatpak manifest (packaging/linux/) at it — see that script and
-# packaging/README.md. (Not on Flathub: its generative-AI policy rules this
-# project out — see packaging/README.md.)
+# linux.yml then chains flatpak.yml: the Flatpak is built from that
+# tarball, signed, and published to the self-hosted repo on GitHub Pages
+# (lotho33.github.io/pileus/flatpak/, deployed by pages.yml, which also
+# serves docs/ — the privacy policy the stores link to). Nothing to do by
+# hand. (Not on Flathub: its generative-AI policy rules this project out —
+# see packaging/README.md.)
 #
 # Store publishing is per target and only for what this release changed
 # (scripts/release-targets.py — shown below before anything is pushed, also
@@ -144,7 +140,7 @@ dispatch_workflow() {
 }
 
 dispatch_workflow linux.yml "$SKIP_LINUX" \
-  "pileus-${ver}-linux-x64.tar.gz, attached to the $tag release (then: scripts/update-flatpak-manifest.sh $ver)" \
+  "pileus-${ver}-linux-x64.tar.gz + the Flatpak (bundle on the $tag release, repo on lotho33.github.io/pileus/flatpak/)" \
   PILEUS_SKIP_LINUX_BUILD
 dispatch_workflow windows.yml "$SKIP_WINDOWS" \
   "the Windows installer + portable zip, attached to the $tag release" \

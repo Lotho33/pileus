@@ -8,7 +8,9 @@ self-hosted infrastructure.
 |---|---|---|
 | `release.yml` | push of tag `vX.Y.Z` (or manual, with a tag input) | Android APKs (per-ABI, both flavors) + the web bundle, attached to the GitHub Release; **also** draft-uploads the TV store build to a new Amazon Appstore edit (see below) |
 | `store.yml` | manual, tag input | signed AAB + signed per-ABI APKs for Play Store / Amazon Appstore, as a downloadable workflow artifact |
-| `linux.yml` | manual, tag input | a Linux x64 tarball, attached to the GitHub Release |
+| `linux.yml` | manual, tag input | a Linux x64 tarball, attached to the GitHub Release; then calls `flatpak.yml` |
+| `flatpak.yml` | called by `linux.yml` (or manual, tag input) | the Flatpak bundle + repo tarball on the Release; then calls `pages.yml` |
+| `pages.yml` | push to `docs/**`, called by `flatpak.yml`, manual | GitHub Pages: `docs/` + the Flatpak repo under `/flatpak/` |
 | `windows.yml` | manual, tag input | a Windows installer + portable zip, attached to the GitHub Release |
 | `ci.yml` | every push/PR to `main` | `flutter analyze` + `flutter test` |
 
@@ -32,9 +34,9 @@ Use the helper: `scripts/release.sh <X.Y.Z>` bumps `version:` in
 `pubspec.yaml`, commits, tags `vX.Y.Z`, pushes branch + tag to the
 `origin` remote (it refuses to run unless you're on `main`), and — if `gh`
 is on PATH — also dispatches `linux.yml` for that tag, so the desktop
-Linux tarball gets built and attached without a separate manual step. Once
-that run finishes, `scripts/update-flatpak-manifest.sh <X.Y.Z>` points the
-Flatpak manifest (`packaging/linux/`) at the new tarball — see
+Linux tarball gets built and attached without a separate manual step;
+that run then chains `flatpak.yml`, which builds the Flatpak, signs it and
+publishes it to the self-hosted repo on GitHub Pages — see
 `packaging/README.md` (Pileus is not on Flathub — see there why).
 
 Manually, the equivalent is:
@@ -211,6 +213,7 @@ counters drifted apart between Play (store.yml) and Amazon (release.yml).
 | `AMAZON_CLIENT_ID` | App Submission API client id (Console → Settings → API Access) — set via `scripts/set-amazon-secrets.sh`, not by hand |
 | `AMAZON_CLIENT_SECRET` | App Submission API client secret — same script |
 | `PLAY_SERVICE_ACCOUNT_JSON` | Play Developer API service-account key (JSON) — see "Google Play API" above |
+| `FLATPAK_GPG_PRIVATE_KEY` | armored private key (no passphrase) that signs the self-hosted Flatpak repo — see `packaging/README.md` |
 
 No extra token needed — the builtin `GITHUB_TOKEN` (`contents: write`,
 already set in each workflow) covers creating the release and uploading

@@ -1,0 +1,121 @@
+# Builds the Flatpak for a `vX.Y.Z` tag and publishes it to the
+# self-hosted, GPG-signed Flatpak repository on this repo's GitHub Pages
+# (https://lotho33.github.io/pileus/flatpak/). Not on Flathub — see
+# packaging/README.md.
+#
+# Called by linux.yml once that tag's tarball is on the GitHub Release
+# (the manifest packages that prebuilt bundle plus a libmpv built here);
+# can also be run by hand from Actions -> flatpak -> Run workflow.
+#
+# Outputs, both attached to the tag's GitHub Release:
+#   pileus-<ver>-linux-x64.flatpak   single-file bundle (offline install)
+#   flatpak-repo.tar.gz             the whole OSTree repo — pages.yml
+#                                   deploys the newest one, so a docs-only
+#                                   Pages deploy never drops the repo.
+# then runs pages.yml to put the new repo online.
+#
+# The repo holds only the latest build: clients update fine without the
+# previous commit (they just fetch objects instead of a static delta).
+#
+# Needs secret FLATPAK_GPG_PRIVATE_KEY (armored, no passphrase): the key
+# whose public half is packaging/linux/flatpak/pileus-flatpak.gpg and the
+# GPGKey= in the .flatpakrepo/.flatpakref. Losing it means every user has
+# to re-add the remote — keep a backup outside GitHub.
+
+name: flatpak
+
+on:
+  workflow_call:
+    inputs:
+      tag:
+        type: string
+        required: true
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "existing tag whose linux tarball is released, e.g. v1.6.8"
+        required: true
+
+permissions:
+  contents: write # attach to the GitHub Release
+  pages: write # pages.yml
+  id-token: write # pages.yml
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    container:
+      image: ghcr.io/flathub-infra/flatpak-github-actions:freedesktop-25.08
+      options: --privileged
+    env:
+      APP: io.github.lotho33.Pileus
+      MANIFEST: packaging/linux/io.github.lotho33.Pileus.yml
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ inputs.tag }}
+
+      - name: Version
+        id: v
+        run: |
+          tag="${{ inputs.tag }}"
+          echo "name=${tag#v}" >> "$GITHUB_OUTPUT"
+
+      - name: Point the manifest at this release's tarball
+        env:
+          V: ${{ steps.v.outputs.name }}
+        run: |
+          curl -fsSL -o packaging/linux/pileus-linux-x64.tar.gz \
+            "https://github.com/${{ github.repository }}/releases/download/v$V/pileus-$V-linux-x64.tar.gz"
+          # url: + its sha256: line -> one local path: line
+          sed -i -E '/url: .*\/pileus-[0-9.]+-linux-x64\.tar\.gz$/{s#url: .*#path: pileus-linux-x64.tar.gz#;n;d}' "$MANIFEST"
+          grep -n 'pileus-linux-x64.tar.gz' "$MANIFEST"
+          sed -i -E "s#<release version=\"[^\"]*\" date=\"[^\"]*\"/>#<release version=\"$V\" date=\"$(date -u +%F)\"/>#" \
+            packaging/linux/$APP.metainfo.xml
+
+      - name: Import signing key
+        env:
+          KEY: ${{ secrets.FLATPAK_GPG_PRIVATE_KEY }}
+        run: |
+          if [ -z "$KEY" ]; then
+            echo "::error::secret FLATPAK_GPG_PRIVATE_KEY missing (see this workflow's header)"
+            exit 1
+          fi
+          printf '%s\n' "$KEY" | gpg --batch --import
+          fpr="$(gpg --list-secret-keys --with-colons | awk -F: '/^fpr/{print $10; exit}')"
+          echo "GPG_FPR=$fpr" >> "$GITHUB_ENV"
+
+      # ffmpeg/libplacebo/mpv take most of the build: keep flatpak-builder's
+      # per-module cache between runs (a module rebuilds only when its own
+      # entry in the manifest changes).
+      - uses: actions/cache@v4
+        with:
+          path: .flatpak-builder
+          key: flatpak-builder-${{ hashFiles('packaging/linux/io.github.lotho33.Pileus.yml') }}-${{ steps.v.outputs.name }}
+          restore-keys: flatpak-builder-
+
+      - name: Build and sign
+        run: |
+          flatpak remote-add --if-not-exists flathub https://dl.flathub.org/repo/flathub.flatpakrepo
+          flatpak-builder --disable-rofiles-fuse --force-clean \
+            --install-deps-from=flathub --default-branch=stable \
+            --repo=repo --gpg-sign="$GPG_FPR" \
+            build-dir "$MANIFEST"
+          flatpak build-update-repo --gpg-sign="$GPG_FPR" \
+            --title=Pileus --default-branch=stable --prune repo
+          mkdir -p dist
+          flatpak build-bundle --gpg-sign="$GPG_FPR" \
+            --runtime-repo=https://dl.flathub.org/repo/flathub.flatpakrepo \
+            repo "dist/pileus-${{ steps.v.outputs.name }}-linux-x64.flatpak" "$APP" stable
+          tar czf dist/flatpak-repo.tar.gz repo
+          ls -la dist
+
+      - name: GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ inputs.tag }}
+          files: dist/*
+
+  pages:
+    needs: build
+    uses: ./.github/workflows/pages.yml

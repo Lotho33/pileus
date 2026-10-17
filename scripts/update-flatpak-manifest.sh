@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # Points packaging/linux/io.github.lotho33.Pileus.yml at a published
-# release's Linux tarball — run once linux.yml's run for that tag has
-# finished (see scripts/release.sh, which dispatches it).
+# release's Linux tarball, for a LOCAL flatpak-builder run. Releases don't
+# need it: flatpak.yml (chained after linux.yml) swaps in the tarball by
+# itself and publishes the repo.
 #
 #   scripts/update-flatpak-manifest.sh 1.5.3
 #
@@ -10,11 +11,8 @@
 # <release version> line in the appstream metainfo so appstream
 # validation sees a matching version.
 #
-# What this does NOT do (one-time setup, not per-release — see
-# packaging/README.md):
-#   - pin/build the libmpv module (still a stub in the manifest)
-#   - publishing the built Flatpak anywhere (not on Flathub — see
-#     packaging/README.md).
+# Publishing is not this script's job: that's flatpak.yml + pages.yml (not
+# on Flathub — see packaging/README.md).
 set -euo pipefail
 
 ver=${1:-}
@@ -88,8 +86,7 @@ echo "updated $manifest and $metainfo for v$ver."
 echo
 
 if command -v flatpak-builder >/dev/null 2>&1; then
-  echo "validating with flatpak-builder (this also needs the libmpv module"
-  echo "filled in — see the manifest's header — to actually succeed):"
+  echo "build and install it locally with:"
   echo "  flatpak-builder --user --install --force-clean build-dir $manifest"
 else
   echo "flatpak-builder not found here — validate on a machine that has it:"
@@ -97,4 +94,4 @@ else
 fi
 
 echo
-echo "git diff shows the change; commit it. See packaging/README.md."
+echo "git diff shows the change (optional to commit). See packaging/README.md."
