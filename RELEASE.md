@@ -170,8 +170,11 @@ before tagging, also on `-n`. Force an unchanged target: Actions → release
 → Run workflow, tag + `force` (`tv,mobile,webos` or `all`).
 
 **Play** (`play` job): builds the AAB of each changed flavor and sends it to
-the **production** track with status completed — i.e. submitted for
-review, published when Google approves. Needs secret
+the track named by repo variable `PLAY_TRACK` — default **`alpha`** (closed
+testing: neither app has production access yet) — with status completed,
+i.e. submitted for review and rolled out when Google approves. Set
+`PLAY_TRACK=production` (Settings → Secrets and variables → Actions →
+Variables) once Google grants production access. Needs secret
 `PLAY_SERVICE_ACCOUNT_JSON` (below); without it the job only warns.
 
 **LG webOS**: the Seller Lounge has no upload API. Download both `.ipk`

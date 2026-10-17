@@ -35,7 +35,8 @@
 # Store jobs only run for targets this tag actually changed (job `targets`,
 # scripts/release-targets.py — Dart import closure per entry point since the
 # previous tag; workflow_dispatch's `force` input overrides):
-#   tv     -> amazon-submit (submitted for review) + play (Android TV app)
+#   tv     -> amazon-submit (submitted for review) + play (Android TV app,
+#             track = repo variable PLAY_TRACK, default alpha)
 #   mobile -> play (mobile app)
 #   webos  -> webos: both .ipk attached to the GitHub Release; LG's Seller
 #             Lounge has no upload API, so that upload stays manual.
@@ -355,8 +356,8 @@ jobs:
           scripts/amazon-upload-edit.sh --submit amazon-apks/*.apk
 
   # Play Store: the Android TV app (tv flavor) and the mobile app are two
-  # listings; each is built and sent to the production track (= submitted
-  # for review) only when its target changed. Flags: keep in sync with
+  # listings; each is built and sent to the PLAY_TRACK track (default
+  # alpha; submitted for review) only when its target changed. Flags: keep in sync with
   # store.yml.
   play:
     needs: targets
@@ -442,7 +443,10 @@ jobs:
             --build-name="${{ steps.v.outputs.name }}" \
             --build-number="${{ steps.v.outputs.build }}"
 
-      - name: Upload to Play (production track, submitted for review)
+      # Track: repo variable PLAY_TRACK, default alpha (closed testing) —
+      # the apps have no production access yet (1.6.6 sits in alpha +
+      # internal). Set PLAY_TRACK=production once Google grants it.
+      - name: Upload to Play (${{ vars.PLAY_TRACK || 'alpha' }} track, submitted for review)
         if: steps.sa.outputs.ok == 'true'
         uses: r0adkll/upload-google-play@v1
         with:
@@ -450,7 +454,7 @@ jobs:
           packageName: ${{ steps.v.outputs.package }}
           releaseFiles: build/app/outputs/bundle/${{ matrix.flavor }}Release/app-${{ matrix.flavor }}-release.aab
           releaseName: ${{ steps.v.outputs.name }}
-          track: production
+          track: ${{ vars.PLAY_TRACK || 'alpha' }}
           status: completed
           mappingFile: build/app/outputs/mapping/${{ matrix.flavor }}Release/mapping.txt
 
