@@ -69,7 +69,11 @@ import json, sys
 version, debug, resolution, src, dst = sys.argv[1], sys.argv[2] == "1", *sys.argv[3:]
 info = json.load(open(src))
 info["version"] = version
-info["inspectable"] = debug
+info.pop("inspectable", None)
+# The LG Content Store rejects "inspectable" (unpermitted property), even
+# false: only debug builds for a dev-mode TV get it.
+if debug:
+    info["inspectable"] = True
 info["resolution"] = resolution
 json.dump(info, open(dst, "w"), indent=2)
 PY

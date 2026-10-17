@@ -12,6 +12,5 @@
   "resolution": "1920x1080",
   "uiRevision": "2",
   "disableBackHistoryAPI": true,
-  "inspectable": false,
   "requiredACG": []
 }

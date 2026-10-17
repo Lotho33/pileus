@@ -174,7 +174,8 @@ spinner — the script rewrites it to `<base href="./">` (Flutter itself only
 accepts a base href starting with `/`). It also builds with
 `--no-web-resources-cdn` (CanvasKit from the package instead of
 `www.gstatic.com`), syncs `appinfo.json`'s `version` from `pubspec.yaml`
-and keeps `inspectable` off unless `--debug`. The same base-href issue
+and adds `inspectable` only with `--debug` (the LG Content Store rejects
+the property outright, even when false). The same base-href issue
 almost certainly applies to Tizen's `.wgt` (also `file://`-style) —
 unverified.
 
