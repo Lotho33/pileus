@@ -168,10 +168,46 @@ for apk in "$@"; do
 done
 
 if [ "$SUBMIT" = 1 ]; then
+  # Amazon refuses the commit while any listing language lacks "recent
+  # changes" (v1.6.8: error_release_notes_incomplete for en-US). Generic
+  # per-version notes, Italian for it-*, English for everything else.
+  echo "== note di versione (recentChanges) =="
+  version="${AMAZON_RELEASE_VERSION:-}"
+  for lang in $(req GET "$API/edits/$EDIT_ID/listings" | jq -r '(.listings // .) | keys[]?'); do
+    hdr="$(mktemp)"
+    listing="$(req GET "$API/edits/$EDIT_ID/listings/$lang" -D "$hdr")"
+    etag="$(tr -d '\r' < "$hdr" | awk 'tolower($1)=="etag:"{print $2}')"
+    rm -f "$hdr"
+    case "$lang" in
+      it*) notes="Pileus $version: correzioni e miglioramenti." ;;
+      *) notes="Pileus $version: bug fixes and improvements." ;;
+    esac
+    echo "$listing" | jq --arg n "$notes" '.recentChanges = $n' > "$hdr.json"
+    req PUT "$API/edits/$EDIT_ID/listings/$lang" -H "If-Match: $etag" \
+      -H 'Content-Type: application/json' --data-binary "@$hdr.json" >/dev/null
+    rm -f "$hdr.json"
+    echo "  $lang: $notes"
+  done
+
   echo "== commit: invio in revisione =="
   etag="$(curl -sS -D - -o /dev/null "$API/edits/$EDIT_ID" \
     -H "Authorization: Bearer $ACCESS_TOKEN" | tr -d '\r' | awk 'tolower($1)=="etag:"{print $2}')"
-  req POST "$API/edits/$EDIT_ID/commit" -H "If-Match: $etag" >/dev/null
+  tmp="$(mktemp)"
+  status="$(curl -sS -o "$tmp" -w '%{http_code}' -X POST "$API/edits/$EDIT_ID/commit" \
+    -H "Authorization: Bearer $ACCESS_TOKEN" -H "If-Match: $etag")"
+  if [ "$status" -lt 200 ] || [ "$status" -ge 300 ]; then
+    # The APKs are in the edit already: say exactly what's left to do by
+    # hand. error_apk_drm_value_missing = "Apply Amazon DRM?" unanswered for
+    # the new APK, which the API has no documented field for.
+    echo "::error::APK caricati nell'edit $EDIT_ID, ma Amazon ha rifiutato l'invio (HTTP $status). Completa e invia da Developer Console > App Submission > la versione in corso. Errori:"
+    jq -r '.errors[]? | "  - \(.errorCode): \(.errorMessage)"' "$tmp" 2>/dev/null || cat "$tmp"
+    if grep -q error_apk_drm_value_missing "$tmp"; then
+      echo "  (error_apk_drm_value_missing: nella sezione dell'APK rispondi a \"Apply Amazon DRM?\" — Pileus non usa l'SDK Appstore: No)"
+    fi
+    rm -f "$tmp"
+    exit 1
+  fi
+  rm -f "$tmp"
   echo
   echo "Fatto — edit $EDIT_ID su app $AMAZON_APP_ID, $# APK caricati e INVIATI in revisione."
   exit 0

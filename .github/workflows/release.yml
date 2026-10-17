@@ -349,6 +349,7 @@ jobs:
           AMAZON_CLIENT_ID: ${{ secrets.AMAZON_CLIENT_ID }}
           AMAZON_CLIENT_SECRET: ${{ secrets.AMAZON_CLIENT_SECRET }}
           AMAZON_APP_ID: ${{ vars.AMAZON_APP_ID }}
+          AMAZON_RELEASE_VERSION: ${{ steps.v.outputs.name }}
         run: |
           set -eu
           if [ -z "${AMAZON_CLIENT_ID:-}" ] || [ -z "${AMAZON_CLIENT_SECRET:-}" ] || [ -z "${AMAZON_APP_ID:-}" ]; then
