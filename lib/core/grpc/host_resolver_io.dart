@@ -29,6 +29,30 @@ Future<bool> canReach(String host, int port, Duration timeout) async {
   }
 }
 
+/// True when http://[host]:[httpPort]/pileus/info answers as Mycelium
+/// within [timeout]. A bare TCP connect isn't proof: a Docker port mapping
+/// accepts connections even with nothing running behind it (a stopped
+/// mycelium devcontainer on 127.0.0.1 used to win every resolve that way,
+/// and then got persisted over the real server's IP).
+Future<bool> answersAsMycelium(
+    String host, int httpPort, Duration timeout) async {
+  final client = HttpClient()..connectionTimeout = timeout;
+  try {
+    final req = await client
+        .getUrl(Uri.http('$host:$httpPort', '/pileus/info'))
+        .timeout(timeout);
+    final res = await req.close().timeout(timeout);
+    if (res.statusCode != 200) return false;
+    final body = await res.transform(utf8.decoder).join().timeout(timeout);
+    final info = jsonDecode(body);
+    return info is Map && info['name'] == 'Mycelium';
+  } catch (_) {
+    return false;
+  } finally {
+    client.close(force: true);
+  }
+}
+
 /// UDP broadcast discovery — mirrors mycelium's responder
 /// (internal/api/discovery.go). Returns the source IP of the first
 /// `{"name":"Mycelium"}` reply (plus its `grpc_port`, when the reply

@@ -10,6 +10,10 @@ bool get isAndroidPlatform => false;
 
 Future<bool> canReach(String host, int port, Duration timeout) async => false;
 
+Future<bool> answersAsMycelium(
+        String host, int httpPort, Duration timeout) async =>
+    false;
+
 Future<({String host, int? grpcPort})?> discoverViaBroadcast({
   Duration timeout = const Duration(milliseconds: 1400),
 }) async =>

@@ -94,9 +94,11 @@ bool isProfileLocked(Object e) =>
 /// sandbox) — worth revisiting once a real certificate mismatch can be
 /// reproduced and the exact exception shape confirmed. A false negative here
 /// just falls back to today's generic message, so this is safe either way.
-bool looksLikeCertificateMismatch(Object e) {
-  final m = e.toString().toLowerCase();
-  return m.contains('handshake') ||
-      m.contains('certificate') ||
-      m.contains('tls');
-}
+///
+/// Matches "certificate" only: a pinned-fingerprint mismatch surfaces as
+/// CERTIFICATE_VERIFY_FAILED, while a bare "handshake"/"tls" also matched
+/// a peer that just closed the connection mid-handshake ("Connection
+/// terminated during handshake" — e.g. a port forward with no server
+/// behind it), wrongly reported as "the certificate changed".
+bool looksLikeCertificateMismatch(Object e) =>
+    e.toString().toLowerCase().contains('certificate');

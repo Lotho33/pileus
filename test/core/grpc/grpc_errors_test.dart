@@ -129,14 +129,21 @@ void main() {
   });
 
   group('looksLikeCertificateMismatch', () {
-    test('matches common certificate/handshake/TLS substrings', () {
-      expect(looksLikeCertificateMismatch(Exception('HandshakeException: x')),
-          isTrue);
+    test('matches a certificate verification failure', () {
       expect(
-          looksLikeCertificateMismatch(
-              Exception('CERTIFICATE_VERIFY_FAILED')),
+          looksLikeCertificateMismatch(Exception(
+              'HandshakeException: Handshake error in client '
+              '(OS Error: CERTIFICATE_VERIFY_FAILED: self signed certificate)')),
           isTrue);
-      expect(looksLikeCertificateMismatch(Exception('tls error')), isTrue);
+    });
+
+    test('false for a handshake the peer just dropped', () {
+      // e.g. a Docker port forward with no server behind it
+      expect(
+          looksLikeCertificateMismatch(Exception(
+              'HandshakeException: Connection terminated during handshake')),
+          isFalse);
+      expect(looksLikeCertificateMismatch(Exception('tls error')), isFalse);
     });
 
     test('false for an unrelated error', () {

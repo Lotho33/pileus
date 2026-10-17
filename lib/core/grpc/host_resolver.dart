@@ -69,10 +69,11 @@ String _webHost() {
 ///    reply, so it keeps working after the server's LAN IP changes. Probed
 ///    on the `grpc_port` the reply itself advertises (falling back to
 ///    [port] if the reply omits it — an older server).
-/// 2. TCP probe of the usual candidates: saved host, env override,
-///    loopback, Android emulator host, VPN host — each on [port], except
-///    the saved host, which is probed on its own previously-learned gRPC
-///    port when one is known (see [DeviceSession.grpcPort]).
+/// 2. Probe of the usual candidates: saved host, env override, loopback,
+///    Android emulator host, VPN host — TCP on [port] (the saved host on
+///    its own previously-learned gRPC port when one is known, see
+///    [DeviceSession.grpcPort]) plus `/pileus/info` on the HTTP port, so
+///    an open port with no Mycelium behind it doesn't win.
 /// 3. If every candidate fails, wait out the UDP window, then fall back to
 ///    the saved host (or loopback).
 /// 4. Cache the winning host (and its gRPC port, when learned via the UDP
@@ -162,7 +163,12 @@ Future<String> resolveGrpcHost({int port = ServerPorts.grpc}) async {
     final probePort = (isSaved && savedPort != null && savedPort > 0)
         ? savedPort
         : port;
-    canReach(host, probePort, timeout).then((ok) {
+    // gRPC port open AND /pileus/info says Mycelium — see
+    // answersAsMycelium for why the port alone isn't enough.
+    Future.wait([
+      canReach(host, probePort, timeout),
+      answersAsMycelium(host, ServerPorts.http, timeout),
+    ]).then((r) => r[0] && r[1]).then((ok) {
       if (ok) {
         if (isSaved) discoveredGrpcPort = savedPort;
         win(host);
