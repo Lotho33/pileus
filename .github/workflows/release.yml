@@ -328,12 +328,14 @@ jobs:
             echo "keyPassword=$KEY_PASS"
           } > android/key.properties
 
-      - name: Build TV (store-ready, per-ABI — keep in sync with store.yml's own "Build TV" step)
+      # armeabi-v7a only: the Amazon Appstore build targets Fire TV, which
+      # only takes the 32-bit APK — an arm64 one is useless there.
+      - name: Build TV (store-ready, armv7 — keep in sync with store.yml's own "Build TV" step)
         run: |
           set -eu
           V="${{ steps.v.outputs.name }}"
           flutter build apk --release --flavor tv --split-per-abi \
-            --target-platform android-arm,android-arm64 \
+            --target-platform android-arm \
             -PpileusRequireSigning=true -PpileusExcludeMpv=true -PpileusR8=true \
             --obfuscate --split-debug-info=build/symbols-tv \
             --dart-define=PILEUS_STORE_BUILD=true \

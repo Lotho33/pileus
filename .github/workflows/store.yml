@@ -7,7 +7,8 @@
 # Builds BOTH store apps (tv + mobile, distinct applicationIds/listings).
 #
 # Difference from release.yml (the sideload/Obtainium beta channel):
-#   * signed **AAB** (Play requires it) + signed per-ABI APKs (Amazon)
+#   * signed **AAB** (Play requires it) + signed per-ABI APKs (Amazon;
+#     TV: armeabi-v7a only, the one ABI Fire TV takes)
 #   * --dart-define=PILEUS_STORE_BUILD=true -> in-app update check compiled
 #     out entirely for this build
 #   * -PpileusRequireSigning=true -> build fails instead of silently
@@ -95,7 +96,8 @@ jobs:
             --dart-define=PILEUS_STORE_BUILD=true \
             --build-name=$V --build-number=${{ steps.v.outputs.build }}"
           flutter build appbundle $common
-          flutter build apk --split-per-abi --target-platform android-arm,android-arm64 $common
+          # Per-ABI APKs are for Amazon (Fire TV): armeabi-v7a only.
+          flutter build apk --split-per-abi --target-platform android-arm $common
           mkdir -p dist
           cp build/app/outputs/bundle/tvRelease/app-tv-release.aab "dist/pileus-$V-tv-store.aab"
           for f in build/app/outputs/flutter-apk/app-*-tv-release.apk; do
