@@ -51,9 +51,10 @@ jobs:
       APP: io.github.lotho33.Pileus
       MANIFEST: packaging/linux/io.github.lotho33.Pileus.yml
     steps:
+      # The packaging (manifest, metadata, key files) comes from the branch
+      # this runs on, not the tag: the app itself is the tag's tarball, so
+      # an older tag can be republished with today's packaging.
       - uses: actions/checkout@v5
-        with:
-          ref: ${{ inputs.tag }}
 
       - name: Version
         id: v
