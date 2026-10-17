@@ -2,8 +2,6 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:pileus/core/di/injection.dart' show getIt;
 import 'package:pileus/core/grpc/auth_interceptor.dart';
 import 'package:pileus/core/grpc/clients/media_client.dart';
-import 'package:pileus/core/grpc/generated/media.pb.dart'
-    show SearchFiltersRequest, SearchFiltersResponse, SearchFilter;
 import 'package:pileus/features/media/data/media_repository.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
