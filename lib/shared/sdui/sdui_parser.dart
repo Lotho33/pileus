@@ -79,6 +79,7 @@ SduiCardItem sduiCardItemFromCatalogItem(CatalogItem item) {
     title: item.title,
     imageUrl: item.posterUrl,
     lang: item.extra['lang'] ?? '',
+    subs: item.extra['subs'] ?? '',
     subtype: item.extra['subtype'] ?? '',
     subtitle: (item.extra['plot'] ?? '').split('\n').first,
     isLive: item.extra['is_live'] == '1',

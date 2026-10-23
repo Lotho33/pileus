@@ -20,6 +20,8 @@ import '../../../core/utils/perf_log.dart';
 import '../../../features/media/bloc/plugin_bloc.dart';
 import '../../../features/media/data/media_repository.dart';
 import '../../../features/settings/data/settings_repository.dart';
+import '../../../shared/player/media_session.dart';
+import '../../../shared/player/player_loading_backdrop.dart';
 import '../../../shared/utils/back_dispatch.dart';
 import '../../../shared/widgets/tv_focusable.dart';
 import '../bloc/playback_bloc.dart';
@@ -39,6 +41,8 @@ import '../playback_episode_cache.dart';
 import '../profile_lease_conflict.dart';
 import '../resume_seek.dart';
 import '../source_continuity.dart';
+import '../live_failover.dart';
+import '../source_preference.dart';
 import 'widgets/player_audio_artwork.dart';
 import 'widgets/player_overlay.dart';
 import 'widgets/player_settings_panel.dart';
@@ -87,6 +91,7 @@ class PlaybackScreen extends StatelessWidget {
             pluginId: pluginId,
             mediaId: mediaId,
             preferredLabel: args.sourceLabel,
+            seriesId: args.parentId,
             startPositionSec: startPositionSec,
           ));
         }

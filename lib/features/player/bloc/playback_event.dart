@@ -21,16 +21,20 @@ class InitializeVideoEvent extends PlaybackEvent {
   // doesn't know the already-resolved stream_id the way "Guarda qui" does)
   // can just re-dispatch this like any other from-scratch retry.
   final bool takeOver;
+  // The series [mediaId] belongs to, '' for a movie — its last-played
+  // language is step 2 of the source choice (source_preference.dart).
+  final String seriesId;
   const InitializeVideoEvent({
     required this.pluginId,
     required this.mediaId,
     this.preferredLabel = '',
     this.startPositionSec = 0,
     this.takeOver = false,
+    this.seriesId = '',
   });
   @override
   List<Object?> get props =>
-      [pluginId, mediaId, preferredLabel, startPositionSec, takeOver];
+      [pluginId, mediaId, preferredLabel, startPositionSec, takeOver, seriesId];
 }
 
 class SelectStreamEvent extends PlaybackEvent {
@@ -58,8 +62,7 @@ class SelectStreamEvent extends PlaybackEvent {
     this.takeOver = false,
   });
   @override
-  List<Object?> get props =>
-      [pluginId, streamId, startPositionSec, takeOver];
+  List<Object?> get props => [pluginId, streamId, startPositionSec, takeOver];
 }
 
 /// Offline-downloads playback (see PlaybackArgs.directUrl's doc) — no

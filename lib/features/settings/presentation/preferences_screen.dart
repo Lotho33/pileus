@@ -22,6 +22,7 @@ import '../../../shared/widgets/tv_focusable.dart';
 import '../bloc/settings_cubit.dart';
 import '../bloc/settings_state.dart';
 import '../data/settings_repository.dart';
+import '../../player/source_preference.dart' show PreferredLanguage;
 
 class PreferencesScreen extends StatelessWidget {
   const PreferencesScreen({super.key});
@@ -107,6 +108,8 @@ class _PreferencesBodyState extends State<_PreferencesBody> {
         ),
         SizedBox(height: AppScale.space(context, 12)),
         const SettingsSectionHeader('Player'),
+        const _PreferredLanguagePrefRow(),
+        SizedBox(height: AppScale.space(context, 4)),
         const _ReservePrefRow(live: false),
         SizedBox(height: AppScale.space(context, 4)),
         const _ReservePrefRow(live: true),
@@ -365,8 +368,8 @@ class _MaxVideoHeightPrefRowState extends State<_MaxVideoHeightPrefRow> {
                 'connessione lenta o un box poco potente; una qualità scelta '
                 'a mano nel player resta possibile. Vale dalla prossima '
                 'riproduzione.',
-                style: TextStyle(
-                    color: Colors.white38, fontSize: captionFs * 0.9),
+                style:
+                    TextStyle(color: Colors.white38, fontSize: captionFs * 0.9),
               ),
             ],
           );
@@ -437,6 +440,53 @@ class _AndroidVideoPrefRowState extends State<_AndroidVideoPrefRow> {
 /// "Modalità hardware modesto" — see SettingsRepository.getLowPowerMode.
 /// Self-contained like _ReservePrefRow: the player re-reads it on the next
 /// playback, nothing else observes it.
+/// "Lingua preferita" — which language version a Play picks (dubbed
+/// Italian, or the original with subtitles). Person-scoped, synced to the
+/// profile: see SettingsRepository.getPreferredLanguage and
+/// source_preference.dart.
+class _PreferredLanguagePrefRow extends StatefulWidget {
+  const _PreferredLanguagePrefRow();
+
+  @override
+  State<_PreferredLanguagePrefRow> createState() =>
+      _PreferredLanguagePrefRowState();
+}
+
+class _PreferredLanguagePrefRowState extends State<_PreferredLanguagePrefRow> {
+  final _repo = getIt<SettingsRepository>();
+  late bool _original =
+      _repo.getPreferredLanguage() == PreferredLanguage.original.id;
+
+  @override
+  Widget build(BuildContext context) {
+    final captionFs =
+        (AppScale.sh(context) * (13.0 / 1080.0)).clamp(10.0, 20.0);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        SettingsToggleRow(
+          label: 'Preferisci la versione originale sottotitolata',
+          value: _original,
+          onChanged: (v) {
+            setState(() => _original = v);
+            _repo.setPreferredLanguage(v
+                ? PreferredLanguage.original.id
+                : PreferredLanguage.italian.id);
+          },
+        ),
+        Padding(
+          padding: EdgeInsets.fromLTRB(AppScale.space(context, 24),
+              AppScale.space(context, 4), AppScale.space(context, 24), 0),
+          child: Text(
+            'Spenta: italiano. Al Play parte questa versione quando c\'è; si può sempre scegliere l\'altra dalla scheda del titolo.',
+            style: TextStyle(color: Colors.white38, fontSize: captionFs * 0.9),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
 class _LowPowerPrefRow extends StatefulWidget {
   const _LowPowerPrefRow();
 

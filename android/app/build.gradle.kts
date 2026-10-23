@@ -166,3 +166,9 @@ kotlin {
 flutter {
     source = "../.."
 }
+
+dependencies {
+    // Android TV home screen "Watch Next" row — src/tv/.../WatchNext.kt.
+    // TV flavor only: the phone app doesn't need it.
+    "tvImplementation"("androidx.tvprovider:tvprovider:1.0.0")
+}

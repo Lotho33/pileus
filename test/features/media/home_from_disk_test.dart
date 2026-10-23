@@ -50,10 +50,20 @@ class _FakeClient implements MediaGrpcClient {
           ContinueWatchingRequest request) async =>
       _answer(cw);
 
+  Object delete = DeleteProgressResponse();
+  final List<String> deleted = [];
+
   @override
   Future<DeleteProgressResponse> deleteProgress(
-          DeleteProgressRequest request) async =>
-      DeleteProgressResponse();
+      DeleteProgressRequest request) async {
+    final r = _answer<DeleteProgressResponse>(delete);
+    deleted.add(request.mediaId);
+    return r;
+  }
+
+  @override
+  Future<ProgressResponse> updateProgress(ProgressRequest request) async =>
+      ProgressResponse();
 
   @override
   Future<CatalogResponse> getCatalog(CatalogRequest request) async {
@@ -309,6 +319,102 @@ void main() {
       bloc.add(const LoadCatalogEvent(pluginId: 'a', catalogId: 'top'));
       await settle();
       expect((bloc.state as DiscoveryLoaded).items.single.id, 'old');
+      await bloc.close();
+    });
+  });
+
+  group('Continue Watching removals while the server is down', () {
+    test('queued, hidden, and sent once the server answers', () async {
+      await start();
+      await repo.fetchContinueWatching();
+      await settle();
+      client.delete = const GrpcError.unavailable();
+      client.cw = const GrpcError.unavailable();
+
+      final bloc = ContinueWatchingBloc(repo);
+      bloc.add(const LoadContinueWatchingEvent());
+      await settle();
+      bloc.add(const RemoveContinueWatchingEvent('a', 'm1'));
+      await settle();
+      // Not put back: the server just didn't answer.
+      expect(
+          (bloc.state as ContinueWatchingLoaded).items.map((i) => i.playableID),
+          ['m2']);
+      await bloc.close();
+
+      // Next cold start, still offline: not back from disk.
+      expect(repo.cachedContinueWatching()!.map((i) => i.playableID), ['m2']);
+
+      // Server back (its answer still lists m1): removal sent, row hidden,
+      // and the copy on disk no longer has it.
+      client.delete = DeleteProgressResponse();
+      client.cw = ContinueWatchingResponse(items: [
+        pb.ContinueWatchingItem(pluginId: 'a', mediaId: 'm1'),
+        pb.ContinueWatchingItem(pluginId: 'a', mediaId: 'm2'),
+      ]);
+      final items = await repo.fetchContinueWatching();
+      await settle();
+      expect(items!.map((i) => i.playableID), ['m2']);
+      expect(client.deleted, ['m1']);
+      expect(repo.cachedContinueWatching()!.map((i) => i.playableID), ['m2']);
+
+      // Nothing left to send.
+      await repo.fetchContinueWatching();
+      expect(client.deleted, ['m1']);
+    });
+
+    test('watching it again cancels the queued removal', () async {
+      await start();
+      await repo.fetchContinueWatching();
+      await settle();
+      client.delete = const GrpcError.unavailable();
+      await repo.removeFromContinueWatching(providerID: 'a', playableID: 'm1');
+      await repo.updateProgress(
+          pluginId: 'a', mediaId: 'm1', position: const Duration(minutes: 3));
+      client.delete = DeleteProgressResponse();
+      final items = await repo.fetchContinueWatching();
+      expect(client.deleted, isEmpty);
+      expect(items!.map((i) => i.playableID), ['m1', 'm2']);
+    });
+  });
+
+  group('offline state (OfflineBanner)', () {
+    test(
+        'cold start from disk with the server down: offline at once, '
+        'cleared when it answers again', () async {
+      await start();
+      await repo.listPlugins();
+      await settle();
+      client.plugins = const GrpcError.unavailable();
+      final bloc = PluginBloc(repo);
+      bloc.add(const LoadPluginsEvent());
+      await settle();
+      expect((bloc.state as PluginsLoaded).offline, isTrue);
+
+      client.plugins = PluginListResponse(plugins: [
+        PluginInfo(pluginId: 'a', name: 'A'),
+        PluginInfo(pluginId: 'b', name: 'B'),
+      ]);
+      bloc.add(const RefreshPluginsEvent());
+      await settle();
+      expect((bloc.state as PluginsLoaded).offline, isFalse);
+      await bloc.close();
+    });
+
+    test('one failed poll is a blip, two in a row are offline', () async {
+      await start();
+      final bloc = PluginBloc(repo);
+      bloc.add(const LoadPluginsEvent());
+      await settle();
+      client.plugins = const GrpcError.unavailable();
+      bloc.add(const RefreshPluginsEvent());
+      await settle();
+      expect((bloc.state as PluginsLoaded).offline, isFalse);
+      bloc.add(const RefreshPluginsEvent());
+      await settle();
+      expect((bloc.state as PluginsLoaded).offline, isTrue);
+      // The list itself is untouched.
+      expect((bloc.state as PluginsLoaded).plugins, hasLength(2));
       await bloc.close();
     });
   });

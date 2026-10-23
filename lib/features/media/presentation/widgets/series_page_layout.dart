@@ -18,6 +18,7 @@ import '../../../../core/utils/image_sizing.dart';
 import '../../../../core/utils/perf_log.dart';
 import '../../data/media_repository.dart';
 import '../../../player/source_continuity.dart' show pickSourceByLabel;
+import '../../../player/source_preference.dart' show preferredFirst;
 import '../../../player/stream_warmer.dart';
 import '../../../../shared/utils/safe_focus.dart';
 import '../../../../shared/widgets/pileus_spinner.dart';

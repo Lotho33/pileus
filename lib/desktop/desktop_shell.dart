@@ -8,6 +8,7 @@ import '../core/di/injection.dart';
 import '../core/grpc/clients/media_client.dart' hide ContinueWatchingItem;
 import '../core/theme/app_theme.dart';
 import '../core/utils/metrics.dart';
+import '../shared/widgets/offline_banner.dart';
 import '../features/auth/bloc/auth_bloc.dart';
 import '../features/auth/bloc/auth_event.dart';
 import '../features/media/bloc/continue_watching_bloc.dart';
@@ -195,16 +196,25 @@ class _DesktopShellState extends State<DesktopShell> {
                     ),
                     const VerticalDivider(width: 1, color: AppTheme.border),
                     Expanded(
-                      child: RepaintBoundary(
-                        child: IndexedStack(
-                          index: _section.index,
-                          children: [
-                            _homePane(ps, active),
-                            DesktopSearchScreen(
-                                visible: _section == DesktopSection.search),
-                            const DesktopSettingsPane(),
-                          ],
-                        ),
+                      child: Stack(
+                        children: [
+                          RepaintBoundary(
+                            child: IndexedStack(
+                              index: _section.index,
+                              children: [
+                                _homePane(ps, active),
+                                DesktopSearchScreen(
+                                    visible: _section == DesktopSection.search),
+                                const DesktopSettingsPane(),
+                              ],
+                            ),
+                          ),
+                          const Positioned(
+                              left: 0,
+                              right: 0,
+                              bottom: 20,
+                              child: Center(child: OfflineBanner())),
+                        ],
                       ),
                     ),
                   ],

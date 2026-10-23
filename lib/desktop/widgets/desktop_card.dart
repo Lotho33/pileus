@@ -7,6 +7,7 @@ import '../../core/utils/image_sizing.dart';
 import '../../features/player/episode_poster.dart';
 import '../../features/player/resolve_and_play.dart';
 import '../../shared/widgets/open_catalog_item.dart';
+import '../../shared/widgets/language_badge.dart';
 import 'desktop_dialogs.dart';
 import 'package:cached_network_image_platform_interface/cached_network_image_platform_interface.dart'
     show ImageRenderMethodForWeb;
@@ -75,7 +76,6 @@ class _DesktopCardState extends State<DesktopCard> {
               : widget.item.posterUrl,
           'mediaType': mt,
         },
-        sourcePicker: showDesktopSourcePicker,
       );
     } else {
       // Series / directory — the details page is where you pick an episode.
@@ -147,6 +147,13 @@ class _DesktopCardState extends State<DesktopCard> {
                             )
                           else
                             _Fallback(title: widget.item.title),
+                          Positioned(
+                            top: 6,
+                            right: 6,
+                            child: LanguageBadgePill(
+                                lang: widget.item.extra['lang'] ?? '',
+                                subs: widget.item.extra['subs'] ?? ''),
+                          ),
                           AnimatedOpacity(
                             opacity: _hover ? 1 : 0,
                             duration: const Duration(milliseconds: 130),

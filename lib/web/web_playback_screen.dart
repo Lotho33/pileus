@@ -29,6 +29,10 @@ import '../features/player/presentation/widgets/pointer_next_episode_banner.dart
 import '../features/player/presentation/widgets/pointer_skip_button.dart';
 import '../features/player/profile_lease_conflict.dart';
 import '../features/player/resume_seek.dart';
+import '../features/player/live_failover.dart';
+import '../features/player/source_preference.dart';
+import '../shared/player/media_session.dart';
+import '../shared/player/player_loading_backdrop.dart';
 
 /// Gated the same way as the rest of the app's diagnostics (perf_log.dart,
 /// playback_bloc.dart) — these 5 call sites used to be plain `debugPrint`,
@@ -163,7 +167,8 @@ class WebPlaybackScreen extends StatelessWidget {
             resolveStartPositionSec(isLive: args.isLive, seekTo: args.seekTo);
         if (directUrl != null && directUrl.isNotEmpty) {
           bloc.add(UseDirectUrlEvent(
-              url: directUrl, httpHeaders: args.directUrlHeaders,
+              url: directUrl,
+              httpHeaders: args.directUrlHeaders,
               format: args.directUrlFormat));
         } else if (direct != null && direct.isNotEmpty) {
           bloc.add(SelectStreamEvent(
@@ -175,6 +180,7 @@ class WebPlaybackScreen extends StatelessWidget {
             pluginId: pluginId,
             mediaId: mediaId,
             preferredLabel: args.sourceLabel,
+            seriesId: args.parentId,
             startPositionSec: startPositionSec,
           ));
         }
@@ -229,7 +235,27 @@ class _ViewState extends State<_View> {
   // still just keeps asking InitializeVideoEvent for the same label as
   // before, unchanged.
   late String _curSourceLabel = widget.args.sourceLabel;
+  // Live with several nodes: on a failure that won't recover, move to the
+  // next node instead of the error page (live_failover.dart).
+  late final LiveFailover? _liveFailover = widget.args.isLive
+      ? LiveFailover(widget.args.liveSources,
+          current: widget.args.directStreamId ?? widget.mediaId)
+      : null;
   late String _curTitle = widget.args.title ?? '';
+  // The first frame of this player has been seen — from then on a loading
+  // cover is an episode switch, not the resume the screen was opened for.
+  bool _startedOnce = false;
+
+  // Under the spinner and as the cover until the first frame — see
+  // PlayerLoadingBackdrop.
+  Widget _loadingBackdrop() => PlayerLoadingBackdrop(
+        imageUrl: _currentEpisodePoster(),
+        title: _curTitle,
+        subtitle: widget.args.showTitle,
+        resumeAtSeconds:
+            widget.args.isLive || _startedOnce ? 0 : widget.args.seekTo,
+        notice: _startedOnce ? '' : widget.args.languageNotice,
+      );
   // Fresh per-episode rating/year once known — null means "nothing fresher
   // than widget.args yet", read with a `?? widget.args.rating`/`.year`
   // fallback at every continue-watching write site. Without this, every CW
@@ -240,6 +266,9 @@ class _ViewState extends State<_View> {
   double? _curRating;
   int? _curYear;
   late final EpisodeNavState _nav = EpisodeNavState.fromArgs(widget.args);
+  // Title/artwork and play/pause/±10s/episode keys in the system's media
+  // controls (browser, TV remote) — see PlayerMediaSession.
+  final _mediaSession = PlayerMediaSession();
   // Engine-agnostic and shared verbatim with mobile/desktop/TV — see
   // episode_prefetch.dart.
   late final _prefetcher = EpisodePrefetcher(
@@ -408,7 +437,8 @@ class _ViewState extends State<_View> {
           _onPlaybackTakenOver('');
           return;
         }
-        _pendingFatalError = 'Riproduzione interrotta (errore ${err?.code ?? '?'}).';
+        _pendingFatalError =
+            'Riproduzione interrotta (errore ${err?.code ?? '?'}).';
         _errorGrace?.cancel();
         _errorGrace = Timer(kErrorGraceDuration, () {
           if (!mounted || _fatalError != null) return;
@@ -417,6 +447,7 @@ class _ViewState extends State<_View> {
             _pendingFatalError = null;
             return;
           }
+          if (_tryLiveFailover()) return;
           setState(() => _fatalError = _pendingFatalError);
         });
       }).toJS,
@@ -459,6 +490,7 @@ class _ViewState extends State<_View> {
 
   @override
   void dispose() {
+    _mediaSession.clear();
     AppLifecycleReactor.instance.state.removeListener(_onLifecycle);
     _progressTimer?.cancel();
     _errorGrace?.cancel();
@@ -531,8 +563,9 @@ class _ViewState extends State<_View> {
     final directUrl = sameTitle ? widget.args.directUrl : null;
     if (directUrl != null && directUrl.isNotEmpty) {
       context.read<PlaybackBloc>().add(UseDirectUrlEvent(
-          url: directUrl, httpHeaders: widget.args.directUrlHeaders,
-              format: widget.args.directUrlFormat));
+          url: directUrl,
+          httpHeaders: widget.args.directUrlHeaders,
+          format: widget.args.directUrlFormat));
       return;
     }
     context.read<PlaybackBloc>().add(InitializeVideoEvent(
@@ -546,15 +579,54 @@ class _ViewState extends State<_View> {
         ));
   }
 
+  /// Live: the node failed for good — move to the next one (the caller
+  /// then shows no error). True when it did.
+  bool _tryLiveFailover() {
+    final failover = _liveFailover;
+    if (!widget.args.isLive || failover == null) return false;
+    final next = failover.next();
+    if (next == null) return false;
+    final label = failover.labelOf(next, widget.args.liveSourceLabels);
+    ScaffoldMessenger.of(context)
+      ..clearSnackBars()
+      ..showSnackBar(SnackBar(
+        content: Text('Sorgente non disponibile — passo a «$label»'),
+        behavior: SnackBarBehavior.floating,
+        duration: const Duration(seconds: 4),
+      ));
+    _errorGrace?.cancel();
+    final i = widget.args.liveSources.indexOf(next);
+    if (i >= 0 && i < widget.args.liveSourceLabels.length) {
+      _curSourceLabel = widget.args.liveSourceLabels[i];
+    }
+    setState(() {
+      _fatalError = null;
+      _pendingFatalError = null;
+      _opened = false;
+      _videoStarted = false;
+    });
+    context.read<PlaybackBloc>().add(SelectStreamEvent(
+          pluginId: widget.args.livePluginId.isNotEmpty
+              ? widget.args.livePluginId
+              : widget.pluginId,
+          streamId: next,
+        ));
+    return true;
+  }
+
   void _onTimeUpdate() {
     if (!mounted) return;
     _liveWatchdog?.recordProgress();
+    _liveFailover?.playing();
     if (widget.args.isLive) {
       // No resume concept for live (ResumeSeekController.isDone is trivially
       // true) — the cover only ever waits on the first real frame here.
       if (!_videoStarted && _video.currentTime > 0) {
         _resumeCoverSafetyTimer?.cancel();
         Metrics.playFirstFrame();
+        SourceMemory.remember(
+            widget.args.epPluginId, widget.args.parentId, _curSourceLabel);
+        _startedOnce = true;
         setState(() => _videoStarted = true);
       }
       return;
@@ -589,6 +661,9 @@ class _ViewState extends State<_View> {
     if (!_videoStarted && pos > Duration.zero && _resumeSeek.isDone) {
       _resumeCoverSafetyTimer?.cancel();
       Metrics.playFirstFrame();
+      SourceMemory.remember(
+          widget.args.epPluginId, widget.args.parentId, _curSourceLabel);
+      _startedOnce = true;
       setState(() => _videoStarted = true);
     }
 
@@ -856,7 +931,25 @@ class _ViewState extends State<_View> {
   /// available — one-shot ({once: true}), so it can never fire again for a
   /// later source. _resumeSeek remains the safety net either way if this
   /// doesn't land (dropped by hls.js, or the metadata event races the seek).
+  void _updateMediaSession() {
+    final episodic = !widget.args.isLive && widget.args.episodeList.isNotEmpty;
+    _mediaSession.update(
+      title: _curTitle.isNotEmpty ? _curTitle : widget.args.showTitle,
+      subtitle: _curTitle.isNotEmpty ? widget.args.showTitle : '',
+      artworkUrl: _currentEpisodePoster(),
+      onPlay: () => _video.play().toDart.catchError((_) => null),
+      onPause: () => _video.pause(),
+      onSeekBy: widget.args.isLive
+          ? null
+          : (s) => _video.currentTime = _video.currentTime + s,
+      // Both no-ops at the ends of the list (their own guards).
+      onNext: episodic ? _goToNextEpisode : null,
+      onPrevious: episodic ? _goToPreviousEpisode : null,
+    );
+  }
+
   void _attachSource(String url, {Duration? startPosition}) {
+    _updateMediaSession();
     final looksHls = url.toLowerCase().contains('.m3u8');
     // canPlayType returns "" (no), "maybe", or "probably" per spec — only
     // Safari genuinely plays HLS natively and returns "probably" for it.
@@ -1150,6 +1243,7 @@ class _ViewState extends State<_View> {
       body: BlocListener<PlaybackBloc, PlaybackState>(
         listener: (context, s) {
           if (s is PlaybackReady) _onReady(s);
+          if (s is PlaybackFailed) _tryLiveFailover();
           if (s is PlaybackPlayingElsewhere) {
             _transitioningEpisode = false;
             setState(() {
@@ -1189,7 +1283,7 @@ class _ViewState extends State<_View> {
               child: AnimatedOpacity(
                 opacity: _videoStarted ? 0.0 : 1.0,
                 duration: const Duration(milliseconds: 400),
-                child: const ColoredBox(color: Colors.black),
+                child: _loadingBackdrop(),
               ),
             ),
             BlocBuilder<PlaybackBloc, PlaybackState>(
@@ -1216,6 +1310,7 @@ class _ViewState extends State<_View> {
                 if (s is! PlaybackReady) {
                   return _Overlay(
                     spinner: true,
+                    background: _loadingBackdrop(),
                     text: switch (s) {
                       FetchingStreams() => 'Ricerca sorgenti…',
                       ResolvingMediaStream() => 'Risoluzione stream…',
@@ -1327,51 +1422,51 @@ class _Overlay extends StatelessWidget {
   final bool spinner;
   final VoidCallback onBack;
   final VoidCallback? onRetry;
+  final Widget background;
   const _Overlay({
     required this.text,
     required this.onBack,
     this.icon,
     this.spinner = false,
     this.onRetry,
+    this.background = const ColoredBox(color: Colors.black),
   });
 
   @override
   Widget build(BuildContext context) {
-    return ColoredBox(
-      color: Colors.black,
-      child: Stack(
-        children: [
-          Center(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                if (spinner)
-                  const CircularProgressIndicator(color: Colors.white),
-                if (icon != null)
-                  Icon(icon, color: const Color(0xFFFF5252), size: 48),
-                const SizedBox(height: 16),
-                Text(text,
-                    textAlign: TextAlign.center,
-                    style: const TextStyle(color: Colors.white70)),
-                if (onRetry != null) ...[
-                  const SizedBox(height: 18),
-                  FilledButton.icon(
-                    onPressed: onRetry,
-                    icon: const Icon(Icons.refresh_rounded),
-                    label: const Text('Riprova'),
-                  ),
-                ],
+    return Stack(
+      fit: StackFit.expand,
+      children: [
+        background,
+        Center(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              if (spinner) const CircularProgressIndicator(color: Colors.white),
+              if (icon != null)
+                Icon(icon, color: const Color(0xFFFF5252), size: 48),
+              const SizedBox(height: 16),
+              Text(text,
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(color: Colors.white70)),
+              if (onRetry != null) ...[
+                const SizedBox(height: 18),
+                FilledButton.icon(
+                  onPressed: onRetry,
+                  icon: const Icon(Icons.refresh_rounded),
+                  label: const Text('Riprova'),
+                ),
               ],
-            ),
+            ],
           ),
-          SafeArea(
-            child: IconButton(
-              icon: const Icon(Icons.arrow_back, color: Colors.white),
-              onPressed: onBack,
-            ),
+        ),
+        SafeArea(
+          child: IconButton(
+            icon: const Icon(Icons.arrow_back, color: Colors.white),
+            onPressed: onBack,
           ),
-        ],
-      ),
+        ),
+      ],
     );
   }
 }

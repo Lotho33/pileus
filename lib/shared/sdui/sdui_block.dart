@@ -39,7 +39,8 @@ class SduiCardItem {
   final String id;
   final String title;
   final String imageUrl;
-  final String lang; // '', 'ita', 'jap' — poster-variant language badge
+  final String lang; // '', 'both', 'ita', 'eng', 'jap' — language badge
+  final String subs; // 'ita' = Italian subtitles for the original version
   final String
       subtype; // 'movie'|'ova'|'ona'|'special'|'music'|'tv-short' — poster-variant subtype badge
   final String subtitle; // live-variant only
@@ -51,6 +52,7 @@ class SduiCardItem {
     required this.title,
     required this.imageUrl,
     this.lang = '',
+    this.subs = '',
     this.subtype = '',
     this.subtitle = '',
     this.isLive = false,

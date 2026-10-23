@@ -302,6 +302,14 @@ class SettingsRepository {
     overscan.dispose();
   }
 
+  /// Which language version a Play picks when nobody chooses one — "it"
+  /// (dubbed Italian) or "original" (often with Italian subtitles). Person-
+  /// scoped and server-synced (ProfilePrefs "playback" block); "it" until
+  /// the profile changes it. See source_preference.dart.
+  String getPreferredLanguage() => _blob.preferredLanguage ?? 'it';
+  Future<void> setPreferredLanguage(String v) =>
+      _updateBlob((b) => b.copyWith(preferredLanguage: v));
+
   // Read order for the four subtitle settings: server-synced blob → local
   // per-profile copy → old unscoped key (pre-per-profile) → hardcoded
   // default (matches playback_screen.dart's original values, so first-run

@@ -16,6 +16,7 @@ import '../features/media/presentation/widgets/plugin_nav.dart'
     show pluginLabel;
 import '../features/settings/bloc/profile_management_cubit.dart';
 import '../features/settings/bloc/profile_management_state.dart';
+import '../features/player/source_preference.dart' show PreferredLanguage;
 import '../features/settings/data/settings_repository.dart';
 import '../core/grpc/clients/media_client.dart' show PluginInfo;
 import '../shared/widgets/default_avatars.dart';
@@ -217,6 +218,8 @@ class _PlaybackSectionState extends State<_PlaybackSection> {
   final _s = getIt<SettingsRepository>();
   late int _vod = _s.getVodBufferSec();
   late int _live = _s.getLiveBufferSec();
+  late bool _original =
+      _s.getPreferredLanguage() == PreferredLanguage.original.id;
 
   @override
   Widget build(BuildContext context) {
@@ -224,6 +227,21 @@ class _PlaybackSectionState extends State<_PlaybackSection> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         _sectionTitle('Riproduzione'),
+        SwitchListTile(
+          contentPadding: EdgeInsets.zero,
+          value: _original,
+          onChanged: (v) => setState(() {
+            _original = v;
+            _s.setPreferredLanguage(v
+                ? PreferredLanguage.original.id
+                : PreferredLanguage.italian.id);
+          }),
+          title: const Text('Preferisci la versione originale sottotitolata',
+              style: TextStyle(color: AppTheme.textHigh)),
+          subtitle: const Text(
+              'Spenta: italiano. Al Play parte questa versione quando c\'è; si può sempre scegliere l\'altra dalla scheda del titolo.',
+              style: TextStyle(color: AppTheme.textLow, fontSize: 12)),
+        ),
         _SliderRow(
           label: 'Riserva di riproduzione',
           value: '$_vod s',
@@ -606,8 +624,7 @@ class _ProfileSection extends StatelessWidget {
                 title: const Text('Dimentica questo dispositivo',
                     style: TextStyle(color: AppTheme.textHigh)),
                 subtitle: const Text('Richiederà di nuovo il PIN qui',
-                    style:
-                        TextStyle(color: AppTheme.textLow, fontSize: 12)),
+                    style: TextStyle(color: AppTheme.textLow, fontSize: 12)),
                 onTap: () => _confirmForgetDevice(context, cubit),
               ),
             const Divider(color: AppTheme.border, height: 32),

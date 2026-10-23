@@ -32,8 +32,11 @@ import '../features/player/presentation/widgets/player_seek_bar.dart';
 import '../features/player/presentation/widgets/pointer_skip_button.dart';
 import '../features/player/profile_lease_conflict.dart';
 import '../features/player/source_continuity.dart';
+import '../features/player/live_failover.dart';
+import '../features/player/source_preference.dart';
 import '../features/settings/data/settings_repository.dart';
 import '../shared/player/playback_progress.dart';
+import '../shared/player/player_loading_backdrop.dart';
 import '../shared/utils/tap_guard.dart';
 
 /// Touch player for the mobile flavor. Landscape-locked while mounted;
@@ -64,7 +67,8 @@ class MobilePlaybackScreen extends StatelessWidget {
             resolveStartPositionSec(isLive: args.isLive, seekTo: args.seekTo);
         if (directUrl != null && directUrl.isNotEmpty) {
           bloc.add(UseDirectUrlEvent(
-              url: directUrl, httpHeaders: args.directUrlHeaders,
+              url: directUrl,
+              httpHeaders: args.directUrlHeaders,
               format: args.directUrlFormat));
         } else if (direct != null && direct.isNotEmpty) {
           bloc.add(SelectStreamEvent(
@@ -76,6 +80,7 @@ class MobilePlaybackScreen extends StatelessWidget {
             pluginId: pluginId,
             mediaId: mediaId,
             preferredLabel: args.sourceLabel,
+            seriesId: args.parentId,
             startPositionSec: startPositionSec,
           ));
         }
@@ -153,8 +158,14 @@ class _MobilePlayerViewState extends State<_MobilePlayerView> {
   // source_continuity.dart). Null until known (a launch that only had a
   // media id learns it from PlaybackReady.streamId).
   String? _curStreamId;
+  // Live with several nodes: on a failure that won't recover, move to the
+  // next node instead of the error page (live_failover.dart).
+  LiveFailover? _liveFailover;
   late String _curSourceLabel;
   late String? _curTitle;
+  // The first frame of this player has been seen — from then on a loading
+  // cover is an episode switch, not the resume the screen was opened for.
+  bool _startedOnce = false;
   late List<String> _curEpisodeList;
   late List<String> _curEpisodeTitles;
   // Parallel to _curEpisodeList — see PlaybackArgs.episodeThumbs and
@@ -250,6 +261,10 @@ class _MobilePlayerViewState extends State<_MobilePlayerView> {
     final launchStream = widget.args.directStreamId;
     if (launchStream != null && launchStream.isNotEmpty) {
       _curStreamId = launchStream;
+    }
+    if (widget.args.isLive) {
+      _liveFailover = LiveFailover(widget.args.liveSources,
+          current: _curStreamId ?? widget.mediaId);
     }
     _progress = PlaybackProgress(
         args: widget.args,
@@ -472,6 +487,9 @@ class _MobilePlayerViewState extends State<_MobilePlayerView> {
         _progress.isResumeDone) {
       _resumeCoverSafetyTimer?.cancel();
       Metrics.playFirstFrame();
+      SourceMemory.remember(
+          widget.args.epPluginId, widget.args.parentId, _curSourceLabel);
+      _startedOnce = true;
       _started = true;
       needsRebuild = true;
     }
@@ -517,6 +535,7 @@ class _MobilePlayerViewState extends State<_MobilePlayerView> {
     _errorGrace?.cancel();
     _errorGrace = Timer(kErrorGraceDuration, () {
       if (mounted && !_engine.playing) {
+        if (_tryLiveFailover()) return;
         setState(() => _playbackError = msg);
       }
     });
@@ -611,8 +630,8 @@ class _MobilePlayerViewState extends State<_MobilePlayerView> {
       return;
     }
     final now = DateTime.now();
-    _autoRestarts.removeWhere(
-        (t) => now.difference(t) > kVideoFrozenRestartWindow);
+    _autoRestarts
+        .removeWhere((t) => now.difference(t) > kVideoFrozenRestartWindow);
     if (_autoRestarts.length >= kVideoFrozenRestartBudget) {
       perf('mobile: video frozen — auto-reopen budget used up');
       return;
@@ -666,8 +685,9 @@ class _MobilePlayerViewState extends State<_MobilePlayerView> {
     final stream = _curStreamId;
     if (directUrl != null && directUrl.isNotEmpty) {
       bloc.add(UseDirectUrlEvent(
-          url: directUrl, httpHeaders: widget.args.directUrlHeaders,
-              format: widget.args.directUrlFormat));
+          url: directUrl,
+          httpHeaders: widget.args.directUrlHeaders,
+          format: widget.args.directUrlFormat));
     } else if (stream != null && stream.isNotEmpty) {
       bloc.add(SelectStreamEvent(
           pluginId: widget.args.epPluginId,
@@ -687,7 +707,8 @@ class _MobilePlayerViewState extends State<_MobilePlayerView> {
 
   void _seekBy(int secs) {
     final d = _engine.duration;
-    var t = (_optimisticSeekTarget ?? _engine.position) + Duration(seconds: secs);
+    var t =
+        (_optimisticSeekTarget ?? _engine.position) + Duration(seconds: secs);
     if (t < Duration.zero) t = Duration.zero;
     if (d > Duration.zero && t > d) t = d;
     _engine.seek(t);
@@ -936,6 +957,7 @@ class _MobilePlayerViewState extends State<_MobilePlayerView> {
   void _onPosition(Duration pos) {
     if (!mounted) return;
     _stallWatchdog?.recordProgress();
+    _liveFailover?.playing();
     if (pos > Duration.zero && !_transitioningEpisode) _lastPos = pos;
     if (widget.args.isLive) return;
 
@@ -1354,7 +1376,10 @@ class _MobilePlayerViewState extends State<_MobilePlayerView> {
           // ever reaching PlaybackReady/_onReady, which is otherwise the
           // only place that clears it) must not leave the heartbeat/dispose
           // save disabled for the rest of the session.
-          if (s is PlaybackFailed) _transitioningEpisode = false;
+          if (s is PlaybackFailed) {
+            _transitioningEpisode = false;
+            _tryLiveFailover();
+          }
           if (s is PlaybackPlayingElsewhere) {
             _transitioningEpisode = false;
             setState(() {
@@ -1428,7 +1453,25 @@ class _MobilePlayerViewState extends State<_MobilePlayerView> {
                     // _onEngine's own _started gate).
                     child = KeyedSubtree(
                       key: const ValueKey('loading'),
-                      child: _LoadingOverlay(state: s, onBack: _exit),
+                      child: _LoadingOverlay(
+                        state: s,
+                        onBack: _exit,
+                        background: PlayerLoadingBackdrop(
+                          imageUrl: posterForEpisode(
+                            episodeThumbs: _curEpisodeThumbs,
+                            index: _curEpisodeIndex,
+                            seriesCoverUrl: widget.args.seriesCoverUrl,
+                            seriesPoster: widget.args.seriesPoster,
+                            fallback: widget.args.poster,
+                          ),
+                          title: _curTitle ?? '',
+                          subtitle: widget.args.showTitle,
+                          resumeAtSeconds: widget.args.isLive || _startedOnce
+                              ? 0
+                              : widget.args.seekTo,
+                          notice: _startedOnce ? '' : widget.args.languageNotice,
+                        ),
+                      ),
                     );
                   } else {
                     // One key ('ready') for both sub-states below — toggling
@@ -1662,9 +1705,28 @@ class _MobilePlayerViewState extends State<_MobilePlayerView> {
     );
   }
 
+  /// True when it moved to another node (the caller then shows no error).
+  bool _tryLiveFailover() {
+    final failover = _liveFailover;
+    if (!widget.args.isLive || failover == null) return false;
+    final next = failover.next();
+    if (next == null) return false;
+    final label = failover.labelOf(next, widget.args.liveSourceLabels);
+    ScaffoldMessenger.of(context)
+      ..clearSnackBars()
+      ..showSnackBar(SnackBar(
+        content: Text('Sorgente non disponibile — passo a «$label»'),
+        behavior: SnackBarBehavior.floating,
+        duration: const Duration(seconds: 4),
+      ));
+    _switchLiveSource(widget.args.liveSources.indexOf(next));
+    return true;
+  }
+
   void _switchLiveSource(int i) {
     final id = widget.args.liveSources[i];
     if (id == _curStreamId) return;
+    _liveFailover?.switchedTo(id);
     _errorGrace?.cancel();
     _curStreamId = id;
     if (i < widget.args.liveSourceLabels.length) {
@@ -1716,7 +1778,8 @@ class _MobilePlayerViewState extends State<_MobilePlayerView> {
                   setSheet(() {});
                 },
               );
-          final liveSources = widget.args.isLive ? widget.args.liveSources : const <String>[];
+          final liveSources =
+              widget.args.isLive ? widget.args.liveSources : const <String>[];
           // "Formato" below is always there for video, so "nothing to pick"
           // only applies to audio-only media now.
           final nothing = widget.args.isAudio &&
@@ -1813,7 +1876,11 @@ class _SheetHeader extends StatelessWidget {
 class _LoadingOverlay extends StatelessWidget {
   final PlaybackState state;
   final VoidCallback onBack;
-  const _LoadingOverlay({required this.state, required this.onBack});
+  final Widget background;
+  const _LoadingOverlay(
+      {required this.state,
+      required this.onBack,
+      this.background = const ColoredBox(color: Colors.black)});
 
   @override
   Widget build(BuildContext context) {
@@ -1827,33 +1894,32 @@ class _LoadingOverlay extends StatelessWidget {
       final r = state as PlaybackRetrying;
       label = 'Nuovo tentativo ${r.attempt}/${r.of}…';
     }
-    return ColoredBox(
-      color: Colors.black,
-      child: Stack(
-        children: [
-          Center(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                const CircularProgressIndicator(color: Colors.white),
-                const SizedBox(height: 16),
-                Text(label,
-                    textAlign: TextAlign.center,
-                    style: const TextStyle(color: Colors.white70)),
-              ],
+    return Stack(
+      fit: StackFit.expand,
+      children: [
+        background,
+        Center(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const CircularProgressIndicator(color: Colors.white),
+              const SizedBox(height: 16),
+              Text(label,
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(color: Colors.white70)),
+            ],
+          ),
+        ),
+        SafeArea(
+          child: Align(
+            alignment: Alignment.topLeft,
+            child: IconButton(
+              icon: const Icon(Icons.arrow_back, color: Colors.white),
+              onPressed: onBack,
             ),
           ),
-          SafeArea(
-            child: Align(
-              alignment: Alignment.topLeft,
-              child: IconButton(
-                icon: const Icon(Icons.arrow_back, color: Colors.white),
-                onPressed: onBack,
-              ),
-            ),
-          ),
-        ],
-      ),
+        ),
+      ],
     );
   }
 }

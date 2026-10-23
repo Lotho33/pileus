@@ -10,7 +10,6 @@ import '../../features/player/episode_poster.dart';
 import '../../features/player/resolve_and_play.dart';
 import '../../shared/responsive.dart';
 import '../../shared/widgets/open_catalog_item.dart';
-import 'desktop_dialogs.dart';
 import 'package:cached_network_image_platform_interface/cached_network_image_platform_interface.dart'
     show ImageRenderMethodForWeb;
 
@@ -147,7 +146,6 @@ class _DesktopHeroState extends State<DesktopHero>
               : widget.item.posterUrl,
           'mediaType': mt,
         },
-        sourcePicker: showDesktopSourcePicker,
       );
     } else {
       _info();

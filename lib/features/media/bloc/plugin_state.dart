@@ -18,9 +18,12 @@ class PluginLoading extends PluginState {
 
 class PluginsLoaded extends PluginState {
   final List<PluginInfo> plugins;
-  const PluginsLoaded(this.plugins);
+  // The server isn't answering: [plugins] is the last list known (from disk
+  // at a cold start, or the last good poll) — see OfflineBanner.
+  final bool offline;
+  const PluginsLoaded(this.plugins, {this.offline = false});
   @override
-  List<Object?> get props => [plugins];
+  List<Object?> get props => [plugins, offline];
 }
 
 class PluginError extends PluginState {

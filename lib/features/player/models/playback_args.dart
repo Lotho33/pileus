@@ -75,6 +75,10 @@ class PlaybackArgs {
   final int durationSeconds;
   final List<String> genres;
   final int year;
+  // "Disponibile solo in inglese" — set by resolveAndPlay when the source it
+  // picked isn't the profile's preferred language (source_preference.dart);
+  // shown while the player loads.
+  final String languageNotice;
 
   const PlaybackArgs({
     required this.isAudio,
@@ -110,6 +114,7 @@ class PlaybackArgs {
     this.durationSeconds = 0,
     this.genres = const [],
     this.year = 0,
+    this.languageNotice = '',
   });
 
   factory PlaybackArgs.fromExtra(
@@ -127,6 +132,7 @@ class PlaybackArgs {
               const {},
       directUrlContainer: extra?['directUrlContainer'] as String? ?? '',
       title: extra?['title'] as String?,
+      languageNotice: extra?['languageNotice'] as String? ?? '',
       episodeList: (extra?['episodeList'] as List?)?.cast<String>() ?? const [],
       episodeTitles:
           (extra?['episodeTitles'] as List?)?.cast<String>() ?? const [],
@@ -226,6 +232,7 @@ class PlaybackArgs {
       durationSeconds: base.durationSeconds,
       genres: base.genres.isNotEmpty ? base.genres : genres,
       year: base.year,
+      languageNotice: base.languageNotice,
     );
   }
 
@@ -279,6 +286,7 @@ class PlaybackArgs {
       durationSeconds: durationSeconds ?? this.durationSeconds,
       genres: genres,
       year: year ?? this.year,
+      languageNotice: languageNotice,
     );
   }
 }

@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 
 import '../core/theme/app_theme.dart';
 import '../core/utils/metrics.dart';
+import '../shared/widgets/offline_banner.dart';
 import 'mobile_home_screen.dart';
 import 'mobile_search_screen.dart';
 import 'mobile_settings_screen.dart';
@@ -57,12 +58,21 @@ class _MobileShellState extends State<MobileShell> {
       onPopInvokedWithResult: _onBack,
       child: Scaffold(
         backgroundColor: AppTheme.bg,
-        body: IndexedStack(
-          index: _tab,
+        body: Stack(
           children: [
-            const MobileHomeScreen(),
-            MobileSearchScreen(visible: _tab == 1),
-            const MobileSettingsScreen(),
+            IndexedStack(
+              index: _tab,
+              children: [
+                const MobileHomeScreen(),
+                MobileSearchScreen(visible: _tab == 1),
+                const MobileSettingsScreen(),
+              ],
+            ),
+            const Positioned(
+                left: 0,
+                right: 0,
+                bottom: 12,
+                child: Center(child: OfflineBanner())),
           ],
         ),
         bottomNavigationBar: NavigationBarTheme(

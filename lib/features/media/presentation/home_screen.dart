@@ -26,7 +26,9 @@ import '../../../core/theme/app_scale.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/update/update_prompt.dart';
 import '../../../core/utils/image_sizing.dart';
+import '../../../core/router/app_router.dart' show appRouter;
 import '../../../core/utils/metrics.dart';
+import '../../../core/watch_next.dart';
 import '../data/media_repository.dart';
 import '../../player/episode_poster.dart' show episodeBadge;
 import '../../../shared/sdui/sdui_block.dart';
@@ -42,6 +44,7 @@ import '../../../shared/utils/safe_focus.dart';
 import 'widgets/details_common.dart';
 import '../../../shared/widgets/error_retry_view.dart';
 import '../../../shared/widgets/open_catalog_item.dart';
+import '../../../shared/widgets/offline_banner.dart';
 import '../../../shared/widgets/pileus_spinner.dart';
 import '../../../shared/widgets/settings/plugin_reorder_dialog.dart';
 import '../../../shared/widgets/tv_focusable.dart';
@@ -132,7 +135,16 @@ class HomeScreen extends StatelessWidget {
         BlocProvider.value(value: pluginBloc),
         BlocProvider.value(value: continueWatchingBloc),
       ],
-      child: const _HomeView(),
+      child: const Stack(
+        children: [
+          _HomeView(),
+          Positioned(
+              left: 0,
+              right: 0,
+              bottom: 24,
+              child: Center(child: OfflineBanner())),
+        ],
+      ),
     );
   }
 }

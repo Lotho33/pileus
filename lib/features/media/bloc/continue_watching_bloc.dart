@@ -1,5 +1,6 @@
 import 'package:flutter_bloc/flutter_bloc.dart';
 
+import '../../../core/watch_next.dart';
 import '../data/continue_watching_item.dart';
 import '../data/media_repository.dart';
 import 'continue_watching_event.dart';
@@ -12,6 +13,15 @@ class ContinueWatchingBloc
   ContinueWatchingBloc(this._repo) : super(const ContinueWatchingInitial()) {
     on<LoadContinueWatchingEvent>(_onLoad);
     on<RemoveContinueWatchingEvent>(_onRemove);
+  }
+
+  // Every version of the row also goes to the Android TV home screen's
+  // "Watch Next" (a no-op elsewhere; unchanged lists aren't resent).
+  @override
+  void onChange(Change<ContinueWatchingState> change) {
+    super.onChange(change);
+    final next = change.nextState;
+    if (next is ContinueWatchingLoaded) WatchNext.sync(next.items);
   }
 
   Future<void> _onLoad(
@@ -64,11 +74,12 @@ class ContinueWatchingBloc
       ];
       emit(ContinueWatchingLoaded(updated));
     }
-    final ok = await _repo.deleteProgress(
+    final ok = await _repo.removeFromContinueWatching(
         providerID: event.providerID, playableID: event.playableID);
-    // The delete never reached the server — put the item back where it was
-    // (not at the end) rather than letting it silently disappear from
-    // "continue watching" with no way for the user to know why.
+    // Refused (session over, profile locked) — put the item back where it
+    // was (not at the end) rather than letting it silently disappear. A
+    // server that just didn't answer is not a refusal: the repository
+    // queues the removal and sends it once the server is back.
     if (!ok && removedItem != null) {
       final current = state;
       if (current is ContinueWatchingLoaded) {

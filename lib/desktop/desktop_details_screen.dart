@@ -24,9 +24,9 @@ import '../features/player/episode_poster.dart';
 import '../features/player/resolve_and_play.dart';
 import '../features/player/source_continuity.dart' show defaultPlayStreamId;
 import '../features/player/stream_warmer.dart';
+import '../shared/widgets/language_chips.dart';
 import '../shared/responsive.dart';
 import '../shared/widgets/error_retry_view.dart';
-import 'widgets/desktop_dialogs.dart';
 import 'package:cached_network_image_platform_interface/cached_network_image_platform_interface.dart'
     show ImageRenderMethodForWeb;
 
@@ -157,7 +157,7 @@ class _Body extends StatelessWidget {
   List<SeasonInfo> get _seasons =>
       details?.hasSeries() == true ? details!.series.seasons : const [];
 
-  Future<void> _play(BuildContext context) async {
+  Future<void> _play(BuildContext context, {String? sourceLabel}) async {
     if (_isSeries && _seasons.isNotEmpty) {
       final season = _seasons.firstWhere((s) => s.episodeCount > 0,
           orElse: () => _seasons.first);
@@ -186,8 +186,8 @@ class _Body extends StatelessWidget {
           posterUrl: item.posterUrl,
         ),
         'mediaType': item.mediaType,
+        if (sourceLabel != null) 'sourceLabel': sourceLabel,
       },
-      sourcePicker: showDesktopSourcePicker,
     );
   }
 
@@ -238,7 +238,6 @@ class _Body extends StatelessWidget {
             : item.year,
         'genres': _genres,
       },
-      sourcePicker: showDesktopSourcePicker,
     );
   }
 
@@ -267,7 +266,7 @@ class _Body extends StatelessWidget {
                 height: headerH,
                 pad: pad,
                 big: big,
-                onPlay: () => _play(context),
+                onPlay: (label) => _play(context, sourceLabel: label),
               ),
             ),
             SliverToBoxAdapter(
@@ -320,7 +319,8 @@ class _Header extends StatelessWidget {
   final double height;
   final double pad;
   final bool big;
-  final VoidCallback onPlay;
+  // [sourceLabel]: a language picked on the movie's chips, null = the rule's.
+  final void Function(String? sourceLabel) onPlay;
 
   const _Header({
     required this.pluginId,
@@ -576,7 +576,7 @@ class _PlayButton extends StatefulWidget {
   final CatalogItem item;
   final bool isSeries;
   final bool big;
-  final VoidCallback onPlayDefault;
+  final void Function(String? sourceLabel) onPlayDefault;
   // What onPlayDefault plays for a series starts from these — see
   // defaultPlayStreamId (warm ahead of Play).
   final List<SeasonInfo> seasons;
@@ -597,6 +597,8 @@ class _PlayButton extends StatefulWidget {
 class _PlayButtonState extends State<_PlayButton> {
   ContinueWatchingItem? _resume;
   WarmTicket? _warm;
+  // A language picked on the chips (LanguageChips) — null: the Play rule's.
+  String? _chosenLabel;
 
   @override
   void initState() {
@@ -650,7 +652,7 @@ class _PlayButtonState extends State<_PlayButton> {
   void _play(BuildContext context) {
     final resume = _resume;
     if (resume == null) {
-      widget.onPlayDefault();
+      widget.onPlayDefault(_chosenLabel);
       return;
     }
     // Same minimal push as the home Continue Watching card's resume — see
@@ -672,7 +674,7 @@ class _PlayButtonState extends State<_PlayButton> {
   @override
   Widget build(BuildContext context) {
     final resume = _resume;
-    return FilledButton.icon(
+    final button = FilledButton.icon(
       onPressed: () => _play(context),
       icon: const Icon(Icons.play_arrow_rounded),
       label: Text(
@@ -689,6 +691,21 @@ class _PlayButtonState extends State<_PlayButton> {
         textStyle: TextStyle(
             fontSize: widget.big ? 15 : 14, fontWeight: FontWeight.w700),
       ),
+    );
+    // Movies: the language versions under the button. A resume keeps the
+    // language it was watched in; a series picks per episode.
+    if (widget.isSeries || resume != null) return button;
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        button,
+        LanguageChips(
+          pluginId: widget.pluginId,
+          mediaId: widget.item.id,
+          onChanged: (s) => setState(() => _chosenLabel = s.label),
+        ),
+      ],
     );
   }
 }

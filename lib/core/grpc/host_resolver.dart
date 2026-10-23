@@ -84,6 +84,32 @@ String _webHost() {
 /// alongside the server's own mDNS responder for it (see
 /// server_discovery_screen.dart's doc): with no responder left to answer,
 /// it could never resolve, so keeping it only wasted a probe slot.
+/// [resolveGrpcHost] without making the cold start wait for it: with a
+/// host saved by an earlier session, that host is returned at once and the
+/// full probe runs in the background. [onMoved] fires only when the probe
+/// settles on a different host (a new DHCP lease, the server moved) — the
+/// caller then switches the channel over. With nothing saved (first run),
+/// web or remote mode it is plain [resolveGrpcHost].
+///
+/// Before this, every cold start waited on the probe; harmless with the
+/// server up (a LAN round-trip), but with it down the app sat on a blank
+/// screen for the probe's full ~3 s before even the splash, instead of
+/// drawing the home from disk.
+Future<String> resolveGrpcHostFast(void Function(String host) onMoved) async {
+  if (kIsWeb) return resolveGrpcHost();
+  String? saved;
+  try {
+    final session = DeviceSession.readFrom(getIt<SharedPreferences>());
+    if (session != null && session.remote != true) saved = session.grpcHost;
+  } catch (_) {}
+  if (saved == null || saved.isEmpty) return resolveGrpcHost();
+  final savedHost = saved;
+  unawaited(resolveGrpcHost().then((host) {
+    if (host != savedHost) onMoved(host);
+  }).catchError((_) {}));
+  return savedHost;
+}
+
 Future<String> resolveGrpcHost({int port = ServerPorts.grpc}) async {
   if (kIsWeb) return _webHost();
 

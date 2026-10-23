@@ -20,6 +20,32 @@ class PluginBloc extends Bloc<PluginEvent, PluginState> {
 
   static const _pollInterval = Duration(seconds: 30);
 
+  // Offline (PluginsLoaded.offline): set when the list on screen can't be
+  // refreshed — at once for a cold start drawn from disk, after two failed
+  // polls in a row otherwise (one can be a blip). While offline it retries
+  // every [_offlineRetry] instead of waiting out the 30 s poll, so the home
+  // comes back to life soon after the server does.
+  static const _offlineRetry = Duration(seconds: 10);
+  int _failedRefreshes = 0;
+  Timer? _offlineRetryTimer;
+
+  void _markOffline(Emitter<PluginState> emit) {
+    final current = state;
+    if (current is PluginsLoaded && !current.offline) {
+      emit(PluginsLoaded(current.plugins, offline: true));
+    }
+    _offlineRetryTimer?.cancel();
+    _offlineRetryTimer = Timer(_offlineRetry, () {
+      if (!isClosed && _pollPauseDepth == 0) add(const RefreshPluginsEvent());
+    });
+  }
+
+  void _markOnline() {
+    _failedRefreshes = 0;
+    _offlineRetryTimer?.cancel();
+    _offlineRetryTimer = null;
+  }
+
   PluginBloc(this._repo, {this.onSessionExpired, this.onProfileLocked})
       : super(const PluginInitial()) {
     on<LoadPluginsEvent>(_onLoad);
@@ -58,6 +84,7 @@ class PluginBloc extends Bloc<PluginEvent, PluginState> {
     }
     try {
       final plugins = await _repo.listPlugins();
+      _markOnline();
       emit(PluginsLoaded(plugins));
       _startPolling();
     } catch (e) {
@@ -75,6 +102,7 @@ class PluginBloc extends Bloc<PluginEvent, PluginState> {
       // is different — only the error screen can say what to do about it.
       if (cached != null && cached.isNotEmpty && !certMismatch) {
         _startPolling();
+        _markOffline(emit);
         return;
       }
       emit(PluginError(e.toString(), certMismatch: certMismatch));
@@ -86,9 +114,11 @@ class PluginBloc extends Bloc<PluginEvent, PluginState> {
       RefreshPluginsEvent event, Emitter<PluginState> emit) async {
     try {
       final plugins = await _repo.listPlugins();
-      // Only emit if state changed — avoids unnecessary rebuilds.
+      _markOnline();
+      // Only emit if state changed — avoids unnecessary rebuilds. Coming
+      // back from offline always emits (it clears the flag).
       final current = state;
-      if (current is PluginsLoaded && !event.force) {
+      if (current is PluginsLoaded && !event.force && !current.offline) {
         final changed = plugins.length != current.plugins.length ||
             _statusChanged(current.plugins, plugins);
         if (changed) emit(PluginsLoaded(plugins));
@@ -104,7 +134,14 @@ class PluginBloc extends Bloc<PluginEvent, PluginState> {
         onProfileLocked?.call();
         return;
       }
-      // Otherwise silent — don't replace a working list with an error on a background poll.
+      // Otherwise don't replace a working list with an error on a
+      // background poll — at most say the server isn't answering.
+      _failedRefreshes++;
+      final current = state;
+      if ((current is PluginsLoaded && current.offline) ||
+          _failedRefreshes >= 2) {
+        _markOffline(emit);
+      }
     }
   }
 
@@ -136,7 +173,7 @@ class PluginBloc extends Bloc<PluginEvent, PluginState> {
     list.insert(event.toIndex, item);
     try {
       await _repo.savePluginOrder(list.map((p) => p.pluginId).toList());
-      emit(PluginsLoaded(list));
+      emit(PluginsLoaded(list, offline: current.offline));
     } catch (_) {
       // Save failed — leave the previously-emitted (still-saved) order in
       // place rather than showing a reorder that didn't actually persist.
@@ -165,6 +202,7 @@ class PluginBloc extends Bloc<PluginEvent, PluginState> {
   @override
   Future<void> close() {
     _pollTimer?.cancel();
+    _offlineRetryTimer?.cancel();
     return super.close();
   }
 

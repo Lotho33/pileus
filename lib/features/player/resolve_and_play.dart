@@ -8,21 +8,16 @@ import '../../core/grpc/clients/media_client.dart' hide ContinueWatchingItem;
 import '../../core/grpc/grpc_errors.dart';
 import '../../shared/utils/tap_guard.dart';
 import '../../core/theme/app_scale.dart';
-import '../../core/theme/app_theme.dart';
 import '../../core/utils/metrics.dart';
 import '../../shared/widgets/pileus_spinner.dart';
 import '../media/data/media_repository.dart';
-import 'source_continuity.dart';
+import 'source_preference.dart';
 
-/// Fetch the stream sources for [mediaId]; if there's more than one, show a
-/// source / language picker first (the mobile equivalent of the TV inline
-/// source list), then navigate to the player. `extra` carries the playback
-/// context (title, episode list, resume position, …).
-/// If [sourcePicker] is given it replaces the built-in bottom sheet used to
-/// choose between multiple sources — the desktop build passes a centered
-/// dialog instead.
-typedef SourcePicker = Future<StreamSource?> Function(
-    BuildContext context, List<StreamSource> sources);
+/// Fetch the stream sources for [mediaId], pick one with the shared rule
+/// (choosePlaySource — never a question at Play) and navigate to the
+/// player. `extra` carries the playback context (title, episode list,
+/// resume position, …); its 'sourceLabel', when set, is a language the user
+/// chose explicitly (a details screen's chips).
 
 /// One player launch at a time. GetStreams can take seconds on a slow
 /// plugin, and with no feedback a second (third…) tap on Play / an episode /
@@ -72,7 +67,6 @@ Future<void> resolveAndPlay(
   String pluginId,
   String mediaId, {
   Map<String, dynamic>? extra,
-  SourcePicker? sourcePicker,
 }) async {
   // Capture everything that depends on `context` up-front and synchronously:
   // the caller (e.g. a long-press sheet) pops its own route right before
@@ -99,7 +93,7 @@ Future<void> resolveAndPlay(
 
   try {
     await _resolveAndPush(router, navigator, messenger, pluginId, mediaId,
-        extra: extra, sourcePicker: sourcePicker, hideSpinner: hideSpinner);
+        extra: extra, hideSpinner: hideSpinner);
   } finally {
     hideSpinner();
     PlayerLaunchGuard._busy = false;
@@ -113,7 +107,6 @@ Future<void> _resolveAndPush(
   String pluginId,
   String mediaId, {
   Map<String, dynamic>? extra,
-  SourcePicker? sourcePicker,
   required VoidCallback hideSpinner,
 }) async {
   List<StreamSource> sources;
@@ -147,51 +140,14 @@ Future<void> _resolveAndPush(
     return;
   }
 
-  StreamSource? chosen;
-  if (sources.length > 1) {
-    chosen = sourcePicker != null
-        ? await sourcePicker(navigator.context, sources)
-        : await showModalBottomSheet<StreamSource>(
-            context: navigator.context,
-            backgroundColor: AppTheme.surface,
-            showDragHandle: true,
-            shape: const RoundedRectangleBorder(
-              borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-            ),
-            builder: (sheetCtx) => SafeArea(
-              child: ListView(
-                shrinkWrap: true,
-                children: [
-                  const Padding(
-                    padding: EdgeInsets.fromLTRB(16, 4, 16, 8),
-                    child: Text('SCEGLI LA SORGENTE',
-                        style: TextStyle(
-                            color: AppTheme.textLow,
-                            fontSize: 11,
-                            fontWeight: FontWeight.w700,
-                            letterSpacing: 1.2)),
-                  ),
-                  for (var i = 0; i < sources.length; i++)
-                    ListTile(
-                      leading: const Icon(Icons.play_arrow_rounded,
-                          color: AppTheme.textHigh),
-                      title: Text(
-                        sources[i].label.isNotEmpty
-                            ? sources[i].label
-                            : 'Sorgente ${i + 1}',
-                        style: const TextStyle(color: AppTheme.textHigh),
-                      ),
-                      onTap: () => popIfCurrent(sheetCtx, sources[i]),
-                    ),
-                ],
-              ),
-            ),
-          );
-    // Picker was shown and dismissed without a pick → abort.
-    if (chosen == null) return;
-  }
-  // Same choice as the warm ahead of Play — see pickSourceByLabel.
-  chosen ??= pickSourceByLabel(sources, '');
+  // No question at Play: the language is a preference (Preferenze →
+  // "Lingua preferita", the series' last one, or the label the caller
+  // passes — a details screen's language chips). source_preference.dart.
+  final chosen = choosePlaySource(sources,
+      explicitLabel: (extra?['sourceLabel'] as String?) ?? '',
+      pluginId: pluginId,
+      seriesId: (extra?['parentId'] as String?) ?? '');
+  final notice = languageNotice(sources, chosen);
 
   PlayerLaunchGuard._lastPush = DateTime.now();
   router.push(
@@ -200,6 +156,7 @@ Future<void> _resolveAndPush(
       ...?extra,
       if (chosen != null) 'streamId': chosen.id,
       if (chosen != null) 'sourceLabel': chosen.label,
+      if (notice.isNotEmpty) 'languageNotice': notice,
     },
   );
 }

@@ -6,6 +6,7 @@ import '../core/di/injection.dart';
 import '../core/theme/app_theme.dart';
 import '../features/media/data/media_repository.dart';
 import '../features/player/android_video_settings.dart';
+import '../features/player/source_preference.dart' show PreferredLanguage;
 import '../features/settings/data/settings_repository.dart';
 import '../shared/utils/tap_guard.dart';
 import '../shared/widgets/metrics_dialog.dart';
@@ -28,6 +29,8 @@ class _MobilePreferencesScreenState extends State<MobilePreferencesScreen> {
   late bool _subBg = _s.getSubtitleBgEnabled();
   late double _subPad = _s.getSubtitleBottomPadding();
   late bool _diag = _s.getDiagnostics();
+  late bool _original =
+      _s.getPreferredLanguage() == PreferredLanguage.original.id;
   late int _maxHeight = _s.getMaxVideoHeight();
 
   static const _swatches = <Color>[
@@ -50,6 +53,20 @@ class _MobilePreferencesScreenState extends State<MobilePreferencesScreen> {
         padding: const EdgeInsets.only(bottom: 32),
         children: [
           _header('Player'),
+          SwitchListTile(
+            value: _original,
+            onChanged: (v) => setState(() {
+              _original = v;
+              _s.setPreferredLanguage(v
+                  ? PreferredLanguage.original.id
+                  : PreferredLanguage.italian.id);
+            }),
+            title: const Text('Preferisci la versione originale sottotitolata',
+                style: TextStyle(color: AppTheme.textHigh)),
+            subtitle: const Text(
+                'Spenta: italiano. Al Play parte questa versione quando c\'è; si può sempre scegliere l\'altra dalla scheda del titolo.',
+                style: TextStyle(color: AppTheme.textLow, fontSize: 12)),
+          ),
           _sliderTile(
             'Riserva di riproduzione',
             '$_vodBuf s',

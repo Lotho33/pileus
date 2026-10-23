@@ -65,6 +65,15 @@ class _PlaybackViewState extends State<_PlaybackView> {
   // ── Playback lifecycle ─────────────────────────────────────────────────────
   bool _playbackReady = false;
   bool _videoStarted = false;
+  // Live with several nodes: on a failure that won't recover, move to the
+  // next node instead of the error page (live_failover.dart).
+  LiveFailover? _liveFailover;
+  // Web builds (Tizen, webOS): title/artwork and play/pause/±10s/episode
+  // keys in the system's media controls. No-op on Android TV.
+  final _mediaSession = PlayerMediaSession();
+  // The first frame of this player has been seen — a later cover is an
+  // episode switch, not the opening Play (see PlayerLoadingBackdrop.notice).
+  bool _videoStartedOnce = false;
   // Resume-from-timestamp — see ResumeSeekController (shared with mobile/
   // desktop/web) for the confirm-and-retry algorithm this delegates to.
   // Reassigned in _resolveEpisodeAt on every episode switch, same as
@@ -238,6 +247,10 @@ class _PlaybackViewState extends State<_PlaybackView> {
       _currentStreamId = launchStream;
     }
     _currentSourceLabel = args.sourceLabel;
+    if (args.isLive) {
+      _liveFailover = LiveFailover(args.liveSources,
+          current: _currentStreamId ?? widget.mediaId);
+    }
     _currentTitle = args.title;
     _currentEpisodeList = args.episodeList;
     _currentEpisodeTitles = args.episodeTitles;
@@ -405,6 +418,7 @@ class _PlaybackViewState extends State<_PlaybackView> {
         setState(() => _pendingErrorText = null);
         return;
       }
+      if (_tryLiveFailover()) return;
       setState(() => _playbackError = _pendingErrorText);
       // Root Focus(autofocus:true) at Scaffold level already holds real
       // focus in this scope by now, same as the skip-intro/next-episode
@@ -414,6 +428,42 @@ class _PlaybackViewState extends State<_PlaybackView> {
         if (mounted) _errorOverlayKey.currentState?.requestInitialFocus();
       });
     });
+  }
+
+  // ── Live node switch (manual, or automatic on failure) ─────────────────
+
+  void _switchLiveSourceTo(String srcId) {
+    _liveFailover?.switchedTo(srcId);
+    _errorGraceTimer?.cancel();
+    setState(() {
+      _pendingErrorText = null;
+      _playbackError = null;
+      _playbackReady = false;
+      _videoStarted = false;
+    });
+    context.read<PlaybackBloc>().add(SelectStreamEvent(
+          pluginId: widget.args.livePluginId.isNotEmpty
+              ? widget.args.livePluginId
+              : widget.pluginId,
+          streamId: srcId,
+        ));
+  }
+
+  /// True when it moved to another node (the caller then shows no error).
+  bool _tryLiveFailover() {
+    final failover = _liveFailover;
+    if (!widget.args.isLive || failover == null) return false;
+    final next = failover.next();
+    if (next == null) return false;
+    final label = failover.labelOf(next, widget.args.liveSourceLabels);
+    ScaffoldMessenger.of(context)
+      ..clearSnackBars()
+      ..showSnackBar(SnackBar(
+        content: Text('Sorgente non disponibile — passo a «$label»'),
+        duration: const Duration(seconds: 4),
+      ));
+    _switchLiveSourceTo(next);
+    return true;
   }
 
   // ── Playback taken over by another device ──────────────────────────────
@@ -912,6 +962,7 @@ class _PlaybackViewState extends State<_PlaybackView> {
 
   @override
   void dispose() {
+    _mediaSession.clear();
     perf('screen: dispose (videoStarted=$_videoStarted)');
     _heartbeatTimer?.cancel();
     _backgroundReleaseTimer?.cancel();
@@ -1121,6 +1172,7 @@ class _PlaybackViewState extends State<_PlaybackView> {
 
   void _onPosition(Duration pos) {
     _lastProgressAt = DateTime.now();
+    _liveFailover?.playing();
     // Real forward progress — whatever the stall watchdog was escalating
     // toward, drop it back to the first (gentlest) tier.
     _stallStrikes = 0;
@@ -1158,6 +1210,9 @@ class _PlaybackViewState extends State<_PlaybackView> {
       perf('screen: ***** FIRST FRAME VISIBLE ***** (videoStarted)');
       _resumeCoverSafetyTimer?.cancel();
       Metrics.playFirstFrame();
+      SourceMemory.remember(
+          widget.args.epPluginId, widget.args.parentId, _currentSourceLabel);
+      _videoStartedOnce = true;
       setState(() => _videoStarted = true);
       _uiCubit.onVideoStarted();
       // The overlay is visible from the start (PlayerUiState.overlayVisible
@@ -1371,10 +1426,31 @@ class _PlaybackViewState extends State<_PlaybackView> {
     perf('screen: engine initialized (${_engine.runtimeType})');
   }
 
+  void _updateMediaSession() {
+    final episodic = !widget.args.isLive && _currentEpisodeList.isNotEmpty;
+    _mediaSession.update(
+      title: _currentTitle ?? widget.args.showTitle,
+      subtitle: (_currentTitle ?? '').isNotEmpty ? widget.args.showTitle : '',
+      artworkUrl: _currentEpisodePoster(),
+      onPlay: _engine.play,
+      onPause: _engine.pause,
+      onSeekBy: widget.args.isLive
+          ? null
+          : (s) => _engine.seek(_engine.position + Duration(seconds: s)),
+      onNext: episodic && !_resolvingEpisode
+          ? () => _goToEpisode(_currentEpisodeIndex + 1)
+          : null,
+      onPrevious: episodic && !_resolvingEpisode && _currentEpisodeIndex > 0
+          ? () => _goToEpisode(_currentEpisodeIndex - 1)
+          : null,
+    );
+  }
+
   void _startPlayback(
       String url, Map<String, String> headers, Map<String, String> extra,
       {StreamFormat format = StreamFormat.auto}) {
     _ensureEngineInitialized();
+    _updateMediaSession();
     List<SkipInterval> intervals = const [];
     final skipJson = extra['skip_times'];
     if (skipJson != null && skipJson.isNotEmpty) {
@@ -1878,6 +1954,7 @@ class _PlaybackViewState extends State<_PlaybackView> {
               ));
           }
           if (state is PlaybackFailed) {
+            if (_tryLiveFailover()) return;
             setState(() => _playbackError = state.errorMessage);
             WidgetsBinding.instance.addPostFrameCallback((_) {
               if (mounted) _errorOverlayKey.currentState?.requestInitialFocus();
@@ -1949,12 +2026,24 @@ class _PlaybackViewState extends State<_PlaybackView> {
                         : _engine.buildView(),
                   ),
 
-                  // ── Cover nera fino al primo frame ────────────────────
+                  // ── Cover fino al primo frame ─────────────────────────
+                  // The title's picture, darkened (PlayerLoadingBackdrop) —
+                  // no text here: the TV overlay above already shows the
+                  // title and the controls while loading. Audio keeps the
+                  // plain black, its artwork view is the picture.
                   IgnorePointer(
                     child: AnimatedOpacity(
                       opacity: _videoStarted ? 0.0 : 1.0,
                       duration: const Duration(milliseconds: 400),
-                      child: Container(color: Colors.black),
+                      child: widget.args.isAudio
+                          ? Container(color: Colors.black)
+                          : PlayerLoadingBackdrop(
+                              imageUrl: _currentEpisodePoster(),
+                              // The one line the TV overlay doesn't show.
+                              notice: _videoStartedOnce
+                                  ? ''
+                                  : widget.args.languageNotice,
+                            ),
                     ),
                   ),
 
@@ -2003,22 +2092,8 @@ class _PlaybackViewState extends State<_PlaybackView> {
                                     livePluginId: widget.args.livePluginId,
                                     liveMediaId: widget.args.liveMediaId,
                                     onBack: _exitPlayer,
-                                    onSwitchSource: (srcId, srcLabel) {
-                                      _errorGraceTimer?.cancel();
-                                      setState(() {
-                                        _playbackReady = false;
-                                        _videoStarted = false;
-                                      });
-                                      context
-                                          .read<PlaybackBloc>()
-                                          .add(SelectStreamEvent(
-                                            pluginId: widget.args.livePluginId
-                                                    .isNotEmpty
-                                                ? widget.args.livePluginId
-                                                : widget.pluginId,
-                                            streamId: srcId,
-                                          ));
-                                    },
+                                    onSwitchSource: (srcId, srcLabel) =>
+                                        _switchLiveSourceTo(srcId),
                                     onOpenSettings: _openSettings,
                                     onRestart: _restartPlayerInPlace,
                                     // Initial load AND any mid-stream

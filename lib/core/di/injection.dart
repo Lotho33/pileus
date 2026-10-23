@@ -14,14 +14,17 @@ import '../grpc/host_resolver.dart';
 import '../grpc/reconnectable_channel.dart';
 import '../update/update_service.dart';
 import '../utils/metrics.dart';
+import '../utils/perf_log.dart';
 import '../../features/auth/bloc/auth_bloc.dart';
 import '../../features/auth/bloc/auth_event.dart';
 import '../../features/auth/data/auth_repository.dart';
 import '../../features/media/active_plugin_controller.dart';
 import '../../features/media/bloc/continue_watching_bloc.dart';
+import '../../features/media/bloc/continue_watching_event.dart';
 import '../../features/media/bloc/details_bloc.dart';
 import '../../features/media/bloc/discovery_bloc.dart';
 import '../../features/media/bloc/plugin_bloc.dart';
+import '../../features/media/bloc/plugin_event.dart';
 import '../../features/media/data/media_repository.dart';
 import '../../features/player/bloc/playback_bloc.dart';
 import '../../features/player/content_view_mode.dart';
@@ -60,6 +63,24 @@ void reconnectGrpcChannel(String reason) {
 // isProfileLocked doc for what this responds to. AuthInterceptor.profileId
 // is read fresh here (not captured) since it's the profile that was active
 // when the call that failed was made.
+// The background probe started by configureDependencies found the server at
+// a different address than the saved one: point every client at it (same
+// path as a server switch from discovery, the fingerprint and port as
+// resolveGrpcHost just persisted them) and have the home catch up now
+// instead of at the next 30 s poll.
+Future<void> _serverMoved(String host) async {
+  perf('grpc: server moved → $host');
+  final session = DeviceSession.readFrom(getIt<SharedPreferences>());
+  await rebuildGrpcClients(host,
+      tlsFingerprint: session?.tlsFingerprint, grpcPort: session?.grpcPort);
+  if (getIt.isRegistered<PluginBloc>()) {
+    getIt<PluginBloc>().add(const RefreshPluginsEvent(force: true));
+  }
+  if (getIt.isRegistered<ContinueWatchingBloc>()) {
+    getIt<ContinueWatchingBloc>().add(const LoadContinueWatchingEvent());
+  }
+}
+
 void _dispatchProfileLocked() => getIt<AuthBloc>()
     .add(ProfileLockedEvent(getIt<AuthInterceptor>().profileId ?? ''));
 
@@ -75,8 +96,10 @@ Future<void> configureDependencies() async {
   // Player "Formato" remembered per content, per profile.
   contentViewModes.bind(prefs, () => interceptor.profileId);
 
-  // 3. Canale gRPC — risolve host LAN/VPN in background
-  final host = await resolveGrpcHost();
+  // 3. Canale gRPC — risolve host LAN/VPN in background: the saved host is
+  // used right away and only replaced if the background probe finds the
+  // server elsewhere (see resolveGrpcHostFast).
+  final host = await resolveGrpcHostFast(_serverMoved);
   // resolveGrpcHost is a plain TCP reachability probe (no /pileus/info
   // round-trip), so the pinned TLS fingerprint — if any — comes from the
   // last time ServerDiscoveryScreen actually fetched /pileus/info and

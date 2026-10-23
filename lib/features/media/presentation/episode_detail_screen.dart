@@ -16,6 +16,7 @@ import '../../../shared/widgets/pileus_spinner.dart';
 import '../../../shared/widgets/tv_focusable.dart';
 import '../data/media_repository.dart';
 import '../../player/source_continuity.dart' show pickSourceByLabel;
+import '../../player/source_preference.dart' show preferredFirst;
 import '../../player/stream_warmer.dart';
 import 'package:cached_network_image_platform_interface/cached_network_image_platform_interface.dart'
     show ImageRenderMethodForWeb;
@@ -90,8 +91,8 @@ class _EpisodeDetailScreenState extends State<EpisodeDetailScreen> {
     super.initState();
     _repo = getIt<MediaRepository>();
     final loaded = _load();
-    // Resolve ahead of Play the first (auto-focused) source — the Play's own
-    // choice too, see pickSourceByLabel.
+    // Resolve ahead of Play the first (auto-focused) source — preferredFirst
+    // put the Play rule's own choice there.
     _warm = getIt<StreamWarmer>().schedule(widget.pluginId, () async {
       await loaded;
       return pickSourceByLabel(_sources, '')?.id;
@@ -118,7 +119,10 @@ class _EpisodeDetailScreenState extends State<EpisodeDetailScreen> {
           _rating = ep?.vote ?? 0.0;
           _durationSeconds =
               (ep?.duration ?? 0) * 60; // EpisodeDetails.duration is minutes
-          _sources = streamsRes.sources;
+          // The rule's pick first: it's the auto-focused button.
+          _sources = preferredFirst(streamsRes.sources,
+              pluginId: widget.pluginId,
+              seriesId: detailsRes.item.showId);
           _loading = false;
         });
         // _EpisodeBodyState's own initState handles the initial-focus

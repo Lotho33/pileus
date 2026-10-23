@@ -106,8 +106,8 @@ class _EpisodePopupState extends State<_EpisodePopup> {
   void initState() {
     super.initState();
     final loaded = _loadAll();
-    // Resolve ahead of Play the auto-focused first source (pickSourceByLabel
-    // is the Play's own choice too).
+    // Resolve ahead of Play the auto-focused first source (preferredFirst
+    // put the Play rule's own choice there).
     _warm = getIt<StreamWarmer>().schedule(widget.pluginId, () async {
       await loaded;
       return pickSourceByLabel(_sources, '')?.id;
@@ -212,7 +212,9 @@ class _EpisodePopupState extends State<_EpisodePopup> {
     final streamsResp = results[0] as StreamsResponse;
     final detailsResp = results[1] as DetailsResponse;
     setState(() {
-      _sources = streamsResp.sources.toList();
+      // The rule's pick first: it's the auto-focused button.
+      _sources = preferredFirst(streamsResp.sources.toList(),
+          pluginId: widget.pluginId, seriesId: widget.parentId);
       _details = detailsResp.hasEpisode() ? detailsResp.episode : null;
       _loading = false;
     });

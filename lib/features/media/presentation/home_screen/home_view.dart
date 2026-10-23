@@ -108,11 +108,27 @@ class _HomeViewState extends State<_HomeView> {
 
   bool _updateCheckDone = false;
 
+  // The row as known right now — from disk at a cold start, before the
+  // live Continue Watching has answered.
+  List<ContinueWatchingItem> _watchNextItems() {
+    final s = getIt<ContinueWatchingBloc>().state;
+    if (s is ContinueWatchingLoaded) return s.items;
+    return getIt<MediaRepository>().cachedContinueWatching() ?? const [];
+  }
+
   @override
   void initState() {
     super.initState();
     // Startup clock (Metrics.startup) ends on the home's first frame.
     WidgetsBinding.instance.addPostFrameCallback((_) => Metrics.homeShown());
+    // Android TV "Watch Next" row: a card opened Pileus (cold start) or was
+    // opened while it runs — resume that title like our own CW card.
+    WatchNext.listen(() => WatchNext.resumePending(appRouter, _watchNextItems));
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) {
+        WatchNext.resumePending(GoRouter.of(context), _watchNextItems);
+      }
+    });
     // One "newer release available" check per home mount — best-effort,
     // rate-limited and a silent no-op unless UpdateConfig is configured.
     WidgetsBinding.instance.addPostFrameCallback((_) {

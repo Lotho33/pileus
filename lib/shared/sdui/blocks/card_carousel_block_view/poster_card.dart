@@ -294,7 +294,7 @@ class _PosterCardViewState extends State<_PosterCardView> {
                               _PosterFallback(title: widget.item.title),
                         )
                       : _PosterFallback(title: widget.item.title),
-                  ..._langBadge(widget.item.lang),
+                  ..._langBadge(widget.item.lang, widget.item.subs),
                   ..._subtypeBadge(widget.item.subtype),
                 ],
               ),
@@ -322,18 +322,16 @@ class _PosterFallback extends StatelessWidget {
       );
 }
 
-// ── language badge — top-right ITA/JAP pill, poster variant only ───────────
+// ── language badge — top-right ITA/JAP/ENG pill, poster variant only ───────
 
-List<Widget> _langBadge(String lang) {
-  if (lang == 'both' || lang.isEmpty) return const [];
-  final label = lang == 'ita' ? 'ITA' : 'JAP';
-  final color =
-      lang == 'ita' ? const Color(0xFF38bdf8) : const Color(0xFFf97316);
+List<Widget> _langBadge(String lang, String subs) {
+  final b = languageBadge(lang, subs: subs);
+  if (b == null) return const [];
   return [
     Positioned(
       top: 8,
       right: 8,
-      child: _StatusPill(label: label, color: color),
+      child: _StatusPill(label: b.label, color: b.color),
     ),
   ];
 }

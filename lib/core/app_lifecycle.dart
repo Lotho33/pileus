@@ -4,6 +4,8 @@ import 'package:flutter/widgets.dart';
 
 import 'di/injection.dart' show getIt, reconnectGrpcChannel;
 import 'utils/metrics.dart';
+import '../features/media/bloc/continue_watching_bloc.dart';
+import '../features/media/bloc/continue_watching_event.dart';
 import '../features/media/bloc/plugin_bloc.dart';
 import '../features/media/bloc/plugin_event.dart';
 
@@ -59,6 +61,13 @@ class AppLifecycleReactor with WidgetsBindingObserver {
   // Below this a trip to the background (a notification, an input switch)
   // can't have cost us the connection; not worth a new handshake.
   static const _backgroundGap = Duration(seconds: 15);
+  static const _staleAfterBackground = Duration(minutes: 1);
+
+  void _refreshContinueWatching() {
+    if (!getIt.isRegistered<ContinueWatchingBloc>()) return;
+    final bloc = getIt<ContinueWatchingBloc>();
+    if (!bloc.isClosed) bloc.add(const LoadContinueWatchingEvent());
+  }
 
   void attach() {
     if (_refs++ == 0) {
@@ -97,6 +106,12 @@ class AppLifecycleReactor with WidgetsBindingObserver {
           Metrics.wakeBegin();
           reconnectGrpcChannel('resumed');
         }
+        // Away long enough for another device to have moved Continue
+        // Watching on (web included: there the tab was hidden).
+        if (since != null &&
+            DateTime.now().difference(since) > _staleAfterBackground) {
+          _refreshContinueWatching();
+        }
         _resumePoll();
       case AppLifecycleState.inactive:
       case AppLifecycleState.detached:
@@ -117,6 +132,7 @@ class AppLifecycleReactor with WidgetsBindingObserver {
         final bloc = getIt<PluginBloc>();
         if (!bloc.isClosed) bloc.add(const RefreshPluginsEvent());
       }
+      if (!isBackgrounded) _refreshContinueWatching();
     }
   }
 

@@ -1,8 +1,10 @@
 import 'dart:async';
 
-import '../../core/grpc/clients/media_client.dart' show SeasonInfo, StreamSource;
+import '../../core/grpc/clients/media_client.dart'
+    show SeasonInfo, StreamSource;
 import '../media/data/media_repository.dart';
 import 'episode_prefetch.dart';
+import 'source_preference.dart';
 
 /// "Same source, same language" across a binge and across a Continue
 /// Watching resume — shared by every player screen.
@@ -25,13 +27,10 @@ const _kLookupTimeout = Duration(seconds: 10);
 /// Picks the source whose label matches [label] (case-insensitive), else the
 /// first one. Null only when [sources] is empty.
 ///
-/// This is THE choice a Play makes when nobody picks a source by hand: the
-/// PlaybackBloc, every episode-switch path, resolveAndPlay with a single
-/// source, the first (auto-focused) language button on TV — and
-/// [playStreamIdFor], which the stream warmer uses. They must not diverge:
-/// a warm only helps when it resolves byte-for-byte the stream id the Play
-/// then sends (the server's coalescing key and the plugins' resolve cache
-/// are both per stream id, i.e. per language).
+/// The label-continuity step: what an episode switch or a next-episode
+/// prefetch uses to stay on the language being watched. A fresh Play goes
+/// through choosePlaySource (source_preference.dart), which adds the
+/// profile's language preference on top of this.
 StreamSource? pickSourceByLabel(List<StreamSource> sources, String label) {
   if (sources.isEmpty) return null;
   if (label.isNotEmpty) {
@@ -46,16 +45,21 @@ StreamSource? pickSourceByLabel(List<StreamSource> sources, String label) {
 /// The stream id a Play of [mediaId] would send to ResolveStream when the
 /// user doesn't choose a source by hand — GetStreams (cached by the
 /// repository, so the details screen's own call is reused) then
-/// [pickSourceByLabel]. Null when there's no source. Throws what GetStreams
-/// throws.
+/// choosePlaySource, the same rule every Play entry point uses: the stream
+/// warmer must prepare byte-for-byte the stream id the Play then asks for
+/// (the server coalesces on it, plugins cache per language). Null when
+/// there's no source. Throws what GetStreams throws.
 Future<String?> playStreamIdFor(
   MediaRepository repo, {
   required String pluginId,
   required String mediaId,
   String preferredLabel = '',
+  String seriesId = '',
 }) async {
   final res = await repo.getStreams(pluginId, mediaId);
-  final id = pickSourceByLabel(res.sources, preferredLabel)?.id;
+  final id = choosePlaySource(res.sources,
+          explicitLabel: preferredLabel, pluginId: pluginId, seriesId: seriesId)
+      ?.id;
   return (id == null || id.isEmpty) ? null : id;
 }
 
@@ -81,7 +85,7 @@ Future<String?> defaultPlayStreamId(
   final b = await repo.browse(pluginId, season.directoryId, '', cache: true);
   if (b.episodes.isEmpty) return null;
   return playStreamIdFor(repo,
-      pluginId: pluginId, mediaId: b.episodes.first.id);
+      pluginId: pluginId, mediaId: b.episodes.first.id, seriesId: itemId);
 }
 
 /// Label of the source [streamId] belongs to, looked up among [episodeId]'s
@@ -126,9 +130,8 @@ Future<String> streamIdForNextEpisode(
     return prefetched.streamId;
   }
   try {
-    final res = await repo
-        .getStreams(pluginId, nextEpisodeId)
-        .timeout(_kLookupTimeout);
+    final res =
+        await repo.getStreams(pluginId, nextEpisodeId).timeout(_kLookupTimeout);
     final match = pickSourceByLabel(res.sources, sourceLabel);
     if (match != null && match.id.isNotEmpty) return match.id;
   } catch (_) {}

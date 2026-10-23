@@ -865,7 +865,7 @@ class MediaRepository {
     int episodeNumber = 0,
   }) async {
     try {
-      return await _client.updateProgress(ProgressRequest(
+      final resp = await _client.updateProgress(ProgressRequest(
         pluginId: pluginId,
         mediaId: mediaId,
         parentId: parentId,
@@ -883,6 +883,13 @@ class MediaRepository {
         seasonNumber: seasonNumber,
         episodeNumber: episodeNumber,
       ));
+      // Watching a row removed offline brings it back: its queued removal
+      // must not delete it later.
+      final pending = _cwPending();
+      if (pending.remove(_cwKey(pluginId, mediaId))) {
+        await _setCwPending(pending);
+      }
+      return resp;
     } catch (e) {
       if (_handledSessionExpiry(e)) return null;
       if (_handledProfileLock(e)) return null;
@@ -895,6 +902,84 @@ class MediaRepository {
   /// an optimistic UI removal (ContinueWatchingBloc) need this to roll back
   /// when it didn't, instead of the item just vanishing from the list with
   /// no way to tell the delete silently failed server-side.
+  // Continue Watching removals made while the server didn't answer: kept
+  // per profile (a plain prefs list of "plugin\u0000media"), hidden from
+  // every list from then on and sent again at the next successful fetch —
+  // otherwise a row removed offline came straight back at the next start.
+  static const String _cwPendingPrefix = 'cw_pending_removals:';
+
+  String? get _cwPendingKey {
+    final pid = _interceptor.profileId;
+    return (pid == null || pid.isEmpty) ? null : '$_cwPendingPrefix$pid';
+  }
+
+  Set<String> _cwPending() {
+    final key = _cwPendingKey;
+    return key == null ? {} : (_prefs.getStringList(key) ?? const []).toSet();
+  }
+
+  Future<void> _setCwPending(Set<String> pending) async {
+    final key = _cwPendingKey;
+    if (key == null) return;
+    if (pending.isEmpty) {
+      await _prefs.remove(key);
+    } else {
+      await _prefs.setStringList(key, pending.toList());
+    }
+  }
+
+  static String _cwKey(String pluginId, String mediaId) =>
+      '$pluginId\u0000$mediaId';
+
+  List<ContinueWatchingItem> _withoutPending(
+      List<ContinueWatchingItem> items) {
+    final pending = _cwPending();
+    if (pending.isEmpty) return items;
+    return [
+      for (final i in items)
+        if (!pending.contains(_cwKey(i.providerID, i.playableID))) i
+    ];
+  }
+
+  /// The user removed a Continue Watching row. True when it's gone from the
+  /// server — or queued because the server didn't answer (see
+  /// [_cwPendingPrefix]); false only when the session or the profile lock
+  /// refused it, which nothing queued could fix.
+  Future<bool> removeFromContinueWatching(
+      {required String providerID, required String playableID}) async {
+    try {
+      await _client.deleteProgress(
+          DeleteProgressRequest(pluginId: providerID, mediaId: playableID));
+      _dropFromCwSnapshot(providerID, playableID);
+      return true;
+    } catch (e) {
+      if (_handledSessionExpiry(e)) return false;
+      if (_handledProfileLock(e)) return false;
+      await _setCwPending(_cwPending()..add(_cwKey(providerID, playableID)));
+      _dropFromCwSnapshot(providerID, playableID);
+      return true;
+    }
+  }
+
+  // The server answers again: send the queued removals. What still fails
+  // stays queued (and hidden) for the next time.
+  Future<void> _flushCwPending() async {
+    final pending = _cwPending();
+    if (pending.isEmpty) return;
+    final left = <String>{};
+    for (final key in pending) {
+      final parts = key.split('\u0000');
+      if (parts.length != 2) continue;
+      try {
+        await _client.deleteProgress(
+            DeleteProgressRequest(pluginId: parts[0], mediaId: parts[1]));
+      } catch (_) {
+        left.add(key);
+      }
+    }
+    await _setCwPending(left);
+  }
+
   Future<bool> deleteProgress({
     required String providerID,
     required String playableID,
@@ -940,6 +1025,15 @@ class MediaRepository {
       ));
       // The home row (unfiltered) is kept on disk per profile — drawn at the
       // next cold start before the server answers (cachedContinueWatching).
+      // Reachable again: queued removals go out now, and stay out of this
+      // answer — and of the copy kept on disk — either way (the answer may
+      // predate them).
+      final pending = _cwPending();
+      if (pending.isNotEmpty) {
+        await _flushCwPending();
+        resp.items.removeWhere(
+            (i) => pending.contains(_cwKey(i.pluginId, i.mediaId)));
+      }
       if (parentId == null && pluginId == null) _saveCwSnapshot(resp);
       final items = _cwItems(resp);
       // A format remembered for a content lasts as long as its Continue
@@ -992,8 +1086,8 @@ class MediaRepository {
     final entry = _readEntry('$_cwSnapshotPrefix$pid');
     if (entry == null || entry.jsonLayoutStructure.isEmpty) return null;
     try {
-      return _cwItems(ContinueWatchingResponse.fromBuffer(
-          base64Decode(entry.jsonLayoutStructure)));
+      return _withoutPending(_cwItems(ContinueWatchingResponse.fromBuffer(
+          base64Decode(entry.jsonLayoutStructure))));
     } catch (_) {
       return null;
     }
@@ -1116,6 +1210,7 @@ class MediaRepository {
               'anilist_id': i.extra['anilist_id'] ?? '',
               'mal_id': i.extra['mal_id'] ?? '',
               'lang': i.extra['lang'] ?? '',
+              'subs': i.extra['subs'] ?? '',
               'subtype': i.extra['subtype'] ?? '',
               'logo_url': i.logoUrl,
             })
@@ -1143,6 +1238,7 @@ class MediaRepository {
         final anilistId = m['anilist_id'] as String? ?? '';
         final malId = m['mal_id'] as String? ?? '';
         final lang = m['lang'] as String? ?? '';
+        final subs = m['subs'] as String? ?? '';
         final subtype = m['subtype'] as String? ?? '';
         final logoUrl = m['logo_url'] as String? ?? '';
         return CatalogItem(
@@ -1162,6 +1258,7 @@ class MediaRepository {
             'anilist_id': anilistId,
             'mal_id': malId,
             'lang': lang,
+            'subs': subs,
             'subtype': subtype,
           }.entries,
         );

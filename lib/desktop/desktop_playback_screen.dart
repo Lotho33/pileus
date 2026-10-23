@@ -31,8 +31,11 @@ import '../features/player/presentation/widgets/pointer_next_episode_banner.dart
 import '../features/player/presentation/widgets/pointer_skip_button.dart';
 import '../features/player/profile_lease_conflict.dart';
 import '../features/player/source_continuity.dart';
+import '../features/player/live_failover.dart';
+import '../features/player/source_preference.dart';
 import '../features/settings/data/settings_repository.dart';
 import '../shared/player/playback_progress.dart';
+import '../shared/player/player_loading_backdrop.dart';
 
 /// Desktop player: full-window video with a mouse-reveal control bar, a
 /// right-side track panel and keyboard shortcuts. Reuses [PlaybackBloc] +
@@ -62,7 +65,8 @@ class DesktopPlaybackScreen extends StatelessWidget {
             resolveStartPositionSec(isLive: args.isLive, seekTo: args.seekTo);
         if (directUrl != null && directUrl.isNotEmpty) {
           bloc.add(UseDirectUrlEvent(
-              url: directUrl, httpHeaders: args.directUrlHeaders,
+              url: directUrl,
+              httpHeaders: args.directUrlHeaders,
               format: args.directUrlFormat));
         } else if (direct != null && direct.isNotEmpty) {
           bloc.add(SelectStreamEvent(
@@ -74,6 +78,7 @@ class DesktopPlaybackScreen extends StatelessWidget {
             pluginId: pluginId,
             mediaId: mediaId,
             preferredLabel: args.sourceLabel,
+            seriesId: args.parentId,
             startPositionSec: startPositionSec,
           ));
         }
@@ -145,11 +150,17 @@ class _ViewState extends State<_View> with WindowListener {
   // Continue Watching stores and what retry/watchdog re-resolve. Same as the
   // mobile/TV players, see source_continuity.dart.
   String? _curStreamId;
+  // Live with several nodes: on a failure that won't recover, move to the
+  // next node instead of the error page (live_failover.dart).
+  LiveFailover? _liveFailover;
   // Last real position of the stream playing now — where "Riprova" and the
   // stall watchdog's reopen resume to (reset on every episode switch).
   Duration _lastPos = Duration.zero;
   late String _curSourceLabel = widget.args.sourceLabel;
   late String _curTitle = widget.args.title ?? '';
+  // The first frame of this player has been seen — from then on a loading
+  // cover is an episode switch, not the resume the screen was opened for.
+  bool _startedOnce = false;
   late final EpisodeNavState _nav = EpisodeNavState.fromArgs(widget.args);
   bool _resolvingEpisode = false;
   // True from the moment _openEpisode starts switching to a new episode
@@ -237,6 +248,10 @@ class _ViewState extends State<_View> with WindowListener {
     final launchStream = widget.args.directStreamId;
     if (launchStream != null && launchStream.isNotEmpty) {
       _curStreamId = launchStream;
+    }
+    if (widget.args.isLive) {
+      _liveFailover = LiveFailover(widget.args.liveSources,
+          current: _curStreamId ?? widget.mediaId);
     }
     _progress = PlaybackProgress(
         args: widget.args,
@@ -402,6 +417,9 @@ class _ViewState extends State<_View> with WindowListener {
         _progress.isResumeDone) {
       _resumeCoverSafetyTimer?.cancel();
       Metrics.playFirstFrame();
+      SourceMemory.remember(
+          widget.args.epPluginId, widget.args.parentId, _curSourceLabel);
+      _startedOnce = true;
       _started = true;
       rebuild = true;
     }
@@ -433,8 +451,45 @@ class _ViewState extends State<_View> with WindowListener {
     }
     _errorGrace?.cancel();
     _errorGrace = Timer(kErrorGraceDuration, () {
-      if (mounted && !_engine.playing) setState(() => _error = msg);
+      if (!mounted || _engine.playing) return;
+      if (_tryLiveFailover()) return;
+      setState(() => _error = msg);
     });
+  }
+
+  /// Live: the node failed for good — move to the next one (the caller
+  /// then shows no error). True when it did.
+  bool _tryLiveFailover() {
+    final failover = _liveFailover;
+    if (!widget.args.isLive || failover == null) return false;
+    final next = failover.next();
+    if (next == null) return false;
+    final label = failover.labelOf(next, widget.args.liveSourceLabels);
+    ScaffoldMessenger.of(context)
+      ..clearSnackBars()
+      ..showSnackBar(SnackBar(
+        content: Text('Sorgente non disponibile — passo a «$label»'),
+        behavior: SnackBarBehavior.floating,
+        duration: const Duration(seconds: 4),
+      ));
+    _errorGrace?.cancel();
+    _curStreamId = next;
+    final i = widget.args.liveSources.indexOf(next);
+    if (i >= 0 && i < widget.args.liveSourceLabels.length) {
+      _curSourceLabel = widget.args.liveSourceLabels[i];
+    }
+    setState(() {
+      _error = null;
+      _opened = false;
+      _started = false;
+    });
+    context.read<PlaybackBloc>().add(SelectStreamEvent(
+          pluginId: widget.args.livePluginId.isNotEmpty
+              ? widget.args.livePluginId
+              : widget.pluginId,
+          streamId: next,
+        ));
+    return true;
   }
 
   // Contract "One device playing per profile": another device took over.
@@ -511,6 +566,7 @@ class _ViewState extends State<_View> with WindowListener {
   void _onPosition(Duration pos) {
     if (!mounted) return;
     _liveWatchdog?.recordProgress();
+    _liveFailover?.playing();
     if (pos > Duration.zero && !_transitioningEpisode) _lastPos = pos;
     if (widget.args.isLive) return;
 
@@ -820,8 +876,9 @@ class _ViewState extends State<_View> with WindowListener {
     final stream = _curStreamId;
     if (directUrl != null && directUrl.isNotEmpty) {
       bloc.add(UseDirectUrlEvent(
-          url: directUrl, httpHeaders: widget.args.directUrlHeaders,
-              format: widget.args.directUrlFormat));
+          url: directUrl,
+          httpHeaders: widget.args.directUrlHeaders,
+          format: widget.args.directUrlFormat));
     } else if (stream != null && stream.isNotEmpty) {
       bloc.add(SelectStreamEvent(
           pluginId: widget.args.epPluginId,
@@ -962,7 +1019,10 @@ class _ViewState extends State<_View> with WindowListener {
             // ever reaching PlaybackReady/_onReady, which is otherwise the
             // only place that clears it) must not leave the heartbeat/
             // dispose save disabled for the rest of the session.
-            if (s is PlaybackFailed) _transitioningEpisode = false;
+            if (s is PlaybackFailed) {
+              _transitioningEpisode = false;
+              _tryLiveFailover();
+            }
             if (s is PlaybackPlayingElsewhere) {
               _transitioningEpisode = false;
               setState(() {
@@ -1041,8 +1101,27 @@ class _ViewState extends State<_View> with WindowListener {
                         child: KeyedSubtree(
                           key: const ValueKey('loading'),
                           child: _LoadingOverlay(
-                              state: s is PlaybackReady ? null : s,
-                              onBack: _exit),
+                            state: s is PlaybackReady ? null : s,
+                            onBack: _exit,
+                            background: PlayerLoadingBackdrop(
+                              imageUrl: posterForEpisode(
+                                episodeThumbs: _nav.episodeThumbs,
+                                index: _nav.episodeIndex,
+                                seriesCoverUrl: _nav.seriesCoverUrl,
+                                seriesPoster: _nav.seriesPoster,
+                                fallback: widget.args.poster,
+                              ),
+                              title: _curTitle,
+                              subtitle: widget.args.showTitle,
+                              resumeAtSeconds:
+                                  widget.args.isLive || _startedOnce
+                                      ? 0
+                                      : widget.args.seekTo,
+                              notice: _startedOnce
+                                  ? ''
+                                  : widget.args.languageNotice,
+                            ),
+                          ),
                         ),
                       );
                     }
@@ -1552,7 +1631,11 @@ class _PanelHeader extends StatelessWidget {
 class _LoadingOverlay extends StatelessWidget {
   final PlaybackState? state;
   final VoidCallback onBack;
-  const _LoadingOverlay({required this.state, required this.onBack});
+  final Widget background;
+  const _LoadingOverlay(
+      {required this.state,
+      required this.onBack,
+      this.background = const ColoredBox(color: Colors.black)});
 
   @override
   Widget build(BuildContext context) {
@@ -1564,30 +1647,29 @@ class _LoadingOverlay extends StatelessWidget {
     if (s is PlaybackRetrying) {
       label = 'Nuovo tentativo ${s.attempt}/${s.of}…';
     }
-    return ColoredBox(
-      color: Colors.black,
-      child: Stack(
-        children: [
-          Center(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                const CircularProgressIndicator(color: Colors.white),
-                const SizedBox(height: 16),
-                Text(label, style: const TextStyle(color: Colors.white70)),
-              ],
-            ),
+    return Stack(
+      fit: StackFit.expand,
+      children: [
+        background,
+        Center(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const CircularProgressIndicator(color: Colors.white),
+              const SizedBox(height: 16),
+              Text(label, style: const TextStyle(color: Colors.white70)),
+            ],
           ),
-          Positioned(
-            top: 16,
-            left: 16,
-            child: IconButton(
-              icon: const Icon(Icons.arrow_back, color: Colors.white),
-              onPressed: onBack,
-            ),
+        ),
+        Positioned(
+          top: 16,
+          left: 16,
+          child: IconButton(
+            icon: const Icon(Icons.arrow_back, color: Colors.white),
+            onPressed: onBack,
           ),
-        ],
-      ),
+        ),
+      ],
     );
   }
 }

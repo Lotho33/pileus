@@ -6,7 +6,7 @@ import '../../../core/grpc/grpc_errors.dart';
 import '../../../core/utils/metrics.dart';
 import '../../../core/utils/perf_log.dart';
 import '../../../features/media/data/media_repository.dart';
-import '../source_continuity.dart';
+import '../source_preference.dart';
 import 'playback_event.dart';
 import 'playback_state.dart';
 
@@ -61,9 +61,12 @@ class PlaybackBloc extends Bloc<PlaybackEvent, PlaybackState> {
         emit(const PlaybackFailed('Nessuna sorgente disponibile.'));
         return;
       }
-      // Auto-select: preferred label match → else first source. The same
-      // function the stream warmer uses — see pickSourceByLabel.
-      final source = pickSourceByLabel(response.sources, event.preferredLabel)!;
+      // The one source-choice rule (source_preference.dart), shared with
+      // every other Play entry point and the stream warm-up.
+      final source = choosePlaySource(response.sources,
+          explicitLabel: event.preferredLabel,
+          pluginId: event.pluginId,
+          seriesId: event.seriesId)!;
       add(SelectStreamEvent(
           pluginId: event.pluginId,
           streamId: source.id,

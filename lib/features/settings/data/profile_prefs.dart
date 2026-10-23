@@ -15,15 +15,19 @@ import '../../media/data/plugin_prefs.dart';
 ///                          "bgEnabled": true, "bottomPadding": 80.0 },
 ///   "plugins": { "order": ["pluginA","pluginB"],
 ///                "hiddenPlugins": ["pluginC"],
-///                "catalogs": { "pluginA": {"order":[...], "hidden":[...]} } } }
+///                "catalogs": { "pluginA": {"order":[...], "hidden":[...]} } },
+///   "playback": { "language": "it" } }
 /// ```
 ///
 /// Every field is nullable/defaults-to-unset: absent means "not set on this
 /// profile, fall back to the local value / app default". Person-scoped only
-/// — volume (desktop-only headroom above 100%), preferred audio/subtitle
-/// language, and any parental gate are all deliberately NOT settings here,
-/// and device/hardware settings (overscan, low-power, buffers, diagnostics)
-/// stay local by design. Plugin order/visibility (the "plugins" block) IS
+/// — volume (desktop-only headroom above 100%), the audio *track* picked
+/// inside a stream (AudioLangPref, device-local) and any parental gate are
+/// all deliberately NOT settings here. The preferred *language version*
+/// ("playback.language": dubbed Italian or original — which source a Play
+/// picks, see source_preference.dart) is: it follows the person. Device/
+/// hardware settings (overscan, low-power, buffers, diagnostics) stay local
+/// by design. Plugin order/visibility (the "plugins" block) IS
 /// person-scoped, unlike those device settings: it's a browsing preference
 /// that should follow the profile to every paired device, same as it does
 /// for subtitles.
@@ -43,6 +47,8 @@ class ProfilePrefs {
   final double? subtitleBottomPadding;
   final List<String> pluginOrder;
   final PluginPrefs pluginPrefs;
+  // "it" | "original" — see PreferredLanguage in source_preference.dart.
+  final String? preferredLanguage;
   final Map<String, dynamic> _unknownBlocks;
 
   const ProfilePrefs({
@@ -52,6 +58,7 @@ class ProfilePrefs {
     this.subtitleBottomPadding,
     this.pluginOrder = const [],
     this.pluginPrefs = const PluginPrefs(),
+    this.preferredLanguage,
     Map<String, dynamic> unknownBlocks = const {},
   }) : _unknownBlocks = unknownBlocks;
 
@@ -63,7 +70,8 @@ class ProfilePrefs {
       subtitleBgEnabled == null &&
       subtitleBottomPadding == null &&
       pluginOrder.isEmpty &&
-      pluginPrefs.isEmpty;
+      pluginPrefs.isEmpty &&
+      preferredLanguage == null;
 
   /// Tolerant: "", "{}", `{"v":1}`, malformed JSON, or an unexpected shape
   /// all yield [empty] rather than throwing.
@@ -78,9 +86,14 @@ class ProfilePrefs {
       final p = plugins is Map
           ? plugins.cast<String, dynamic>()
           : const <String, dynamic>{};
+      final playback = root['playback'];
+      final pb = playback is Map ? playback : const <dynamic, dynamic>{};
       final unknown = <String, dynamic>{
         for (final e in root.entries)
-          if (e.key != 'v' && e.key != 'subtitles' && e.key != 'plugins')
+          if (e.key != 'v' &&
+              e.key != 'subtitles' &&
+              e.key != 'plugins' &&
+              e.key != 'playback')
             e.key.toString(): e.value,
       };
       return ProfilePrefs(
@@ -93,6 +106,7 @@ class ProfilePrefs {
         // passing the whole plugins map (which also has 'order') is fine,
         // it ignores keys it doesn't know.
         pluginPrefs: p.isEmpty ? const PluginPrefs() : PluginPrefs.fromJson(p),
+        preferredLanguage: pb['language'] as String?,
         unknownBlocks: unknown,
       );
     } catch (_) {
@@ -116,11 +130,20 @@ class ProfilePrefs {
       if (pluginOrder.isNotEmpty) 'order': pluginOrder,
       if (!pluginPrefs.isEmpty) ...pluginPrefs.toJson(),
     };
-    if (sub.isEmpty && plugins.isEmpty && _unknownBlocks.isEmpty) return '{}';
+    final playback = <String, dynamic>{
+      if (preferredLanguage != null) 'language': preferredLanguage,
+    };
+    if (sub.isEmpty &&
+        plugins.isEmpty &&
+        playback.isEmpty &&
+        _unknownBlocks.isEmpty) {
+      return '{}';
+    }
     return jsonEncode({
       'v': schemaVersion,
       if (sub.isNotEmpty) 'subtitles': sub,
       if (plugins.isNotEmpty) 'plugins': plugins,
+      if (playback.isNotEmpty) 'playback': playback,
       ..._unknownBlocks,
     });
   }
@@ -132,6 +155,7 @@ class ProfilePrefs {
     double? subtitleBottomPadding,
     List<String>? pluginOrder,
     PluginPrefs? pluginPrefs,
+    String? preferredLanguage,
   }) =>
       ProfilePrefs(
         subtitleFontSize: subtitleFontSize ?? this.subtitleFontSize,
@@ -141,6 +165,7 @@ class ProfilePrefs {
             subtitleBottomPadding ?? this.subtitleBottomPadding,
         pluginOrder: pluginOrder ?? this.pluginOrder,
         pluginPrefs: pluginPrefs ?? this.pluginPrefs,
+        preferredLanguage: preferredLanguage ?? this.preferredLanguage,
         unknownBlocks: _unknownBlocks,
       );
 }

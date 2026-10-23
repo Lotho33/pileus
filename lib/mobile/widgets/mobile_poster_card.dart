@@ -5,6 +5,7 @@ import '../../core/grpc/clients/media_client.dart' hide ContinueWatchingItem;
 import '../../core/theme/app_theme.dart';
 import '../../core/utils/image_sizing.dart';
 import '../../shared/widgets/open_catalog_item.dart';
+import '../../shared/widgets/language_badge.dart';
 import '../mobile_item_sheet.dart';
 import '../mobile_live_sheet.dart';
 import 'press_scale.dart';
@@ -50,23 +51,35 @@ class MobilePosterCard extends StatelessWidget {
               borderRadius: BorderRadius.circular(10),
               child: AspectRatio(
                 aspectRatio: ratio,
-                child: item.posterUrl.isNotEmpty
-                    ? CachedNetworkImage(
-                        // Web-only, no-op on every other platform — see image_sizing.dart's
-                        // "ImageRenderMethodForWeb.HttpGet" section for why every
-                        // CachedNetworkImage call site in the app sets this.
-                        imageRenderMethodForWeb:
-                            ImageRenderMethodForWeb.HttpGet,
-                        imageUrl: posterSrc(item.posterUrl, imgW),
-                        memCacheWidth: imgW,
-                        fit: BoxFit.cover,
-                        fadeInDuration: const Duration(milliseconds: 180),
-                        placeholder: (_, __) =>
-                            const ColoredBox(color: AppTheme.surface2),
-                        errorWidget: (_, __, ___) =>
-                            _Fallback(title: item.title),
-                      )
-                    : _Fallback(title: item.title),
+                child: Stack(
+                  fit: StackFit.expand,
+                  children: [
+                    item.posterUrl.isNotEmpty
+                        ? CachedNetworkImage(
+                            // Web-only, no-op on every other platform — see image_sizing.dart's
+                            // "ImageRenderMethodForWeb.HttpGet" section for why every
+                            // CachedNetworkImage call site in the app sets this.
+                            imageRenderMethodForWeb:
+                                ImageRenderMethodForWeb.HttpGet,
+                            imageUrl: posterSrc(item.posterUrl, imgW),
+                            memCacheWidth: imgW,
+                            fit: BoxFit.cover,
+                            fadeInDuration: const Duration(milliseconds: 180),
+                            placeholder: (_, __) =>
+                                const ColoredBox(color: AppTheme.surface2),
+                            errorWidget: (_, __, ___) =>
+                                _Fallback(title: item.title),
+                          )
+                        : _Fallback(title: item.title),
+                    Positioned(
+                      top: 6,
+                      right: 6,
+                      child: LanguageBadgePill(
+                          lang: item.extra['lang'] ?? '',
+                          subs: item.extra['subs'] ?? ''),
+                    ),
+                  ],
+                ),
               ),
             ),
             const SizedBox(height: 6),

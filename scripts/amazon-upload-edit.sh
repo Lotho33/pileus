@@ -7,7 +7,7 @@
 #   scripts/amazon-upload-edit.sh --submit path/to/app-*.apk   # + submit for review
 #
 # Steps, in order: get an OAuth2 access token, reuse the open edit or
-# create one (see step 2), upload each APK to it and — only with --submit —
+# create one (see step 2), put each APK in it (see step 3) and — only with --submit —
 # commit the edit, which is what submits it for Amazon's review. Without
 # --submit the edit stays IN_PROGRESS in the Developer Console for a human
 # to review and submit. release.yml's amazon-submit job is the caller.
@@ -124,12 +124,6 @@ if [ -n "$EDIT_ID" ]; then
     exit 0
   fi
   echo "Edit aperto esistente: $EDIT_ID ($edit_status) — lo riuso."
-  for apk_id in $(req GET "$API/edits/$EDIT_ID/apks" | jq -r '.[]?.id // empty'); do
-    etag="$(curl -sS -D - -o /dev/null "$API/edits/$EDIT_ID/apks/$apk_id" \
-      -H "Authorization: Bearer $ACCESS_TOKEN" | tr -d '\r' | awk 'tolower($1)=="etag:"{print $2}')"
-    echo "  rimuovo APK precedente $apk_id"
-    req DELETE "$API/edits/$EDIT_ID/apks/$apk_id" -H "If-Match: $etag" >/dev/null
-  done
 else
   tmp="$(mktemp)"
   status="$(curl -sS -o "$tmp" -w '%{http_code}' -X POST "$API/edits" \
@@ -157,14 +151,51 @@ else
   echo "Edit creato: $EDIT_ID ($(echo "$edit_response" | jq -r '.status // "?"'))"
 fi
 
-echo "== 3/3: carico $# APK =="
+# A new edit starts from the live version, APKs included. Each of those is
+# REPLACED in place, not deleted and uploaded again: replace keeps the APK's
+# own attributes — device targeting (documented, flows.html) and the
+# "Apply Amazon DRM?" answer, which the API has no field for and which a
+# freshly uploaded APK lacks (v1.6.9: commit refused with
+# error_apk_drm_value_missing). Only APKs beyond the ones already there are
+# uploaded new, and those still need the DRM answer in the Console once.
+apk_etag() {
+  curl -sS -D - -o /dev/null "$API/edits/$EDIT_ID/apks/$1" \
+    -H "Authorization: Bearer $ACCESS_TOKEN" | tr -d '\r' | awk 'tolower($1)=="etag:"{print $2}'
+}
+# Not `mapfile < <(req …)`: a failing req in a process substitution can't
+# stop the script, and an empty list would turn every replace into an upload.
+apks_json="$(req GET "$API/edits/$EDIT_ID/apks")"
+mapfile -t existing < <(echo "$apks_json" | jq -r '.[]?.id // empty')
+
+echo "== 3/3: carico $# APK (nell'edit ce ne sono ${#existing[@]}) =="
+i=0
 for apk in "$@"; do
   name="$(basename "$apk")"
-  echo "  -> $name ($(du -h "$apk" | cut -f1))"
-  req POST "$API/edits/$EDIT_ID/apks/upload" \
-    -H 'Content-Type: application/octet-stream' \
-    -H "fileName: $name" \
-    --data-binary "@$apk" >/dev/null
+  if [ "$i" -lt "${#existing[@]}" ]; then
+    apk_id="${existing[$i]}"
+    echo "  -> $name ($(du -h "$apk" | cut -f1)) sostituisce l'APK $apk_id"
+    req PUT "$API/edits/$EDIT_ID/apks/$apk_id/replace" \
+      -H "If-Match: $(apk_etag "$apk_id")" \
+      -H 'Content-Type: application/vnd.android.package-archive' \
+      -H "fileName: $name" \
+      --data-binary "@$apk" >/dev/null
+  else
+    echo "  -> $name ($(du -h "$apk" | cut -f1)) nuovo APK"
+    echo "::warning::$name caricato come APK nuovo: se l'invio fallisce con error_apk_drm_value_missing, rispondi una volta \"Apply Amazon DRM?\" = No in Developer Console; dalle versioni dopo verrà sostituito e la risposta resta."
+    req POST "$API/edits/$EDIT_ID/apks/upload" \
+      -H 'Content-Type: application/vnd.android.package-archive' \
+      -H "fileName: $name" \
+      --data-binary "@$apk" >/dev/null
+  fi
+  i=$((i + 1))
+done
+# More APKs in the edit than this release ships (e.g. an ABI dropped):
+# the extra ones go, or the old build would ship alongside the new one.
+while [ "$i" -lt "${#existing[@]}" ]; do
+  apk_id="${existing[$i]}"
+  echo "  rimuovo APK in più $apk_id"
+  req DELETE "$API/edits/$EDIT_ID/apks/$apk_id" -H "If-Match: $(apk_etag "$apk_id")" >/dev/null
+  i=$((i + 1))
 done
 
 if [ "$SUBMIT" = 1 ]; then
@@ -197,8 +228,8 @@ if [ "$SUBMIT" = 1 ]; then
     -H "Authorization: Bearer $ACCESS_TOKEN" -H "If-Match: $etag")"
   if [ "$status" -lt 200 ] || [ "$status" -ge 300 ]; then
     # The APKs are in the edit already: say exactly what's left to do by
-    # hand. error_apk_drm_value_missing = "Apply Amazon DRM?" unanswered for
-    # the new APK, which the API has no documented field for.
+    # hand. error_apk_drm_value_missing = "Apply Amazon DRM?" unanswered —
+    # only possible for an APK uploaded new (see step 3).
     echo "::error::APK caricati nell'edit $EDIT_ID, ma Amazon ha rifiutato l'invio (HTTP $status). Completa e invia da Developer Console > App Submission > la versione in corso. Errori:"
     jq -r '.errors[]? | "  - \(.errorCode): \(.errorMessage)"' "$tmp" 2>/dev/null || cat "$tmp"
     if grep -q error_apk_drm_value_missing "$tmp"; then

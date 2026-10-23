@@ -31,6 +31,7 @@ import '../../player/episode_poster.dart';
 import '../../player/resolve_and_play.dart' show PlayerLaunchGuard;
 import '../../player/resume_lookup.dart';
 import '../../player/source_continuity.dart' show pickSourceByLabel;
+import '../../player/source_preference.dart' show preferredFirst;
 import '../../player/stream_warmer.dart';
 import 'widgets/details_common.dart';
 import 'widgets/series_page_layout.dart';

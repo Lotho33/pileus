@@ -3,6 +3,7 @@ package com.lotho33.pileus
 import android.app.ActivityManager
 import android.app.UiModeManager
 import android.content.Context
+import android.content.Intent
 import android.content.res.Configuration
 import android.content.pm.PackageManager
 import android.os.Build
@@ -22,6 +23,15 @@ class MainActivity : FlutterActivity() {
                     else -> result.notImplemented()
                 }
             }
+        // Android TV home screen "Watch Next" row (no-op in the mobile flavor).
+        WatchNext.register(flutterEngine, this)
+        WatchNext.onIntent(intent, notify = false)
+    }
+
+    // singleTop: a Watch Next card opened while Pileus is already running.
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        WatchNext.onIntent(intent, notify = true)
     }
 
     // Coarse hardware description for main.dart's weak-device auto-detect

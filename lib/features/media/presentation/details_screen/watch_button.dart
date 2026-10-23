@@ -87,7 +87,7 @@ class _WatchButtonState extends State<_WatchButton> {
     if (!widget.isAudio) {
       final ready = Future.wait([_checkResume(), _loadSources()]);
       // Resolve ahead of Play what this button will play: the resume row's
-      // stream, else the auto-focused first language (see pickSourceByLabel).
+      // stream, else the auto-focused first language (preferredFirst).
       _warm = getIt<StreamWarmer>().schedule(widget.pluginId, () async {
         await ready;
         final resume = _resume;
@@ -188,7 +188,8 @@ class _WatchButtonState extends State<_WatchButton> {
       final res = await repo.getStreams(widget.pluginId, widget.mediaId);
       if (mounted) {
         setState(() {
-          _sources = res.sources;
+          // The rule's pick first: it's the auto-focused button.
+          _sources = preferredFirst(res.sources, pluginId: widget.pluginId);
           _sourcesLoaded = true;
         });
         _maybeRequestInitialFocus();

@@ -26,6 +26,7 @@ import '../features/player/resolve_and_play.dart';
 import '../features/player/resume_lookup.dart';
 import '../features/player/source_continuity.dart' show defaultPlayStreamId;
 import '../features/player/stream_warmer.dart';
+import '../shared/widgets/language_chips.dart';
 import '../shared/widgets/error_retry_view.dart';
 import 'package:cached_network_image_platform_interface/cached_network_image_platform_interface.dart'
     show ImageRenderMethodForWeb;
@@ -445,6 +446,8 @@ class _PlayButtonState extends State<_PlayButton> {
   GoRouter? _router;
   bool _playerWasActive = false;
   WarmTicket? _warm;
+  // A language picked on the chips (LanguageChips) — null: the Play rule's.
+  String? _chosenLabel;
 
   @override
   void initState() {
@@ -548,7 +551,8 @@ class _PlayButtonState extends State<_PlayButton> {
           // Used to be unguarded: a network error left the tap doing nothing
           // at all (and an uncaught async error behind it).
           messenger.showSnackBar(SnackBar(
-            content: Text('Impossibile caricare gli episodi: ${grpcMessage(e)}'),
+            content:
+                Text('Impossibile caricare gli episodi: ${grpcMessage(e)}'),
             behavior: SnackBarBehavior.floating,
           ));
           return;
@@ -615,6 +619,7 @@ class _PlayButtonState extends State<_PlayButton> {
           posterUrl: widget.item.posterUrl,
         ),
         'mediaType': widget.item.mediaType,
+        if (_chosenLabel != null) 'sourceLabel': _chosenLabel,
       },
     );
   }
@@ -643,19 +648,31 @@ class _PlayButtonState extends State<_PlayButton> {
     // Movie only for now — an episode's own download button lives on its
     // tile in _Seasons below; a series has no single stream to offer here.
     if (widget.isSeries) return playButton;
-    return Row(
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Expanded(child: playButton),
-        const SizedBox(width: 8),
-        DownloadButton(
-          pluginId: widget.pluginId,
-          target: DownloadTarget(
-            mediaId: widget.item.id,
-            streamId: '', // resolved by the sheet itself via GetStreams
-            title: widget.item.title,
-            poster: widget.item.posterUrl,
-          ),
+        Row(
+          children: [
+            Expanded(child: playButton),
+            const SizedBox(width: 8),
+            DownloadButton(
+              pluginId: widget.pluginId,
+              target: DownloadTarget(
+                mediaId: widget.item.id,
+                streamId: '', // resolved by the sheet itself via GetStreams
+                title: widget.item.title,
+                poster: widget.item.posterUrl,
+              ),
+            ),
+          ],
         ),
+        // A resume keeps the language it was watched in.
+        if (resume == null)
+          LanguageChips(
+            pluginId: widget.pluginId,
+            mediaId: widget.item.id,
+            onChanged: (s) => setState(() => _chosenLabel = s.label),
+          ),
       ],
     );
   }
