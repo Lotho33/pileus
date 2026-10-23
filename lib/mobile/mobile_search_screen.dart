@@ -16,10 +16,13 @@ import '../features/media/bloc/plugin_bloc.dart';
 import '../features/media/bloc/plugin_event.dart';
 import '../features/media/bloc/plugin_state.dart';
 import '../features/media/data/media_repository.dart';
+import '../features/media/data/recent_searches.dart';
 import '../features/media/data/search_filters_loader.dart';
 import '../features/media/presentation/widgets/plugin_nav.dart'
     show pluginLabel;
 import '../shared/widgets/filter_sheet.dart';
+import '../shared/widgets/recent_searches_list.dart';
+import '../shared/widgets/skeleton.dart';
 import 'widgets/mobile_poster_card.dart';
 import '../shared/utils/tap_guard.dart';
 
@@ -41,6 +44,10 @@ class MobileSearchScreen extends StatefulWidget {
 
 class _MobileSearchScreenState extends State<MobileSearchScreen> {
   late final DiscoveryBloc _bloc;
+  // "Ricerche recenti": a query is kept once it settles on results (see
+  // RecentSearchRecorder).
+  final _recent = RecentSearchRecorder();
+  StreamSubscription<DiscoveryState>? _recentSub;
   final _ctrl = TextEditingController();
   final _focus = FocusNode();
   // Pagination: results used to be capped at whatever the
@@ -104,6 +111,11 @@ class _MobileSearchScreenState extends State<MobileSearchScreen> {
     _filtersLoader.setPlugin(_pluginId);
     _activePlugin.addListener(_onActiveChanged);
     _scrollCtrl.addListener(_onScroll);
+    _recentSub = _bloc.stream.listen((s) {
+      if (s is DiscoveryLoaded && s.searchQuery.isNotEmpty) {
+        _recent.settled(s.searchQuery, hasResults: s.items.isNotEmpty);
+      }
+    });
   }
 
   @override
@@ -118,6 +130,8 @@ class _MobileSearchScreenState extends State<MobileSearchScreen> {
 
   @override
   void dispose() {
+    _recentSub?.cancel();
+    _recent.dispose();
     _filtersLoader.dispose();
     _debounce?.cancel();
     _activePlugin.removeListener(_onActiveChanged);
@@ -215,6 +229,7 @@ class _MobileSearchScreenState extends State<MobileSearchScreen> {
   /// quick-search and search screens (quick_search_area/area_state.dart,
   /// features/media/presentation/search_screen/view.dart).
   void _onQueryChanged(String _) {
+    _recent.typing();
     _debounce?.cancel();
     _debounce = Timer(_debounceDelay, () {
       if (mounted) _run(unfocus: false);
@@ -336,7 +351,10 @@ class _MobileSearchScreenState extends State<MobileSearchScreen> {
                             ? 'Cerca in ${pluginLabel(active)}'
                             : 'Cerca film, serie, canali…',
                         onChanged: _onQueryChanged,
-                        onSubmitted: _run,
+                        onSubmitted: () {
+                          _recent.submit(_ctrl.text);
+                          _run();
+                        },
                         onClear: _clearQuery,
                       ),
                     ),
@@ -395,15 +413,27 @@ class _MobileSearchScreenState extends State<MobileSearchScreen> {
                   bloc: _bloc,
                   builder: (context, s) {
                     if (_submitted.isEmpty) {
-                      return _Hint(
-                        icon: Icons.search_rounded,
-                        text: hasFilters
-                            ? 'Scrivi un titolo o imposta un filtro.'
-                            : 'Scrivi un titolo da cercare.',
+                      return RecentSearchesList(
+                        onPick: (q) {
+                          _ctrl.text = q;
+                          _run();
+                        },
+                        fallback: _Hint(
+                          icon: Icons.search_rounded,
+                          text: hasFilters
+                              ? 'Scrivi un titolo o imposta un filtro.'
+                              : 'Scrivi un titolo da cercare.',
+                        ),
                       );
                     }
                     if (s is DiscoveryLoading) {
-                      return const Center(child: CircularProgressIndicator());
+                      // Same grid as the results it stands in for.
+                      return const PosterGridSkeleton(
+                        maxCrossAxisExtent: 118,
+                        childAspectRatio: 0.48,
+                        padding: EdgeInsets.fromLTRB(16, 6, 16, 8),
+                        spacing: 14,
+                      );
                     }
                     if (s is DiscoveryError) {
                       // Retryable in place — a dropped connection used to

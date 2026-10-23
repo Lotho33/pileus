@@ -89,6 +89,7 @@ Future<void> configureDependencies() async {
   final prefs = await SharedPreferences.getInstance();
   getIt.registerSingleton<SharedPreferences>(prefs);
   Metrics.attach(prefs);
+  Metrics.installFluidity();
 
   // 2. Interceptor JWT (singleton — aggiornato post-login)
   final interceptor = AuthInterceptor();

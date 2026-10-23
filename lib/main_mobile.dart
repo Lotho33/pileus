@@ -6,6 +6,7 @@ import 'core/app_lifecycle.dart';
 import 'core/di/injection.dart';
 import 'core/perf_profile.dart';
 import 'core/utils/error_hooks.dart';
+import 'core/pip.dart';
 import 'core/utils/metrics.dart';
 import 'core/utils/perf_log.dart';
 import 'core/utils/perf_probes.dart';
@@ -66,6 +67,7 @@ Future<void> runMobileApp() async {
   // No software-decoder / compat-rendering switches on the phone UI (TV-box
   // workarounds); the quality cap and the diagnostics stats do apply.
   applyAndroidVideoSettings(settings, tvSwitches: false);
+  Pip.init();
 
   runApp(const PileusMobileApp());
 }

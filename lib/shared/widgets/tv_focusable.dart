@@ -40,6 +40,11 @@ class TvFocusable extends StatefulWidget {
   final bool canRequestFocus;
   final ValueChanged<bool>? onFocusChange;
 
+  /// What a screen reader (TalkBack / VoiceView) says for this control.
+  /// Needed where the control shows no text of its own (a poster, an icon);
+  /// otherwise the text inside is merged into one spoken control already.
+  final String? semanticLabel;
+
   const TvFocusable({
     super.key,
     required this.builder,
@@ -53,6 +58,7 @@ class TvFocusable extends StatefulWidget {
     this.autofocus = false,
     this.canRequestFocus = true,
     this.onFocusChange,
+    this.semanticLabel,
   });
 
   @override
@@ -141,12 +147,38 @@ class _TvFocusableState extends State<TvFocusable> {
         widget.onFocusChange?.call(v);
       },
       onKeyEvent: _onKeyEvent,
-      child: GestureDetector(
+      child: _semantics(GestureDetector(
         onTap: widget.onActivate,
         child: Builder(
           builder: (context) => widget.builder(context, _focused),
         ),
-      ),
+      )),
+    );
+  }
+
+  // One spoken control per focusable: its own label, or its texts merged.
+  // Not for the non-focusable wrappers used as key handlers around whole
+  // dialogs/screens — merging those would collapse everything inside.
+  Widget _semantics(Widget child) {
+    if (!widget.canRequestFocus) return child;
+    final label = widget.semanticLabel;
+    final button = widget.onActivate != null;
+    if (label != null && label.isNotEmpty) {
+      return Semantics(
+        container: true,
+        button: button,
+        focusable: true,
+        focused: _focused,
+        label: label,
+        // The tap of the GestureDetector inside is excluded with the rest.
+        onTap: widget.onActivate,
+        excludeSemantics: true,
+        child: child,
+      );
+    }
+    return MergeSemantics(
+      child: Semantics(
+          button: button, focusable: true, focused: _focused, child: child),
     );
   }
 }

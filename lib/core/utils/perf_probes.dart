@@ -21,9 +21,11 @@ class PerfNavigatorObserver extends NavigatorObserver {
   }
 
   void _changed(String what, Route<dynamic>? shown, Route<dynamic>? from) {
-    if (!kPerfDiagnostics) return;
     final to = _name(shown);
+    // Always — the smoothness metric (Metrics.fluidity) files every frame
+    // under the current screen. The logging below is diagnostics-only.
     perfScreen = to;
+    if (!kPerfDiagnostics) return;
     final sw = Stopwatch()..start();
     perf('nav: $what $to (from ${_name(from)})');
     SchedulerBinding.instance.addPostFrameCallback((_) {

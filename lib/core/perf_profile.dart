@@ -17,6 +17,12 @@ library;
 
 bool lowPowerUi = false;
 
+/// The TV interface is running (Android TV flavor, or the TV web build for
+/// Tizen/webOS) — whatever the box. Set once in main.dart / main_web_tv.dart.
+/// The lean defaults every TV gets, capable or not (see image_sizing.dart's
+/// backdropCacheWidth): "hardware modesto" is for what's left beyond them.
+bool tvUi = false;
+
 /// Set once at startup from `DeviceProfile.isTv` (see `main.dart`) — true
 /// only on real Android TV/Fire TV firmware, false on every other platform
 /// including Android phones/tablets. `main.dart`'s `MaterialApp.router`

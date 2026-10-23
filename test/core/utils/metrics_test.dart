@@ -1,9 +1,15 @@
+import 'dart:ui' show FrameTiming;
+
 import 'package:flutter_test/flutter_test.dart';
+import 'package:pileus/core/utils/perf_log.dart';
 import 'package:pileus/core/utils/metrics.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 List<int> _samples(Metric m) =>
-    Metrics.summaries().where((s) => s.metric.id == m.id).firstOrNull?.samples ??
+    Metrics.summaries()
+        .where((s) => s.metric.id == m.id)
+        .firstOrNull
+        ?.samples ??
     const [];
 
 void main() {
@@ -80,5 +86,37 @@ void main() {
     SharedPreferences.setMockInitialValues({'metrics.samples.v1': '{oops'});
     Metrics.attach(await SharedPreferences.getInstance());
     expect(Metrics.summaries(), isEmpty);
+  });
+
+  group('fluidity', () {
+    FrameTiming frame(int ms) => FrameTiming(
+          vsyncStart: 0,
+          buildStart: 0,
+          buildFinish: ms * 1000,
+          rasterStart: ms * 1000,
+          rasterFinish: ms * 1000,
+          rasterFinishWallTime: ms * 1000,
+        );
+
+    test('screen of a route', () {
+      expect(Metrics.screenOf('/details/p/1'), 'details');
+      expect(Metrics.screenOf('/home'), 'home');
+      expect(Metrics.screenOf('/player/p/x'), 'player');
+      expect(Metrics.screenOf('/unknown'), 'altro');
+      expect(Metrics.screenOf('MaterialPageRoute<void>'), 'altro');
+    });
+
+    test('share of slow frames, per screen', () {
+      perfScreen = '/home';
+      Metrics.recordFrames([frame(8), frame(8), frame(8), frame(40)]);
+      perfScreen = '/details/p/1';
+      Metrics.recordFrames([frame(10)]);
+      final f = Metrics.fluidity();
+      expect(f.first.label, 'Home');
+      expect(f.first.frames, 4);
+      expect(f.first.slowPct, 25);
+      expect(f.last.label, 'Scheda titolo');
+      expect(f.last.slowPct, 0);
+    });
   });
 }

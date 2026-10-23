@@ -16,6 +16,7 @@ import '../../../shared/sdui/sport_theme.dart'
     show sportAccentColor, isLiveNow, liveStartTimeLabel;
 import '../../../shared/widgets/error_retry_view.dart';
 import '../../../shared/widgets/pileus_spinner.dart';
+import '../../../shared/widgets/skeleton.dart';
 import '../../../shared/widgets/tv_focusable.dart';
 import '../bloc/details_bloc.dart';
 import '../bloc/details_event.dart';
@@ -115,11 +116,9 @@ class _DetailsView extends StatelessWidget {
       // media_type, unknown until GetDetails answers), so the "continuity"
       // just meant an extra, mismatched-looking backdrop flashing in and
       // back out for however long the request takes.
-      return KeyedSubtree(
-        key: const ValueKey('loading'),
-        child: Center(
-            child: PileusSpinner(
-                size: AppScale.spinnerL(context), color: AppTheme.textHigh)),
+      return const KeyedSubtree(
+        key: ValueKey('loading'),
+        child: DetailsSkeleton(),
       );
     }
     if (state is DetailsError) {

@@ -3,6 +3,18 @@
 // private identifiers are shared across all parts.
 part of '../player_overlay.dart';
 
+// What a screen reader says for the icon-only player buttons below.
+final _iconLabels = <IconData, String>{
+  Icons.arrow_back_ios_new: 'Indietro',
+  Icons.settings_rounded: 'Impostazioni di riproduzione',
+  Icons.skip_previous_rounded: 'Episodio precedente',
+  Icons.skip_next_rounded: 'Episodio successivo',
+  Icons.replay_10: 'Indietro di 10 secondi',
+  Icons.forward_10: 'Avanti di 10 secondi',
+  Icons.swap_horiz_rounded: 'Cambia sorgente',
+  Icons.restart_alt_rounded: 'Riavvia la diretta',
+};
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Control buttons — all D-pad focusable: a FocusNode, select/enter activates,
 // arrow keys delegate to the caller's onKey (row/chain navigation, see
@@ -33,6 +45,7 @@ class _FocusableIconButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return TvFocusable(
+      semanticLabel: _iconLabels[icon],
       focusNode: focusNode,
       onActivate: onPressed,
       onLeft: onLeft,
@@ -98,6 +111,7 @@ class _PlayPauseButton extends StatelessWidget {
     final h = MediaQuery.sizeOf(context).height;
     final sz = (h * 0.096).clamp(72.0, 120.0);
     return TvFocusable(
+      semanticLabel: playing ? 'Pausa' : 'Riproduci',
       focusNode: focusNode,
       onActivate: onPressed,
       onLeft: onLeft,
@@ -169,6 +183,7 @@ class _SkipButton extends StatelessWidget {
     final sz = (h * 0.074).clamp(56.0, 96.0);
     final disabled = onPressed == null;
     return TvFocusable(
+      semanticLabel: _iconLabels[icon],
       focusNode: focusNode,
       onActivate: onPressed,
       onLeft: onLeft,
@@ -228,6 +243,7 @@ class _NavEpisodeButton extends StatelessWidget {
     final h = MediaQuery.sizeOf(context).height;
     final sz = (h * 0.063).clamp(48.0, 80.0);
     return TvFocusable(
+      semanticLabel: _iconLabels[icon],
       focusNode: focusNode,
       // A disabled nav button (no prev/next episode) still sits in the
       // chain — skip past it rather than letting focus land somewhere with

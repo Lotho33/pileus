@@ -189,3 +189,21 @@ class SourceMemory {
     } catch (_) {}
   }
 }
+
+/// The language versions the player offers under "Lingua" — only when they
+/// are separate streams: more than one source with a language label, and
+/// the stream playing carries a single audio track. When the stream already
+/// has several audio tracks (vix: Italian and English in one master), its
+/// own "Audio" menu is the language switch and a second one would just
+/// confuse. Empty = no "Lingua" entry.
+List<StreamSource> playerLanguageOptions(
+  List<StreamSource> sources, {
+  required int audioTracks,
+}) {
+  final versions = [
+    for (final s in sources)
+      if (languageOfLabel(s.label) != null) s
+  ];
+  if (versions.length < 2 || audioTracks >= 2) return const [];
+  return versions;
+}

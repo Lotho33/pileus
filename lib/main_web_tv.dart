@@ -77,6 +77,7 @@ Future<void> runWebTvApp() async {
   lowPowerUi = settings.isLowPowerModeSet()
       ? settings.getLowPowerMode()
       : true;
+  tvUi = true;
   if (lowPowerUi) {
     PaintingBinding.instance.imageCache.maximumSizeBytes = 40 << 20;
     PaintingBinding.instance.imageCache.maximumSize = 140;

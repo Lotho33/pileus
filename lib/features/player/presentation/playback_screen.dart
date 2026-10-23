@@ -11,7 +11,7 @@ import 'package:wakelock_plus/wakelock_plus.dart';
 import '../../../core/app_lifecycle.dart';
 import '../../../core/di/injection.dart';
 import '../../../core/grpc/clients/media_client.dart'
-    show DetailsResponse, ProgressResponse;
+    show DetailsResponse, ProgressResponse, StreamSource;
 import '../../../core/perf_profile.dart';
 import '../../../core/theme/app_scale.dart';
 import '../../../core/theme/app_theme.dart';

@@ -425,8 +425,24 @@ class _ContinueWatchingCardState extends State<_ContinueWatchingCard> {
     );
   }
 
+  // One spoken control for screen readers: what resumes, and where.
   @override
   Widget build(BuildContext context) {
+    final it = widget.item;
+    final name = it.showTitle.isNotEmpty &&
+            it.showTitle.toLowerCase() != it.title.toLowerCase()
+        ? '${it.showTitle}, ${it.title}'
+        : it.title;
+    return Semantics(
+      container: true,
+      button: true,
+      label: 'Riprendi $name',
+      excludeSemantics: true,
+      child: _buildCard(context),
+    );
+  }
+
+  Widget _buildCard(BuildContext context) {
     // Was a magic 1.08 — shared with every other card in the app so CW
     // doesn't scale differently from the poster/live rows right below it.
     final scale = _focused ? AppScale.focusScaleCard : 1.0;

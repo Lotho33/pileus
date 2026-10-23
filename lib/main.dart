@@ -141,6 +141,7 @@ void main() async {
     await settings.setLowPowerMode(true);
   }
   lowPowerUi = settings.getLowPowerMode();
+  tvUi = true;
   applyAndroidVideoSettings(settings, tvSwitches: true);
   if (lowPowerUi) {
     PaintingBinding.instance.imageCache.maximumSizeBytes = 40 << 20;

@@ -238,44 +238,102 @@ class ScrollEdgeFade extends StatelessWidget {
   final Widget child;
   // Fraction of the box's own height each fade spans.
   final double fadeExtent;
+  // The solid colour the content sits on, when it sits on one (a popup
+  // panel): the fade is then drawn as two gradient strips of that colour
+  // over the edges — the same look, none of the per-frame offscreen
+  // compositing a mask costs. Null (content over a picture): the mask.
+  final Color? fadeColor;
   const ScrollEdgeFade({
     super.key,
     required this.controller,
     required this.child,
     this.fadeExtent = 0.08,
+    this.fadeColor,
   });
 
   @override
   Widget build(BuildContext context) {
-    // "Hardware modesto": a ShaderMask(dstIn) rebuilds its gradient shader
-    // and forces an offscreen saveLayer on every scroll frame — a real
-    // per-frame GPU tax while the user scrolls the details list. The edge
-    // fade is purely cosmetic; drop it entirely on weak boxes.
+    final color = fadeColor;
+    if (color != null) return _strips(color);
+    // "Hardware modesto": a ShaderMask(dstIn) forces an offscreen saveLayer
+    // whenever it repaints — drop the purely cosmetic fade on weak boxes.
     if (lowPowerUi) return child;
-    return AnimatedBuilder(
-      animation: controller,
-      builder: (context, _) {
-        final hasClients = controller.hasClients;
-        final atTop = !hasClients || controller.offset <= 0.5;
-        final atBottom = !hasClients ||
-            controller.offset >= controller.position.maxScrollExtent - 0.5;
-        if (atTop && atBottom) return child; // fits without scrolling at all
-        final topStop = atTop ? 0.0 : fadeExtent;
-        final bottomStop = atBottom ? 1.0 : 1.0 - fadeExtent;
-        return ShaderMask(
-          shaderCallback: (rect) => LinearGradient(
-            begin: Alignment.topCenter,
-            end: Alignment.bottomCenter,
-            colors: const [
-              Colors.transparent,
-              Colors.black,
-              Colors.black,
-              Colors.transparent,
-            ],
-            stops: [0.0, topStop, bottomStop, 1.0],
-          ).createShader(rect),
-          blendMode: BlendMode.dstIn,
-          child: child,
+    // Everywhere else the mask is isolated in its own layer, so it is only
+    // redrawn while this list itself scrolls — not on every focus or hero
+    // animation elsewhere on the screen.
+    return RepaintBoundary(
+      child: AnimatedBuilder(
+        animation: controller,
+        builder: (context, _) {
+          final (atTop, atBottom) = _edges();
+          if (atTop && atBottom) return child; // fits without scrolling
+          final topStop = atTop ? 0.0 : fadeExtent;
+          final bottomStop = atBottom ? 1.0 : 1.0 - fadeExtent;
+          return ShaderMask(
+            shaderCallback: (rect) => LinearGradient(
+              begin: Alignment.topCenter,
+              end: Alignment.bottomCenter,
+              colors: const [
+                Colors.transparent,
+                Colors.black,
+                Colors.black,
+                Colors.transparent,
+              ],
+              stops: [0.0, topStop, bottomStop, 1.0],
+            ).createShader(rect),
+            blendMode: BlendMode.dstIn,
+            child: child,
+          );
+        },
+      ),
+    );
+  }
+
+  (bool, bool) _edges() {
+    final hasClients = controller.hasClients;
+    final atTop = !hasClients || controller.offset <= 0.5;
+    final atBottom = !hasClients ||
+        controller.offset >= controller.position.maxScrollExtent - 0.5;
+    return (atTop, atBottom);
+  }
+
+  Widget _strips(Color color) {
+    Widget strip(bool top) => IgnorePointer(
+          child: DecoratedBox(
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                begin: top ? Alignment.topCenter : Alignment.bottomCenter,
+                end: top ? Alignment.bottomCenter : Alignment.topCenter,
+                colors: [color, color.withValues(alpha: 0)],
+              ),
+            ),
+          ),
+        );
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final h = constraints.maxHeight.isFinite
+            ? constraints.maxHeight * fadeExtent
+            : 24.0;
+        return Stack(
+          children: [
+            child,
+            AnimatedBuilder(
+              animation: controller,
+              builder: (context, _) {
+                final (atTop, atBottom) = _edges();
+                return Positioned.fill(
+                  child: Column(
+                    children: [
+                      SizedBox(height: h, child: atTop ? null : strip(true)),
+                      const Spacer(),
+                      SizedBox(
+                          height: h, child: atBottom ? null : strip(false)),
+                    ],
+                  ),
+                );
+              },
+            ),
+          ],
         );
       },
     );

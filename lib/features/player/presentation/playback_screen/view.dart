@@ -1791,7 +1791,58 @@ class _PlaybackViewState extends State<_PlaybackView> {
   // enough because whatever button was pressed to get here still holds
   // focus in the frame the panel mounts, so the panel's own autofocus is a
   // no-op — explicit requestInitialFocus() after the frame is the fix.
+  // "Lingua": the language versions of what's playing, when they are
+  // separate streams (see playerLanguageOptions) — fetched for the current
+  // episode when the settings panel opens (GetStreams is cached).
+  List<StreamSource> _langSources = const [];
+  String? _langFor;
+
+  Future<void> _loadLanguages() async {
+    if (widget.args.isLive || _langFor == _currentMediaId) return;
+    final media = _currentMediaId;
+    try {
+      final r = await getIt<MediaRepository>()
+          .getStreams(widget.args.epPluginId, media);
+      _langSources = r.sources;
+      _langFor = media;
+      if (mounted) setState(() {});
+    } catch (_) {}
+  }
+
+  List<StreamSource> get _languageOptions => widget.args.isLive ||
+          (widget.args.directUrl ?? '').isNotEmpty ||
+          _langFor != _currentMediaId
+      ? const []
+      : playerLanguageOptions(_langSources,
+          audioTracks: _engine.audioTracks.length);
+
+  /// Same title, same position, other language version. A movie's old row
+  /// goes from Continue Watching (keyed by stream id, i.e. language); a
+  /// series' row is replaced by the server on the next save anyway.
+  void _switchLanguage(StreamSource src) {
+    final old = _currentStreamId;
+    if (src.id == old) return;
+    final at = _lastEnginePos.inSeconds;
+    _closeSettings();
+    _currentStreamId = src.id;
+    _currentSourceLabel = src.label;
+    SourceMemory.remember(
+        widget.args.epPluginId, widget.args.parentId, src.label);
+    if (widget.args.parentId.isEmpty && old != null && old.isNotEmpty) {
+      getIt<MediaRepository>()
+          .deleteProgress(providerID: widget.args.epPluginId, playableID: old);
+    }
+    // Re-armed at the current position — see the error overlay's onRetry.
+    _resumeSeek = ResumeSeekController(targetSec: at, isLive: false);
+    setState(() {
+      _playbackReady = false;
+      _videoStarted = false;
+    });
+    _reresolveCurrent(startSec: at);
+  }
+
   void _openSettings() {
+    unawaited(_loadLanguages());
     _uiCubit.openSettings();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
@@ -2270,6 +2321,9 @@ class _PlaybackViewState extends State<_PlaybackView> {
                         onClose: _closeSettings,
                         onAudioTrackSelected: (t) =>
                             _audioPref.remember(t.label),
+                        languages: _languageOptions,
+                        currentStreamId: _currentStreamId,
+                        onLanguageSelected: _switchLanguage,
                         onVolumeChanged: (v) {
                           setState(() => _volume = v);
                           _engine.setVolume(v);

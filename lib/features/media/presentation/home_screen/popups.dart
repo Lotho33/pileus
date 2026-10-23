@@ -359,6 +359,7 @@ class _MediaDetailsPopupState extends State<_MediaDetailsPopup> {
                             // (see ScrollEdgeFade's doc).
                             child: ScrollEdgeFade(
                               controller: _scrollCtrl,
+                              fadeColor: const Color(0xFF0E0E1A),
                               child: SingleChildScrollView(
                                 controller: _scrollCtrl,
                                 padding: EdgeInsets.zero,

@@ -20,7 +20,12 @@
         tools:node="remove"/>
 
     <application tools:remove="android:banner">
-        <activity android:name=".MainActivity">
+        <!-- Picture-in-picture for the player (Pip.kt). configChanges in
+             src/main already covers the size changes PiP causes, so the
+             activity isn't recreated entering/leaving it. -->
+        <activity
+            android:name=".MainActivity"
+            android:supportsPictureInPicture="true">
             <meta-data
                 android:name="io.flutter.embedding.android.ImpellerBackend"
                 tools:node="remove"/>

@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../../../core/theme/app_scale.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../../../shared/widgets/tv_focusable.dart';
+import '../../../../core/grpc/clients/media_client.dart' show StreamSource;
 import '../../engine/player_engine.dart';
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -16,7 +17,7 @@ import '../../engine/player_engine.dart';
 // deals with playback-track selection.
 // ─────────────────────────────────────────────────────────────────────────────
 
-enum _SettingsCategory { audio, video, format, subtitles }
+enum _SettingsCategory { language, audio, video, format, subtitles }
 
 enum _PanelView { master, detail }
 
@@ -30,6 +31,14 @@ class PlayerSettingsPanel extends StatefulWidget {
   /// audio_lang_pref.dart) so the next episode / a later resume keeps it.
   final ValueChanged<MediaTrack>? onAudioTrackSelected;
 
+  /// "Lingua": the language versions of what's playing when they are
+  /// separate streams (playerLanguageOptions) — empty hides the category.
+  /// Picking one reopens the title in it at the same position (the screen
+  /// does that in [onLanguageSelected]; the panel closes).
+  final List<StreamSource> languages;
+  final String? currentStreamId;
+  final ValueChanged<StreamSource>? onLanguageSelected;
+
   const PlayerSettingsPanel({
     super.key,
     required this.engine,
@@ -37,6 +46,9 @@ class PlayerSettingsPanel extends StatefulWidget {
     required this.onClose,
     required this.onVolumeChanged,
     this.onAudioTrackSelected,
+    this.languages = const [],
+    this.currentStreamId,
+    this.onLanguageSelected,
   });
 
   @override
@@ -56,6 +68,7 @@ class PlayerSettingsPanelState extends State<PlayerSettingsPanel> {
   // toggling in/out of availability is just a canRequestFocus flip.
   final _closeFn = FocusNode();
   final _volumeRowFn = FocusNode();
+  final _langRowFn = FocusNode();
   final _audioRowFn = FocusNode();
   final _videoRowFn = FocusNode();
   final _formatRowFn = FocusNode();
@@ -63,6 +76,7 @@ class PlayerSettingsPanelState extends State<PlayerSettingsPanel> {
 
   // Entry point into each category's option list, landed on when a row is
   // opened — one per category, also alive for the panel's whole lifetime.
+  final _langFirstFn = FocusNode();
   final _audioFirstFn = FocusNode();
   final _videoFirstFn = FocusNode();
   final _formatFirstFn = FocusNode();
@@ -72,6 +86,7 @@ class PlayerSettingsPanelState extends State<PlayerSettingsPanel> {
   List<MediaTrack> get _videoTracks => widget.engine.videoTracks;
   List<MediaTrack> get _subTracks => widget.engine.subtitleTracks;
 
+  bool get _hasLang => widget.languages.isNotEmpty;
   bool get _hasAudio => _audioTracks.length > 1;
   bool get _hasVideo => _videoTracks.length > 1;
   bool get _hasSubs => _subTracks.isNotEmpty;
@@ -110,11 +125,13 @@ class PlayerSettingsPanelState extends State<PlayerSettingsPanel> {
   }
 
   void _syncAvailability() {
+    _langRowFn.canRequestFocus = _hasLang;
     _audioRowFn.canRequestFocus = _hasAudio;
     _videoRowFn.canRequestFocus = _hasVideo;
     _subsRowFn.canRequestFocus = _hasSubs;
     if (_view == _PanelView.detail) {
       final stillVisible = switch (_detailCategory!) {
+        _SettingsCategory.language => _hasLang,
         _SettingsCategory.audio => _hasAudio,
         _SettingsCategory.video => _hasVideo,
         _SettingsCategory.format => true,
@@ -132,10 +149,12 @@ class PlayerSettingsPanelState extends State<PlayerSettingsPanel> {
     widget.engine.removeListener(_onEngineTick);
     _closeFn.dispose();
     _volumeRowFn.dispose();
+    _langRowFn.dispose();
     _audioRowFn.dispose();
     _videoRowFn.dispose();
     _formatRowFn.dispose();
     _subsRowFn.dispose();
+    _langFirstFn.dispose();
     _audioFirstFn.dispose();
     _videoFirstFn.dispose();
     _formatFirstFn.dispose();
@@ -151,8 +170,14 @@ class PlayerSettingsPanelState extends State<PlayerSettingsPanel> {
   /// requestInitialFocus(), which this mirrors.
   void requestInitialFocus() => _volumeRowFn.requestFocus();
 
-  List<FocusNode> get _masterChain =>
-      [_volumeRowFn, _audioRowFn, _videoRowFn, _formatRowFn, _subsRowFn];
+  List<FocusNode> get _masterChain => [
+        _volumeRowFn,
+        _langRowFn,
+        _audioRowFn,
+        _videoRowFn,
+        _formatRowFn,
+        _subsRowFn
+      ];
 
   void _moveMasterRow(FocusNode from, int dir) {
     var i = _masterChain.indexOf(from);
@@ -181,6 +206,7 @@ class PlayerSettingsPanelState extends State<PlayerSettingsPanel> {
   void _returnToMaster({FocusNode? focusRow}) {
     final row = focusRow ??
         switch (_detailCategory) {
+          _SettingsCategory.language => _langRowFn,
           _SettingsCategory.audio => _audioRowFn,
           _SettingsCategory.video => _videoRowFn,
           _SettingsCategory.format => _formatRowFn,
@@ -262,6 +288,21 @@ class PlayerSettingsPanelState extends State<PlayerSettingsPanel> {
           onUp: () => _closeFn.requestFocus(),
           onDown: () => _moveMasterRow(_volumeRowFn, 1),
         ),
+        if (_hasLang)
+          _CategoryRow(
+            icon: Icons.translate_rounded,
+            label: 'Lingua',
+            value: widget.languages
+                    .where((s) => s.id == widget.currentStreamId)
+                    .firstOrNull
+                    ?.label ??
+                '—',
+            focusNode: _langRowFn,
+            onUp: () => _moveMasterRow(_langRowFn, -1),
+            onDown: () => _moveMasterRow(_langRowFn, 1),
+            onOpen: () => _openDetail(_SettingsCategory.language, _langFirstFn),
+            onCloseFromLeft: widget.onClose,
+          ),
         if (_hasAudio)
           _CategoryRow(
             icon: Icons.multitrack_audio_rounded,
@@ -314,6 +355,27 @@ class PlayerSettingsPanelState extends State<PlayerSettingsPanel> {
 
   Widget _buildDetail(BuildContext context) {
     switch (_detailCategory!) {
+      case _SettingsCategory.language:
+        final langs = widget.languages;
+        return ListView(
+          key: const ValueKey('detail_language'),
+          padding: EdgeInsets.symmetric(vertical: AppScale.space(context, 8)),
+          children: [
+            _DetailHeader(label: 'Lingua', onBack: _returnToMaster),
+            for (var i = 0; i < langs.length; i++)
+              _TrackTile(
+                label: langs[i].label,
+                selected: langs[i].id == widget.currentStreamId,
+                onTap: () {
+                  if (langs[i].id == widget.currentStreamId) return;
+                  widget.onLanguageSelected?.call(langs[i]);
+                },
+                focusNode: i == 0 ? _langFirstFn : null,
+                onBack: _returnToMaster,
+              ),
+          ],
+        );
+
       case _SettingsCategory.audio:
         final tracks = _audioTracks;
         final active = widget.engine.activeAudioTrack;

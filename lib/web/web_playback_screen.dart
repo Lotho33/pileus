@@ -11,7 +11,8 @@ import '../core/app_lifecycle.dart';
 import '../core/di/injection.dart';
 import '../core/utils/metrics.dart';
 import '../core/utils/perf_log.dart' show kPerfDiagnostics;
-import '../core/grpc/clients/media_client.dart' show ProgressResponse;
+import '../core/grpc/clients/media_client.dart'
+    show ProgressResponse, StreamSource;
 import '../features/media/data/media_repository.dart';
 import '../features/settings/data/settings_repository.dart';
 import '../features/player/bloc/playback_bloc.dart';
@@ -524,9 +525,55 @@ class _ViewState extends State<_View> {
     });
   }
 
+  // "Lingua": the language versions of what's playing (see
+  // playerLanguageOptions). The browser player doesn't expose a stream's
+  // audio tracks, so here every set of separate language streams is offered
+  // — on vix too, where this is the only way to switch.
+  List<StreamSource> _langSources = const [];
+  String? _langFor;
+
+  Future<void> _loadLanguages() async {
+    if (widget.args.isLive || _langFor == _curMediaId) return;
+    final media = _curMediaId;
+    try {
+      final r = await getIt<MediaRepository>()
+          .getStreams(widget.args.epPluginId, media);
+      _langSources = r.sources;
+      _langFor = media;
+      if (mounted) setState(() {});
+    } catch (_) {}
+  }
+
+  List<StreamSource> get _languageOptions => widget.args.isLive ||
+          (widget.args.directUrl ?? '').isNotEmpty ||
+          _langFor != _curMediaId
+      ? const []
+      : playerLanguageOptions(_langSources, audioTracks: 0);
+
+  /// Same title, same position, other language version.
+  void _switchLanguage(StreamSource src) {
+    if (src.label == _curSourceLabel) return;
+    final t = _video.currentTime;
+    final at = t.isFinite && t > 0 ? t.toInt() : 0;
+    _curSourceLabel = src.label;
+    SourceMemory.remember(
+        widget.args.epPluginId, widget.args.parentId, src.label);
+    _resumeSeek = ResumeSeekController(targetSec: at, isLive: false);
+    setState(() {
+      _opened = false;
+      _videoStarted = false;
+    });
+    context.read<PlaybackBloc>().add(SelectStreamEvent(
+          pluginId: widget.args.epPluginId,
+          streamId: src.id,
+          startPositionSec: resolveStartPositionSec(isLive: false, seekTo: at),
+        ));
+  }
+
   void _onReady(PlaybackReady s) {
     if (_opened) return;
     _opened = true;
+    unawaited(_loadLanguages());
     // The new stream is confirmed resolved and about to attach — the
     // transition started by _openEpisode is over, heartbeat/dispose saves
     // are safe again (against the new episode's own state, from here on).
@@ -1329,6 +1376,7 @@ class _ViewState extends State<_View> {
                         mainAxisSize: MainAxisSize.min,
                         children: [
                           IconButton(
+                            tooltip: 'Indietro',
                             icon: const Icon(Icons.arrow_back,
                                 color: Colors.white),
                             onPressed: _exit,
@@ -1336,6 +1384,24 @@ class _ViewState extends State<_View> {
                           Text(title,
                               style: const TextStyle(
                                   color: Colors.white70, fontSize: 13)),
+                          if (_languageOptions.isNotEmpty)
+                            PopupMenuButton<StreamSource>(
+                              tooltip: 'Lingua',
+                              icon: const Icon(Icons.translate_rounded,
+                                  color: Colors.white70),
+                              color: const Color(0xFF141428),
+                              onSelected: _switchLanguage,
+                              itemBuilder: (_) => [
+                                for (final s in _languageOptions)
+                                  CheckedPopupMenuItem<StreamSource>(
+                                    value: s,
+                                    checked: s.label == _curSourceLabel,
+                                    child: Text(s.label,
+                                        style: const TextStyle(
+                                            color: Colors.white)),
+                                  ),
+                              ],
+                            ),
                           if (!widget.args.isLive && _nav.hasPrevious) ...[
                             const SizedBox(width: 4),
                             IconButton(
@@ -1462,6 +1528,7 @@ class _Overlay extends StatelessWidget {
         ),
         SafeArea(
           child: IconButton(
+            tooltip: 'Indietro',
             icon: const Icon(Icons.arrow_back, color: Colors.white),
             onPressed: onBack,
           ),

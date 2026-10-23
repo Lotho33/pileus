@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
+import 'package:flutter/scheduler.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'perf_log.dart';
@@ -44,12 +45,12 @@ class Metrics {
 
   static const startup = Metric('avvio', 'Avvio → home',
       'Da quando l\'app parte alla home pronta (solo con profilo ricordato).');
-  static const details = Metric(
-      'dettagli', 'Apertura dettaglio', 'Caricamento della scheda di un titolo.');
+  static const details = Metric('dettagli', 'Apertura dettaglio',
+      'Caricamento della scheda di un titolo.');
   static const play = Metric('play', 'Play → primo frame',
       'Dal tocco su Play al primo fotogramma sullo schermo.');
-  static const sources =
-      Metric('sorgenti', 'Ricerca sorgenti', 'Elenco delle sorgenti (GetStreams).');
+  static const sources = Metric(
+      'sorgenti', 'Ricerca sorgenti', 'Elenco delle sorgenti (GetStreams).');
   static const resolve = Metric('resolve', 'Preparazione stream',
       'Preparazione del video sul server, fino ai primi segmenti.');
   static const firstFrame = Metric('apertura', 'Apertura video',
@@ -57,7 +58,15 @@ class Metrics {
   static const wake = Metric('ripresa', 'Ripresa dopo standby',
       'Dal risveglio alla prima risposta del server.');
 
-  static const all = [startup, details, play, sources, resolve, firstFrame, wake];
+  static const all = [
+    startup,
+    details,
+    play,
+    sources,
+    resolve,
+    firstFrame,
+    wake
+  ];
 
   static const _prefsKey = 'metrics.samples.v1';
   static const _keep = 20;
@@ -112,8 +121,10 @@ class Metrics {
 
   static Future<void> clear() async {
     _samples.clear();
+    _fluidity.clear();
     _saveTimer?.cancel();
     await _prefs?.remove(_prefsKey);
+    await _prefs?.remove(_fluidityKey);
   }
 
   static void _trim(String id) {
@@ -125,6 +136,7 @@ class Metrics {
     _saveTimer?.cancel();
     _saveTimer = Timer(const Duration(seconds: 2), () {
       unawaited(_prefs?.setString(_prefsKey, jsonEncode(_samples)));
+      unawaited(_prefs?.setString(_fluidityKey, jsonEncode(_fluidity)));
     });
   }
 
@@ -202,8 +214,85 @@ class Metrics {
     record(wake, w.elapsedMilliseconds);
   }
 
+  // ── Smoothness ─────────────────────────────────────────────────────────────
+  //
+  // Share of slow frames per screen, always on: the engine already hands
+  // frame timings over in batches, counting them is nearly free. "Slow" is
+  // past 1.5 frames at 60 Hz — a hitch you can see, not a missed vsync.
+  // Counts are halved past [_fluidityWindow] frames so the number follows
+  // the current build/settings, not the whole install's history.
+
+  static const _fluidityKey = 'metrics.fluidity.v1';
+  static const _slowFrame = Duration(milliseconds: 25);
+  static const _fluidityWindow = 20000;
+  static final Map<String, List<int>> _fluidity = {}; // screen → [frames, slow]
+  static bool _fluidityInstalled = false;
+
+  static const screenLabels = {
+    'home': 'Home',
+    'details': 'Scheda titolo',
+    'episode': 'Scheda episodio',
+    'browse': 'Sfoglia',
+    'search': 'Ricerca',
+    'player': 'Player',
+    'settings': 'Impostazioni',
+  };
+
+  /// "/details/p/123" → "details"; anything unnamed → "altro".
+  static String screenOf(String route) {
+    if (!route.startsWith('/')) return 'altro';
+    final first = route.split('/').where((s) => s.isNotEmpty).firstOrNull;
+    return screenLabels.containsKey(first) ? first! : 'altro';
+  }
+
+  /// Call once from main(), after [attach].
+  static void installFluidity() {
+    if (_fluidityInstalled) return;
+    _fluidityInstalled = true;
+    try {
+      final raw = _prefs?.getString(_fluidityKey);
+      if (raw != null) {
+        final m = jsonDecode(raw) as Map<String, dynamic>;
+        for (final e in m.entries) {
+          final v = (e.value as List).whereType<int>().toList();
+          if (v.length == 2) _fluidity[e.key] = v;
+        }
+      }
+    } catch (_) {}
+    SchedulerBinding.instance.addTimingsCallback(recordFrames);
+  }
+
+  @visibleForTesting
+  static void recordFrames(List<FrameTiming> timings) {
+    final c = _fluidity[screenOf(perfScreen)] ??= [0, 0];
+    for (final t in timings) {
+      c[0]++;
+      if (t.totalSpan > _slowFrame) c[1]++;
+    }
+    if (c[0] > _fluidityWindow) {
+      c[0] ~/= 2;
+      c[1] ~/= 2;
+    }
+    _scheduleSave();
+  }
+
+  /// (label, slow frames %, frames) per screen seen, busiest first.
+  static List<({String label, double slowPct, int frames})> fluidity() {
+    final out = [
+      for (final e in _fluidity.entries)
+        if (e.value[0] > 0)
+          (
+            label: screenLabels[e.key] ?? 'Altro',
+            slowPct: e.value[1] * 100 / e.value[0],
+            frames: e.value[0],
+          ),
+    ]..sort((a, b) => b.frames.compareTo(a.frames));
+    return out;
+  }
+
   @visibleForTesting
   static void resetForTest() {
+    _fluidity.clear();
     _samples.clear();
     _prefs = null;
     _saveTimer?.cancel();

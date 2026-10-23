@@ -100,8 +100,23 @@ class _PosterCardViewState extends State<_PosterCardView> {
     super.dispose();
   }
 
+  // One spoken control for screen readers (TalkBack / VoiceView): the
+  // title, plus the language badge when there is one.
   @override
   Widget build(BuildContext context) {
+    final badge = languageBadge(widget.item.lang, subs: widget.item.subs);
+    return Semantics(
+      container: true,
+      button: true,
+      label: badge == null
+          ? widget.item.title
+          : '${widget.item.title}, ${badge.label}',
+      excludeSemantics: true,
+      child: _buildCard(context),
+    );
+  }
+
+  Widget _buildCard(BuildContext context) {
     return Focus(
       focusNode: widget.focusNode,
       onFocusChange: (v) {

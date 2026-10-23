@@ -8,7 +8,8 @@ import 'package:wakelock_plus/wakelock_plus.dart';
 
 import '../core/app_lifecycle.dart';
 import '../core/di/injection.dart';
-import '../core/grpc/clients/media_client.dart' show DetailsResponse;
+import '../core/grpc/clients/media_client.dart'
+    show DetailsResponse, StreamSource;
 import '../core/perf_profile.dart';
 import '../core/theme/app_theme.dart';
 import '../features/media/bloc/plugin_bloc.dart';
@@ -32,6 +33,7 @@ import '../features/player/presentation/widgets/player_seek_bar.dart';
 import '../features/player/presentation/widgets/pointer_skip_button.dart';
 import '../features/player/profile_lease_conflict.dart';
 import '../features/player/source_continuity.dart';
+import '../core/pip.dart';
 import '../features/player/live_failover.dart';
 import '../features/player/source_preference.dart';
 import '../features/settings/data/settings_repository.dart';
@@ -413,6 +415,7 @@ class _MobilePlayerViewState extends State<_MobilePlayerView> {
 
   @override
   void dispose() {
+    Pip.setEligible(false);
     // Restore portrait + chrome FIRST — if the engine teardown below throws
     // (platform-view races on some devices) the screen must still not leave
     // the whole app stuck landscape / fullscreen.
@@ -457,6 +460,14 @@ class _MobilePlayerViewState extends State<_MobilePlayerView> {
     if (!mounted) return;
     final playing = _engine.playing;
     var needsRebuild = false;
+
+    // Leaving the app while a video plays keeps it in a PiP window.
+    final size = _engine.videoSize;
+    Pip.setEligible(
+      playing && _started && !widget.args.isAudio,
+      width: (size?.width ?? 16).round(),
+      height: (size?.height ?? 9).round(),
+    );
 
     // Wakelock is a platform-channel call — flip it only on an actual
     // play/pause change, not on every 4 Hz engine tick.
@@ -1417,154 +1428,171 @@ class _MobilePlayerViewState extends State<_MobilePlayerView> {
                       : (_videoView ??= _engine.buildView()),
                 ),
               ),
-              BlocBuilder<PlaybackBloc, PlaybackState>(
-                builder: (context, s) {
-                  final Widget child;
-                  if (_takeoverPrompt != null) {
-                    child = KeyedSubtree(
-                      key: const ValueKey('takeover'),
-                      child: _TakeoverOverlay(
-                          prompt: _takeoverPrompt!, onBack: _exit),
-                    );
-                  } else if (_playbackError != null) {
-                    child = KeyedSubtree(
-                      key: const ValueKey('error'),
-                      child: _ErrorOverlay(
-                        message: _playbackError!,
-                        onBack: _exit,
-                        onRetry: _retry,
-                      ),
-                    );
-                  } else if (s is PlaybackFailed) {
-                    child = KeyedSubtree(
-                      key: const ValueKey('error'),
-                      child: _ErrorOverlay(
-                        message: s.errorMessage,
-                        onBack: _exit,
-                        onRetry: _retry,
-                      ),
-                    );
-                  } else if (s is! PlaybackReady || !_started) {
-                    // Loading: only the spinner (dead-centre) + a back
-                    // button — no transport controls competing for the
-                    // centre of the screen. Stays up through the open()/
-                    // first-decode gap (which now also covers the resume
-                    // seek landing, not just the first decoded frame — see
-                    // _onEngine's own _started gate).
-                    child = KeyedSubtree(
-                      key: const ValueKey('loading'),
-                      child: _LoadingOverlay(
-                        state: s,
-                        onBack: _exit,
-                        background: PlayerLoadingBackdrop(
-                          imageUrl: posterForEpisode(
-                            episodeThumbs: _curEpisodeThumbs,
-                            index: _curEpisodeIndex,
-                            seriesCoverUrl: widget.args.seriesCoverUrl,
-                            seriesPoster: widget.args.seriesPoster,
-                            fallback: widget.args.poster,
+              // Picture-in-picture shows the video alone: everything else
+              // stays mounted (state, focus, timers) but is not drawn.
+              ValueListenableBuilder<bool>(
+                valueListenable: Pip.active,
+                builder: (context, inPip, layers) =>
+                    Offstage(offstage: inPip, child: layers),
+                child: Stack(
+                  fit: StackFit.expand,
+                  children: [
+                    BlocBuilder<PlaybackBloc, PlaybackState>(
+                      builder: (context, s) {
+                        final Widget child;
+                        if (_takeoverPrompt != null) {
+                          child = KeyedSubtree(
+                            key: const ValueKey('takeover'),
+                            child: _TakeoverOverlay(
+                                prompt: _takeoverPrompt!, onBack: _exit),
+                          );
+                        } else if (_playbackError != null) {
+                          child = KeyedSubtree(
+                            key: const ValueKey('error'),
+                            child: _ErrorOverlay(
+                              message: _playbackError!,
+                              onBack: _exit,
+                              onRetry: _retry,
+                            ),
+                          );
+                        } else if (s is PlaybackFailed) {
+                          child = KeyedSubtree(
+                            key: const ValueKey('error'),
+                            child: _ErrorOverlay(
+                              message: s.errorMessage,
+                              onBack: _exit,
+                              onRetry: _retry,
+                            ),
+                          );
+                        } else if (s is! PlaybackReady || !_started) {
+                          // Loading: only the spinner (dead-centre) + a back
+                          // button — no transport controls competing for the
+                          // centre of the screen. Stays up through the open()/
+                          // first-decode gap (which now also covers the resume
+                          // seek landing, not just the first decoded frame — see
+                          // _onEngine's own _started gate).
+                          child = KeyedSubtree(
+                            key: const ValueKey('loading'),
+                            child: _LoadingOverlay(
+                              state: s,
+                              onBack: _exit,
+                              background: PlayerLoadingBackdrop(
+                                imageUrl: posterForEpisode(
+                                  episodeThumbs: _curEpisodeThumbs,
+                                  index: _curEpisodeIndex,
+                                  seriesCoverUrl: widget.args.seriesCoverUrl,
+                                  seriesPoster: widget.args.seriesPoster,
+                                  fallback: widget.args.poster,
+                                ),
+                                title: _curTitle ?? '',
+                                subtitle: widget.args.showTitle,
+                                resumeAtSeconds:
+                                    widget.args.isLive || _startedOnce
+                                        ? 0
+                                        : widget.args.seekTo,
+                                notice: _startedOnce
+                                    ? ''
+                                    : widget.args.languageNotice,
+                              ),
+                            ),
+                          );
+                        } else {
+                          // One key ('ready') for both sub-states below — toggling
+                          // _controlsVisible must stay the instant show/hide it
+                          // always was, not get pulled into the cover-reveal
+                          // crossfade this AnimatedSwitcher exists for.
+                          child = KeyedSubtree(
+                            key: const ValueKey('ready'),
+                            child: _controlsVisible
+                                ? _controls()
+                                : const SizedBox.shrink(),
+                          );
+                        }
+                        // One crossfade for the whole cover→ready transition
+                        // (loading/error → controls) — see kResumeCoverSafetyTimeout
+                        // and _onEngine's _started gate for what "ready" waits on.
+                        return Positioned.fill(
+                          child: AnimatedSwitcher(
+                            duration: const Duration(milliseconds: 400),
+                            child: child,
                           ),
-                          title: _curTitle ?? '',
-                          subtitle: widget.args.showTitle,
-                          resumeAtSeconds: widget.args.isLive || _startedOnce
-                              ? 0
-                              : widget.args.seekTo,
-                          notice: _startedOnce ? '' : widget.args.languageNotice,
+                        );
+                      },
+                    ),
+                    // Mid-playback rebuffer cue. The loading overlay above only
+                    // covers the initial resolve/first frame; after that a stall
+                    // used to look exactly like a frozen video (the TV overlay
+                    // shows its spinner in this case too).
+                    if (_started &&
+                        _lastBuffering &&
+                        _playbackError == null &&
+                        _takeoverPrompt == null)
+                      const IgnorePointer(
+                        child: Center(
+                          child: SizedBox(
+                            width: 48,
+                            height: 48,
+                            child: CircularProgressIndicator(
+                                strokeWidth: 3, color: Colors.white),
+                          ),
                         ),
                       ),
-                    );
-                  } else {
-                    // One key ('ready') for both sub-states below — toggling
-                    // _controlsVisible must stay the instant show/hide it
-                    // always was, not get pulled into the cover-reveal
-                    // crossfade this AnimatedSwitcher exists for.
-                    child = KeyedSubtree(
-                      key: const ValueKey('ready'),
-                      child: _controlsVisible
-                          ? _controls()
-                          : const SizedBox.shrink(),
-                    );
-                  }
-                  // One crossfade for the whole cover→ready transition
-                  // (loading/error → controls) — see kResumeCoverSafetyTimeout
-                  // and _onEngine's _started gate for what "ready" waits on.
-                  return Positioned.fill(
-                    child: AnimatedSwitcher(
-                      duration: const Duration(milliseconds: 400),
-                      child: child,
-                    ),
-                  );
-                },
+                    if (_activeSkip != null && !_skipDismissed)
+                      Positioned(
+                        right: 16,
+                        bottom: 84,
+                        child: SafeArea(
+                          child: Builder(builder: (_) {
+                            final outroToNext =
+                                _activeSkip!.type == SkipType.ed &&
+                                    _hasNextEpisode &&
+                                    !_resolvingEpisode;
+                            return PointerSkipButton(
+                              label: outroToNext
+                                  ? 'Prossimo episodio'
+                                  : _activeSkip!.label,
+                              icon: outroToNext
+                                  ? Icons.skip_next_rounded
+                                  : Icons.fast_forward_rounded,
+                              onSkip: () {
+                                if (outroToNext) {
+                                  setState(() => _skipDismissed = true);
+                                  _autoAdvanced = true;
+                                  _goToNextEpisode();
+                                } else {
+                                  _engine.seek(Duration(
+                                      milliseconds:
+                                          (_activeSkip!.end * 1000).toInt()));
+                                  setState(() => _skipDismissed = true);
+                                }
+                              },
+                              onDismiss: () =>
+                                  setState(() => _skipDismissed = true),
+                            );
+                          }),
+                        ),
+                      ),
+                    if (_nextEpisodeSecs != null)
+                      Positioned(
+                        right: 16,
+                        bottom: 16,
+                        child: SafeArea(
+                          child: _MobileNextEpisodeBanner(
+                            secondsRemaining: _nextEpisodeSecs!,
+                            onSkip: () {
+                              _autoAdvanced = true;
+                              _goToNextEpisode();
+                            },
+                            onDismiss: () => setState(() {
+                              _nextEpisodeDismissed = true;
+                              _nextEpisodeSecs = null;
+                            }),
+                          ),
+                        ),
+                      ),
+                  ],
+                ),
               ),
-              // Mid-playback rebuffer cue. The loading overlay above only
-              // covers the initial resolve/first frame; after that a stall
-              // used to look exactly like a frozen video (the TV overlay
-              // shows its spinner in this case too).
-              if (_started &&
-                  _lastBuffering &&
-                  _playbackError == null &&
-                  _takeoverPrompt == null)
-                const IgnorePointer(
-                  child: Center(
-                    child: SizedBox(
-                      width: 48,
-                      height: 48,
-                      child: CircularProgressIndicator(
-                          strokeWidth: 3, color: Colors.white),
-                    ),
-                  ),
-                ),
-              if (_activeSkip != null && !_skipDismissed)
-                Positioned(
-                  right: 16,
-                  bottom: 84,
-                  child: SafeArea(
-                    child: Builder(builder: (_) {
-                      final outroToNext = _activeSkip!.type == SkipType.ed &&
-                          _hasNextEpisode &&
-                          !_resolvingEpisode;
-                      return PointerSkipButton(
-                        label: outroToNext
-                            ? 'Prossimo episodio'
-                            : _activeSkip!.label,
-                        icon: outroToNext
-                            ? Icons.skip_next_rounded
-                            : Icons.fast_forward_rounded,
-                        onSkip: () {
-                          if (outroToNext) {
-                            setState(() => _skipDismissed = true);
-                            _autoAdvanced = true;
-                            _goToNextEpisode();
-                          } else {
-                            _engine.seek(Duration(
-                                milliseconds:
-                                    (_activeSkip!.end * 1000).toInt()));
-                            setState(() => _skipDismissed = true);
-                          }
-                        },
-                        onDismiss: () => setState(() => _skipDismissed = true),
-                      );
-                    }),
-                  ),
-                ),
-              if (_nextEpisodeSecs != null)
-                Positioned(
-                  right: 16,
-                  bottom: 16,
-                  child: SafeArea(
-                    child: _MobileNextEpisodeBanner(
-                      secondsRemaining: _nextEpisodeSecs!,
-                      onSkip: () {
-                        _autoAdvanced = true;
-                        _goToNextEpisode();
-                      },
-                      onDismiss: () => setState(() {
-                        _nextEpisodeDismissed = true;
-                        _nextEpisodeSecs = null;
-                      }),
-                    ),
-                  ),
-                ),
             ],
           ),
         ),
@@ -1585,6 +1613,7 @@ class _MobilePlayerViewState extends State<_MobilePlayerView> {
             Row(
               children: [
                 IconButton(
+                  tooltip: 'Indietro',
                   icon: const Icon(Icons.arrow_back, color: Colors.white),
                   onPressed: _exit,
                 ),
@@ -1642,12 +1671,14 @@ class _MobilePlayerViewState extends State<_MobilePlayerView> {
               children: [
                 if (!widget.args.isLive)
                   IconButton(
+                    tooltip: 'Indietro di 10 secondi',
                     iconSize: 40,
                     icon: const Icon(Icons.replay_10_rounded,
                         color: Colors.white),
                     onPressed: () => _seekBy(-10),
                   ),
                 IconButton(
+                  tooltip: _engine.playing ? 'Pausa' : 'Riproduci',
                   iconSize: 64,
                   icon: Icon(
                     _engine.playing
@@ -1662,6 +1693,7 @@ class _MobilePlayerViewState extends State<_MobilePlayerView> {
                 ),
                 if (!widget.args.isLive)
                   IconButton(
+                    tooltip: 'Avanti di 10 secondi',
                     iconSize: 40,
                     icon: const Icon(Icons.forward_10_rounded,
                         color: Colors.white),
@@ -1746,21 +1778,67 @@ class _MobilePlayerViewState extends State<_MobilePlayerView> {
         ));
   }
 
+  // "Lingua": the language versions of what's playing, when they are
+  // separate streams (see playerLanguageOptions). Fetched for the current
+  // episode when the tracks sheet opens — GetStreams is cached, the Play
+  // asked for the same list moments ago.
+  List<StreamSource> _langSources = const [];
+  String? _langFor;
+
+  Future<void> _loadLanguages() async {
+    if (widget.args.isLive || _langFor == _curMediaId) return;
+    final media = _curMediaId;
+    try {
+      final r = await getIt<MediaRepository>()
+          .getStreams(widget.args.epPluginId, media);
+      _langSources = r.sources;
+      _langFor = media;
+    } catch (_) {}
+  }
+
+  /// Same title, same position, other language version. A movie's old row
+  /// goes from Continue Watching (it's keyed by stream id, i.e. language);
+  /// a series' row is replaced by the server on the next save anyway.
+  void _switchLanguage(StreamSource src) {
+    final old = _curStreamId;
+    if (src.id == old) return;
+    final at = _lastPos.inSeconds;
+    _curStreamId = src.id;
+    _curSourceLabel = src.label;
+    SourceMemory.remember(
+        widget.args.epPluginId, widget.args.parentId, src.label);
+    if (widget.args.parentId.isEmpty && old != null && old.isNotEmpty) {
+      getIt<MediaRepository>()
+          .deleteProgress(providerID: widget.args.epPluginId, playableID: old);
+    }
+    _reopenCurrent(atSec: at);
+  }
+
   void _showTracksSheet() {
     if (!TapGuard.acquire()) return; // double tap — see tap_guard.dart
     _hideTimer?.cancel();
+    StateSetter? sheetSetter;
+    _loadLanguages().then((_) {
+      if (mounted) sheetSetter?.call(() {});
+    });
     showModalBottomSheet<void>(
       context: context,
       backgroundColor: const Color(0xFF141428),
       showDragHandle: true,
       builder: (_) => StatefulBuilder(
         builder: (ctx, setSheet) {
+          sheetSetter = setSheet;
           // The player route can be torn down (session expiry) while this
           // sheet is open — don't call into a disposed engine.
           if (!mounted) return const SizedBox.shrink();
           final video = _engine.videoTracks;
           final audio = _engine.audioTracks;
           final subs = _engine.subtitleTracks;
+          final languages = widget.args.isLive ||
+                  (widget.args.directUrl ?? '').isNotEmpty ||
+                  _langFor != _curMediaId
+              ? const <StreamSource>[]
+              : playerLanguageOptions(_langSources, audioTracks: audio.length);
           Widget tile(String label, bool selected, VoidCallback onTap) =>
               ListTile(
                 dense: true,
@@ -1802,6 +1880,14 @@ class _MobilePlayerViewState extends State<_MobilePlayerView> {
                 // Live: switch source in place (same as the TV live
                 // overlay's "SORGENTI" panel) — a dead feed no longer means
                 // backing out to the event sheet to pick another one.
+                if (languages.isNotEmpty) ...[
+                  const _SheetHeader('Lingua'),
+                  for (final src in languages)
+                    tile(src.label, src.id == _curStreamId, () {
+                      if (!popIfCurrent(ctx)) return;
+                      _switchLanguage(src);
+                    }),
+                ],
                 if (liveSources.length > 1) ...[
                   const _SheetHeader('Sorgente'),
                   for (var i = 0; i < liveSources.length; i++)
@@ -1914,6 +2000,7 @@ class _LoadingOverlay extends StatelessWidget {
           child: Align(
             alignment: Alignment.topLeft,
             child: IconButton(
+              tooltip: 'Indietro',
               icon: const Icon(Icons.arrow_back, color: Colors.white),
               onPressed: onBack,
             ),
@@ -2081,6 +2168,7 @@ class _MobileNextEpisodeBanner extends StatelessWidget {
               child: const Text('Salta'),
             ),
             IconButton(
+              tooltip: 'Chiudi',
               icon: const Icon(Icons.close, color: Colors.white54, size: 18),
               onPressed: onDismiss,
             ),

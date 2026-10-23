@@ -143,4 +143,18 @@ void main() {
         isNull);
     expect(const ProfilePrefs(preferredLanguage: 'it').isEmpty, isFalse);
   });
+
+  group('playerLanguageOptions ("Lingua" in the player)', () {
+    test('anime: separate streams, one audio track each → offered', () {
+      expect(playerLanguageOptions(_anime, audioTracks: 1).map((s) => s.id),
+          ['ep::ita', 'ep::jp']);
+    });
+    test('vix with both languages in one stream → the Audio menu does it', () {
+      expect(playerLanguageOptions(_vix, audioTracks: 2), isEmpty);
+    });
+    test('a single version, or live nodes → nothing', () {
+      expect(playerLanguageOptions(_vixEnOnly, audioTracks: 1), isEmpty);
+      expect(playerLanguageOptions(_live, audioTracks: 0), isEmpty);
+    });
+  });
 }

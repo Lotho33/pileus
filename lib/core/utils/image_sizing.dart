@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/widgets.dart';
 
 import '../grpc/host_resolver.dart';
+import '../perf_profile.dart';
 
 // Decode-size helpers for network images.
 //
@@ -73,9 +74,14 @@ int cacheWidthFor(BuildContext context, double logicalWidth) =>
 
 /// Decode width for a full-screen backdrop. Capped at 1920 px: backdrops sit
 /// under dark gradients, so a 4K decode is indistinguishable but costs 4×.
+/// The TV interface caps at 1280: on a 1080p panel, behind those gradients
+/// and seen from a sofa, the difference doesn't show — while the decode is
+/// 2.25× smaller in memory, and TMDB serves its own w1280 file (a smaller
+/// download too, see backdropSrc). Every TV gets this, not just "hardware
+/// modesto".
 int backdropCacheWidth(BuildContext context) =>
     (MediaQuery.sizeOf(context).width * MediaQuery.devicePixelRatioOf(context))
-        .clamp(64.0, 1920.0)
+        .clamp(64.0, tvUi ? 1280.0 : 1920.0)
         .round();
 
 // ── source-size selection ────────────────────────────────────────────────────

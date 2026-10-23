@@ -698,24 +698,17 @@ class _QuickSearchAreaState extends State<QuickSearchArea> {
           // subtree — its widgets do get rebuilt on each expand/collapse
           // (the ancestor type differs either way), but that's one discrete,
           // user-triggered transition, not a per-frame tax.
+          // No blur at all, on any box: a BackdropFilter re-reads and blurs
+          // the framebuffer under it on every frame the home repaints, for
+          // a frosted look the near-opaque panel below barely differs from
+          // (it was already the "hardware modesto" look). This UI only runs
+          // on TVs.
           child: _expanded
-              ? (lowPowerUi
-                  // "Hardware modesto": no framebuffer read-back + Gaussian
-                  // pass. A near-opaque solid panel keeps result text
-                  // legible without the blur shader.
-                  ? Container(
-                      padding: EdgeInsets.all(AppScale.space(context, 21.6)),
-                      color: const Color(0xF2101018),
-                      child: searchContent,
-                    )
-                  : BackdropFilter(
-                      filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
-                      child: Container(
-                        padding: EdgeInsets.all(AppScale.space(context, 21.6)),
-                        color: const Color(0xAD101018),
-                        child: searchContent,
-                      ),
-                    ))
+              ? Container(
+                  padding: EdgeInsets.all(AppScale.space(context, 21.6)),
+                  color: const Color(0xF2101018),
+                  child: searchContent,
+                )
               : Container(
                   padding: EdgeInsets.zero,
                   color: Colors.transparent,

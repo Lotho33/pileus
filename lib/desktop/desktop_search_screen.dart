@@ -14,10 +14,13 @@ import '../features/media/bloc/discovery_state.dart';
 import '../features/media/bloc/plugin_bloc.dart';
 import '../features/media/bloc/plugin_state.dart';
 import '../features/media/data/media_repository.dart';
+import '../features/media/data/recent_searches.dart';
 import '../features/media/data/search_filters_loader.dart';
 import '../features/media/presentation/widgets/plugin_nav.dart'
     show pluginLabel;
 import '../shared/widgets/filter_sheet.dart';
+import '../shared/widgets/recent_searches_list.dart';
+import '../shared/widgets/skeleton.dart';
 import '../shared/responsive.dart';
 import 'widgets/desktop_card.dart';
 
@@ -67,7 +70,17 @@ class _DesktopSearchScreenState extends State<DesktopSearchScreen> {
     );
     _scrollCtrl.addListener(_onScroll);
     _filtersLoader.setVisible(widget.visible);
+    _recentSub = _bloc.stream.listen((s) {
+      if (s is DiscoveryLoaded && s.searchQuery.isNotEmpty) {
+        _recent.settled(s.searchQuery, hasResults: s.items.isNotEmpty);
+      }
+    });
   }
+
+  // "Ricerche recenti": a query is kept once it settles on results (see
+  // RecentSearchRecorder).
+  final _recent = RecentSearchRecorder();
+  StreamSubscription<DiscoveryState>? _recentSub;
 
   @override
   void didUpdateWidget(DesktopSearchScreen oldWidget) {
@@ -81,6 +94,8 @@ class _DesktopSearchScreenState extends State<DesktopSearchScreen> {
 
   @override
   void dispose() {
+    _recentSub?.cancel();
+    _recent.dispose();
     _filtersLoader.dispose();
     _debounce?.cancel();
     _scrollCtrl.removeListener(_onScroll);
@@ -157,6 +172,7 @@ class _DesktopSearchScreenState extends State<DesktopSearchScreen> {
   }
 
   void _onQueryChanged(String _) {
+    _recent.typing();
     _debounce?.cancel();
     _debounce = Timer(_debounceDelay, () {
       if (mounted) _run(unfocus: false);
@@ -224,7 +240,10 @@ class _DesktopSearchScreenState extends State<DesktopSearchScreen> {
                                 ? 'Cerca in ${pluginLabel(active)}'
                                 : 'Cerca…',
                             onChanged: _onQueryChanged,
-                            onSubmit: _run,
+                            onSubmit: () {
+                              _recent.submit(_ctrl.text);
+                              _run();
+                            },
                           ),
                         ),
                       ),
@@ -289,15 +308,31 @@ class _DesktopSearchScreenState extends State<DesktopSearchScreen> {
                     bloc: _bloc,
                     builder: (context, s) {
                       if (_submitted.isEmpty) {
-                        return _Hint(
-                          icon: Icons.search_rounded,
-                          text: hasFilters
-                              ? 'Scrivi un titolo o imposta un filtro.'
-                              : 'Scrivi e premi Invio.',
+                        return RecentSearchesList(
+                          onPick: (q) {
+                            _ctrl.text = q;
+                            _run();
+                          },
+                          fallback: _Hint(
+                            icon: Icons.search_rounded,
+                            text: hasFilters
+                                ? 'Scrivi un titolo o imposta un filtro.'
+                                : 'Scrivi e premi Invio.',
+                          ),
                         );
                       }
                       if (s is DiscoveryLoading) {
-                        return const Center(child: CircularProgressIndicator());
+                        // Same grid as the results it stands in for.
+                        final capH =
+                            captionBoxHeight(context, bp.cardTitleSize);
+                        final cellH = bp.cardWidth * 1.5 + 8 + capH + 20;
+                        return PosterGridSkeleton(
+                          maxCrossAxisExtent: bp.cardWidth + 24,
+                          childAspectRatio: (bp.cardWidth + 24) / cellH,
+                          padding: EdgeInsets.fromLTRB(
+                              bp.gutter, 10, bp.gutter, 10),
+                          spacing: 18,
+                        );
                       }
                       if (s is DiscoveryError) {
                         return const _Hint(

@@ -67,7 +67,17 @@ class _LiveCardViewState extends State<_LiveCardView> {
   }
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context) => Semantics(
+        container: true,
+        button: true,
+        label: widget.isActuallyLive
+            ? '${widget.title}, in diretta'
+            : widget.title,
+        excludeSemantics: true,
+        child: _buildCard(context),
+      );
+
+  Widget _buildCard(BuildContext context) {
     final accent = sportAccentColor(widget.sportCat);
     final hasSport = widget.sportCat.isNotEmpty;
     final sh = MediaQuery.sizeOf(context).height;

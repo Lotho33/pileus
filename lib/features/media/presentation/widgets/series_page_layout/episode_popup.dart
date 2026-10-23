@@ -285,6 +285,7 @@ class _EpisodePopupState extends State<_EpisodePopup> {
                     // more content past it (see ScrollEdgeFade's doc).
                     ScrollEdgeFade(
                       controller: _scrollCtrl,
+                      fadeColor: const Color(0xFF14141F),
                       child: SingleChildScrollView(
                         controller: _scrollCtrl,
                         child: Column(

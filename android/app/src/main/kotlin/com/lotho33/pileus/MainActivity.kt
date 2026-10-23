@@ -26,6 +26,21 @@ class MainActivity : FlutterActivity() {
         // Android TV home screen "Watch Next" row (no-op in the mobile flavor).
         WatchNext.register(flutterEngine, this)
         WatchNext.onIntent(intent, notify = false)
+        // Picture-in-picture for the phone player (no-op in the TV flavor).
+        Pip.register(flutterEngine, this)
+    }
+
+    override fun onUserLeaveHint() {
+        super.onUserLeaveHint()
+        Pip.onUserLeaveHint(this)
+    }
+
+    override fun onPictureInPictureModeChanged(
+        isInPictureInPictureMode: Boolean,
+        newConfig: Configuration
+    ) {
+        super.onPictureInPictureModeChanged(isInPictureInPictureMode, newConfig)
+        Pip.onModeChanged(isInPictureInPictureMode)
     }
 
     // singleTop: a Watch Next card opened while Pileus is already running.

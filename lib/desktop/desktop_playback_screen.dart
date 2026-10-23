@@ -9,7 +9,8 @@ import 'package:window_manager/window_manager.dart';
 
 import '../core/app_lifecycle.dart';
 import '../core/di/injection.dart';
-import '../core/grpc/clients/media_client.dart' show DetailsResponse;
+import '../core/grpc/clients/media_client.dart'
+    show DetailsResponse, StreamSource;
 import '../core/perf_profile.dart';
 import '../core/theme/app_theme.dart';
 import '../core/utils/metrics.dart';
@@ -840,6 +841,41 @@ class _ViewState extends State<_View> with WindowListener {
 
   void _retry() => _reopenCurrent();
 
+  // "Lingua": the language versions of what's playing, when they are
+  // separate streams (see playerLanguageOptions) — fetched for the current
+  // episode when the tracks panel opens (GetStreams is cached).
+  List<StreamSource> _langSources = const [];
+  String? _langFor;
+
+  Future<void> _loadLanguages() async {
+    if (widget.args.isLive || _langFor == _curMediaId) return;
+    final media = _curMediaId;
+    try {
+      final r = await getIt<MediaRepository>()
+          .getStreams(widget.args.epPluginId, media);
+      _langSources = r.sources;
+      _langFor = media;
+    } catch (_) {}
+  }
+
+  /// Same title, same position, other language version. A movie's old row
+  /// goes from Continue Watching (keyed by stream id, i.e. language); a
+  /// series' row is replaced by the server on the next save anyway.
+  void _switchLanguage(StreamSource src) {
+    final old = _curStreamId;
+    if (src.id == old) return;
+    final at = _lastPos.inSeconds;
+    _curStreamId = src.id;
+    _curSourceLabel = src.label;
+    SourceMemory.remember(
+        widget.args.epPluginId, widget.args.parentId, src.label);
+    if (widget.args.parentId.isEmpty && old != null && old.isNotEmpty) {
+      getIt<MediaRepository>()
+          .deleteProgress(providerID: widget.args.epPluginId, playableID: old);
+    }
+    _reopenCurrent(atSec: at);
+  }
+
   /// "Riprova", the stall watchdog's second tier and "Riprendi qui" — same
   /// contract as the mobile player's: resume where playback actually got to
   /// (not the launch resume point, nor — after an episode switch — the
@@ -1157,6 +1193,9 @@ class _ViewState extends State<_View> with WindowListener {
                                 onFullscreen: _toggleFullscreen,
                                 onTracks: () {
                                   setState(() => _tracksPanel = true);
+                                  _loadLanguages().then((_) {
+                                    if (mounted) setState(() {});
+                                  });
                                   _hideTimer?.cancel();
                                 },
                                 hasPrevEpisode: _nav.hasPrevious,
@@ -1235,6 +1274,17 @@ class _ViewState extends State<_View> with WindowListener {
                     onPickAudio: (t) {
                       _engine.selectAudioTrack(t);
                       _progress.rememberAudioTrack(t.label);
+                    },
+                    languages: widget.args.isLive ||
+                            (widget.args.directUrl ?? '').isNotEmpty ||
+                            _langFor != _curMediaId
+                        ? const []
+                        : playerLanguageOptions(_langSources,
+                            audioTracks: _engine.audioTracks.length),
+                    currentStreamId: _curStreamId,
+                    onPickLanguage: (src) {
+                      setState(() => _tracksPanel = false);
+                      _switchLanguage(src);
                     },
                   ),
               ],
@@ -1316,6 +1366,7 @@ class _ControlsLayer extends StatelessWidget {
             child: Row(
               children: [
                 IconButton(
+                  tooltip: 'Indietro',
                   icon: const Icon(Icons.arrow_back, color: Colors.white),
                   onPressed: onBack,
                 ),
@@ -1513,10 +1564,17 @@ class _TracksPanel extends StatefulWidget {
   final PlayerEngine engine;
   final VoidCallback onClose;
   final void Function(MediaTrack) onPickAudio;
+  // "Lingua" — see playerLanguageOptions. Empty: no section.
+  final List<StreamSource> languages;
+  final String? currentStreamId;
+  final void Function(StreamSource) onPickLanguage;
   const _TracksPanel({
     required this.engine,
     required this.onClose,
     required this.onPickAudio,
+    this.languages = const [],
+    this.currentStreamId,
+    required this.onPickLanguage,
   });
 
   @override
@@ -1567,6 +1625,7 @@ class _TracksPanelState extends State<_TracksPanel> {
                               fontWeight: FontWeight.w700)),
                     ),
                     IconButton(
+                      tooltip: 'Chiudi',
                       icon: const Icon(Icons.close, color: Colors.white70),
                       onPressed: widget.onClose,
                     ),
@@ -1576,6 +1635,12 @@ class _TracksPanelState extends State<_TracksPanel> {
               Expanded(
                 child: ListView(
                   children: [
+                    if (widget.languages.isNotEmpty) ...[
+                      const _PanelHeader('Lingua'),
+                      for (final src in widget.languages)
+                        tile(src.label, src.id == widget.currentStreamId,
+                            () => widget.onPickLanguage(src)),
+                    ],
                     if (video.length > 1) ...[
                       const _PanelHeader('Qualità video'),
                       for (final t in video)
@@ -1665,6 +1730,7 @@ class _LoadingOverlay extends StatelessWidget {
           top: 16,
           left: 16,
           child: IconButton(
+            tooltip: 'Indietro',
             icon: const Icon(Icons.arrow_back, color: Colors.white),
             onPressed: onBack,
           ),

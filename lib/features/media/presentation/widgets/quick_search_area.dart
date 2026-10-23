@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:ui' show ImageFilter;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -8,7 +7,6 @@ import 'package:go_router/go_router.dart';
 
 import '../../../../core/di/injection.dart';
 import '../../../../core/grpc/clients/media_client.dart' show CatalogItem;
-import '../../../../core/perf_profile.dart';
 import '../../../../core/theme/app_scale.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../../../shared/sdui/blocks/card_carousel_block_view.dart';
