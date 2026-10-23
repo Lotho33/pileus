@@ -12,6 +12,7 @@ import '../core/di/injection.dart';
 import '../core/grpc/clients/media_client.dart' show DetailsResponse;
 import '../core/perf_profile.dart';
 import '../core/theme/app_theme.dart';
+import '../core/utils/metrics.dart';
 import '../features/media/data/media_repository.dart';
 import '../features/player/bloc/playback_bloc.dart';
 import '../features/player/bloc/playback_event.dart';
@@ -400,6 +401,7 @@ class _ViewState extends State<_View> with WindowListener {
         (playing || _engine.position > Duration.zero) &&
         _progress.isResumeDone) {
       _resumeCoverSafetyTimer?.cancel();
+      Metrics.playFirstFrame();
       _started = true;
       rebuild = true;
     }

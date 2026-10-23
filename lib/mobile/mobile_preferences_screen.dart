@@ -8,6 +8,7 @@ import '../features/media/data/media_repository.dart';
 import '../features/player/android_video_settings.dart';
 import '../features/settings/data/settings_repository.dart';
 import '../shared/utils/tap_guard.dart';
+import '../shared/widgets/metrics_dialog.dart';
 
 class MobilePreferencesScreen extends StatefulWidget {
   const MobilePreferencesScreen({super.key});
@@ -179,6 +180,14 @@ class _MobilePreferencesScreenState extends State<MobilePreferencesScreen> {
                 style: TextStyle(color: AppTheme.textHigh)),
             subtitle: const Text('Richiede il riavvio dell\'app.',
                 style: TextStyle(color: AppTheme.textLow, fontSize: 12)),
+          ),
+          ListTile(
+            leading: const Icon(Icons.timer_outlined, color: AppTheme.textMid),
+            title: const Text('Tempi di risposta',
+                style: TextStyle(color: AppTheme.textHigh)),
+            subtitle: const Text('Avvio, apertura titoli, Play → primo frame',
+                style: TextStyle(color: AppTheme.textLow, fontSize: 12)),
+            onTap: () => showMetricsDialog(context),
           ),
           ListTile(
             leading: const Icon(Icons.delete_sweep_outlined,

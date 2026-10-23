@@ -22,6 +22,7 @@ import '../features/player/episode_prefetch.dart';
 import '../features/player/live_stall_watchdog.dart';
 import '../features/player/models/playback_args.dart';
 import '../features/player/models/skip_interval.dart';
+import '../core/utils/metrics.dart';
 import '../core/utils/perf_log.dart';
 import '../features/player/player_tuning.dart';
 import '../features/player/resume_seek.dart' show resolveStartPositionSec;
@@ -470,6 +471,7 @@ class _MobilePlayerViewState extends State<_MobilePlayerView> {
         (playing || _engine.position > Duration.zero) &&
         _progress.isResumeDone) {
       _resumeCoverSafetyTimer?.cancel();
+      Metrics.playFirstFrame();
       _started = true;
       needsRebuild = true;
     }

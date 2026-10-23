@@ -9,8 +9,10 @@ import '../../core/grpc/grpc_errors.dart';
 import '../../shared/utils/tap_guard.dart';
 import '../../core/theme/app_scale.dart';
 import '../../core/theme/app_theme.dart';
+import '../../core/utils/metrics.dart';
 import '../../shared/widgets/pileus_spinner.dart';
 import '../media/data/media_repository.dart';
+import 'source_continuity.dart';
 
 /// Fetch the stream sources for [mediaId]; if there's more than one, show a
 /// source / language picker first (the mobile equivalent of the TV inline
@@ -43,6 +45,7 @@ class PlayerLaunchGuard {
   /// Watching, "Riprendi").
   static void push(GoRouter router, String location, {Object? extra}) {
     if (_blocked || !TapGuard.acquire()) return;
+    Metrics.playBegin();
     _lastPush = DateTime.now();
     router.push(location, extra: extra);
   }
@@ -83,6 +86,7 @@ Future<void> resolveAndPlay(
 
   if (PlayerLaunchGuard._blocked || !TapGuard.acquire()) return;
   PlayerLaunchGuard._busy = true;
+  Metrics.playBegin();
   OverlayEntry? spinner;
   final spinnerTimer = Timer(const Duration(milliseconds: 250), () {
     if (navigator.mounted) spinner = _showLaunchSpinner(navigator);
@@ -186,7 +190,8 @@ Future<void> _resolveAndPush(
     // Picker was shown and dismissed without a pick → abort.
     if (chosen == null) return;
   }
-  chosen ??= sources.isNotEmpty ? sources.first : null;
+  // Same choice as the warm ahead of Play — see pickSourceByLabel.
+  chosen ??= pickSourceByLabel(sources, '');
 
   PlayerLaunchGuard._lastPush = DateTime.now();
   router.push(

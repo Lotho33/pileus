@@ -348,6 +348,21 @@ message ReleasePlaybackResponse {
   bool ok = 1;
 }
 
+// WarmStream: best-effort, resolve a stream ahead of Play so the plugin's
+// resolve cache is warm when ResolveStream comes. No playback lease, no
+// session, no segments. Returns at once; the work goes on in the background.
+// A server without it answers UNIMPLEMENTED: the client stops warming.
+message WarmStreamRequest {
+  string plugin_id = 1;
+  string stream_id = 2;
+}
+message WarmStreamResponse {
+  // "started" | "joined" (already in flight) | "skipped"
+  string outcome = 1;
+  // When skipped: a short reason code (informational only).
+  string reason  = 2;
+}
+
 message DeleteProgressRequest {
   string plugin_id = 1;
   string media_id  = 2;
@@ -691,4 +706,5 @@ service MediaPipeline {
   rpc CreateDownloads    (CreateDownloadsRequest) returns (CreateDownloadsResponse);
   rpc AckDownloadFetched (DownloadIdRequest)      returns (DownloadActionResponse);
   rpc ReleasePlayback    (ReleasePlaybackRequest) returns (ReleasePlaybackResponse);
+  rpc WarmStream         (WarmStreamRequest)      returns (WarmStreamResponse);
 }

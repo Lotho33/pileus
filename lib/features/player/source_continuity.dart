@@ -1,6 +1,6 @@
 import 'dart:async';
 
-import '../../core/grpc/clients/media_client.dart' show StreamSource;
+import '../../core/grpc/clients/media_client.dart' show SeasonInfo, StreamSource;
 import '../media/data/media_repository.dart';
 import 'episode_prefetch.dart';
 
@@ -23,8 +23,15 @@ import 'episode_prefetch.dart';
 const _kLookupTimeout = Duration(seconds: 10);
 
 /// Picks the source whose label matches [label] (case-insensitive), else the
-/// first one. Null only when [sources] is empty. Same rule the PlaybackBloc
-/// and every episode-switch path already use.
+/// first one. Null only when [sources] is empty.
+///
+/// This is THE choice a Play makes when nobody picks a source by hand: the
+/// PlaybackBloc, every episode-switch path, resolveAndPlay with a single
+/// source, the first (auto-focused) language button on TV — and
+/// [playStreamIdFor], which the stream warmer uses. They must not diverge:
+/// a warm only helps when it resolves byte-for-byte the stream id the Play
+/// then sends (the server's coalescing key and the plugins' resolve cache
+/// are both per stream id, i.e. per language).
 StreamSource? pickSourceByLabel(List<StreamSource> sources, String label) {
   if (sources.isEmpty) return null;
   if (label.isNotEmpty) {
@@ -34,6 +41,47 @@ StreamSource? pickSourceByLabel(List<StreamSource> sources, String label) {
     }
   }
   return sources.first;
+}
+
+/// The stream id a Play of [mediaId] would send to ResolveStream when the
+/// user doesn't choose a source by hand — GetStreams (cached by the
+/// repository, so the details screen's own call is reused) then
+/// [pickSourceByLabel]. Null when there's no source. Throws what GetStreams
+/// throws.
+Future<String?> playStreamIdFor(
+  MediaRepository repo, {
+  required String pluginId,
+  required String mediaId,
+  String preferredLabel = '',
+}) async {
+  final res = await repo.getStreams(pluginId, mediaId);
+  final id = pickSourceByLabel(res.sources, preferredLabel)?.id;
+  return (id == null || id.isEmpty) ? null : id;
+}
+
+/// The stream id a details page's main Play button resolves when there's
+/// nothing to resume — mirrors its "play from the start" path on mobile and
+/// desktop: a series plays the first episode of the first season that has
+/// any (the season list cached by the repository, as the page loaded it),
+/// a movie plays the title itself; either way through [playStreamIdFor].
+/// Null when that can't be known yet (no seasons loaded, empty season).
+Future<String?> defaultPlayStreamId(
+  MediaRepository repo, {
+  required String pluginId,
+  required String itemId,
+  required bool isSeries,
+  List<SeasonInfo> seasons = const [],
+}) async {
+  if (!isSeries) {
+    return playStreamIdFor(repo, pluginId: pluginId, mediaId: itemId);
+  }
+  if (seasons.isEmpty) return null;
+  final season = seasons.firstWhere((s) => s.episodeCount > 0,
+      orElse: () => seasons.first);
+  final b = await repo.browse(pluginId, season.directoryId, '', cache: true);
+  if (b.episodes.isEmpty) return null;
+  return playStreamIdFor(repo,
+      pluginId: pluginId, mediaId: b.episodes.first.id);
 }
 
 /// Label of the source [streamId] belongs to, looked up among [episodeId]'s

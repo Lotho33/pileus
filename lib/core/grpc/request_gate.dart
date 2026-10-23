@@ -17,6 +17,10 @@ import 'dart:async';
 /// RPCs can't be recalled — and would otherwise run before the new plugin's.
 /// Waiters of the most recently seen group go first; everything else stays
 /// FIFO, so a single home load still fills top-to-bottom.
+///
+/// [run]'s `low` is for work nobody is waiting on (WarmStream): it never
+/// changes the latest group and, once queued, only gets a slot when no
+/// normal waiter is left.
 class RequestGate {
   RequestGate(this.limit) : assert(limit > 0);
 
@@ -24,12 +28,18 @@ class RequestGate {
   int _active = 0;
   Object? _latestGroup;
   final List<({Completer<void> turn, Object? group})> _waiters = [];
+  final List<Completer<void>> _lowWaiters = [];
 
-  Future<T> run<T>(Future<T> Function() task, {Object? group}) async {
-    _latestGroup = group ?? _latestGroup;
+  Future<T> run<T>(Future<T> Function() task,
+      {Object? group, bool low = false}) async {
+    if (!low) _latestGroup = group ?? _latestGroup;
     if (_active >= limit) {
       final turn = Completer<void>();
-      _waiters.add((turn: turn, group: group));
+      if (low) {
+        _lowWaiters.add(turn);
+      } else {
+        _waiters.add((turn: turn, group: group));
+      }
       // The finishing task hands its slot straight to us (no _active change).
       await turn.future;
     } else {
@@ -41,6 +51,8 @@ class RequestGate {
       if (_waiters.isNotEmpty) {
         final i = _waiters.indexWhere((w) => w.group == _latestGroup);
         _waiters.removeAt(i < 0 ? 0 : i).turn.complete();
+      } else if (_lowWaiters.isNotEmpty) {
+        _lowWaiters.removeAt(0).complete();
       } else {
         _active--;
       }

@@ -15,6 +15,7 @@ import '../../../core/grpc/clients/media_client.dart'
 import '../../../core/perf_profile.dart';
 import '../../../core/theme/app_scale.dart';
 import '../../../core/theme/app_theme.dart';
+import '../../../core/utils/metrics.dart';
 import '../../../core/utils/perf_log.dart';
 import '../../../features/media/bloc/plugin_bloc.dart';
 import '../../../features/media/data/media_repository.dart';

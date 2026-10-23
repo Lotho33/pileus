@@ -6,6 +6,7 @@ import 'core/app_lifecycle.dart';
 import 'core/di/injection.dart';
 import 'core/perf_profile.dart';
 import 'core/utils/error_hooks.dart';
+import 'core/utils/metrics.dart';
 import 'core/utils/perf_log.dart';
 import 'core/utils/perf_probes.dart';
 import 'features/player/android_video_settings.dart';
@@ -26,6 +27,7 @@ import 'mobile/mobile_app.dart';
 void main() => runMobileApp();
 
 Future<void> runMobileApp() async {
+  Metrics.markAppStart();
   WidgetsFlutterBinding.ensureInitialized();
   installErrorHooks();
 

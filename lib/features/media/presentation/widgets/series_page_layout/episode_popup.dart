@@ -80,9 +80,11 @@ class _EpisodePopupState extends State<_EpisodePopup> {
   final Map<int, FocusNode> _playFns = {};
   FocusNode _playFn(int i) =>
       i == 0 ? _firstPlayFn : _playFns.putIfAbsent(i, () => FocusNode());
+  WarmTicket? _warm;
 
   @override
   void dispose() {
+    _warm?.cancel();
     _scrollCtrl.dispose();
     _closeFn.dispose();
     _firstPlayFn.dispose();
@@ -103,7 +105,13 @@ class _EpisodePopupState extends State<_EpisodePopup> {
   @override
   void initState() {
     super.initState();
-    _loadAll();
+    final loaded = _loadAll();
+    // Resolve ahead of Play the auto-focused first source (pickSourceByLabel
+    // is the Play's own choice too).
+    _warm = getIt<StreamWarmer>().schedule(widget.pluginId, () async {
+      await loaded;
+      return pickSourceByLabel(_sources, '')?.id;
+    });
   }
 
   Future<void> _loadAll() async {

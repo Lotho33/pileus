@@ -1,6 +1,7 @@
 import 'package:flutter_bloc/flutter_bloc.dart';
 
 import '../../../core/grpc/grpc_errors.dart';
+import '../../../core/utils/metrics.dart';
 import '../data/media_repository.dart';
 import 'details_event.dart';
 import 'details_state.dart';
@@ -18,12 +19,14 @@ class DetailsBloc extends Bloc<DetailsEvent, DetailsState> {
   Future<void> _onLoadDetails(
       LoadDetailsEvent event, Emitter<DetailsState> emit) async {
     emit(const DetailsLoading());
+    final sw = Stopwatch()..start();
     try {
       final response = await _repo.getDetails(
         event.pluginId,
         event.mediaId,
         urgent: true,
       );
+      Metrics.record(Metrics.details, sw.elapsedMilliseconds);
       emit(DetailsLoaded(response));
     } catch (e) {
       if (isUnauthenticated(e)) {

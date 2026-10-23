@@ -22,6 +22,8 @@ import '../features/media/data/continue_watching_item.dart';
 import '../features/media/data/media_repository.dart';
 import '../features/player/episode_poster.dart';
 import '../features/player/resolve_and_play.dart';
+import '../features/player/source_continuity.dart' show defaultPlayStreamId;
+import '../features/player/stream_warmer.dart';
 import '../shared/responsive.dart';
 import '../shared/widgets/error_retry_view.dart';
 import 'widgets/desktop_dialogs.dart';
@@ -160,7 +162,7 @@ class _Body extends StatelessWidget {
       final season = _seasons.firstWhere((s) => s.episodeCount > 0,
           orElse: () => _seasons.first);
       final browse = await getIt<MediaRepository>()
-          .browse(pluginId, season.directoryId, '');
+          .browse(pluginId, season.directoryId, '', cache: true);
       if (!context.mounted) return;
       if (browse.episodes.isNotEmpty) {
         _playEpisode(context, season, browse.episodes, 0);
@@ -437,6 +439,7 @@ class _Header extends StatelessWidget {
               isSeries: isSeries,
               big: big,
               onPlayDefault: onPlay,
+              seasons: seasons,
             )
           else
             Row(
@@ -448,6 +451,7 @@ class _Header extends StatelessWidget {
                   isSeries: isSeries,
                   big: big,
                   onPlayDefault: onPlay,
+                  seasons: seasons,
                 ),
                 const SizedBox(width: 8),
                 DownloadButton(
@@ -573,6 +577,9 @@ class _PlayButton extends StatefulWidget {
   final bool isSeries;
   final bool big;
   final VoidCallback onPlayDefault;
+  // What onPlayDefault plays for a series starts from these — see
+  // defaultPlayStreamId (warm ahead of Play).
+  final List<SeasonInfo> seasons;
 
   const _PlayButton({
     required this.pluginId,
@@ -580,6 +587,7 @@ class _PlayButton extends StatefulWidget {
     required this.isSeries,
     required this.big,
     required this.onPlayDefault,
+    this.seasons = const [],
   });
 
   @override
@@ -588,11 +596,30 @@ class _PlayButton extends StatefulWidget {
 
 class _PlayButtonState extends State<_PlayButton> {
   ContinueWatchingItem? _resume;
+  WarmTicket? _warm;
 
   @override
   void initState() {
     super.initState();
-    _checkResume();
+    final checked = _checkResume();
+    // Resolve ahead of Play what this button will play — the resume row's
+    // stream, else what onPlayDefault (the screen's _play) picks.
+    _warm = getIt<StreamWarmer>().schedule(widget.pluginId, () async {
+      await checked;
+      final resume = _resume;
+      if (resume != null) return resume.playableID;
+      return defaultPlayStreamId(getIt<MediaRepository>(),
+          pluginId: widget.pluginId,
+          itemId: widget.item.id,
+          isSeries: widget.isSeries,
+          seasons: widget.seasons);
+    });
+  }
+
+  @override
+  void dispose() {
+    _warm?.cancel();
+    super.dispose();
   }
 
   Future<void> _checkResume() async {
@@ -821,7 +848,7 @@ class _DesktopSeasonsState extends State<_DesktopSeasons> {
     setState(() => _busy = true);
     try {
       final b = await getIt<MediaRepository>()
-          .browse(widget.pluginId, s.directoryId, '');
+          .browse(widget.pluginId, s.directoryId, '', cache: true);
       _cache[s.directoryId] = b.episodes;
     } catch (_) {
       _cache[s.directoryId] = const [];

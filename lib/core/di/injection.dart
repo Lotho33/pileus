@@ -1,7 +1,7 @@
 import 'dart:async' show unawaited;
 
 import 'package:get_it/get_it.dart';
-import 'package:grpc/service_api.dart' show ClientChannel;
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../config/server_config.dart';
@@ -11,7 +11,9 @@ import '../grpc/clients/auth_client.dart';
 import '../grpc/clients/media_client.dart';
 import '../grpc/grpc_channel.dart';
 import '../grpc/host_resolver.dart';
+import '../grpc/reconnectable_channel.dart';
 import '../update/update_service.dart';
+import '../utils/metrics.dart';
 import '../../features/auth/bloc/auth_bloc.dart';
 import '../../features/auth/bloc/auth_event.dart';
 import '../../features/auth/data/auth_repository.dart';
@@ -24,6 +26,7 @@ import '../../features/media/data/media_repository.dart';
 import '../../features/player/bloc/playback_bloc.dart';
 import '../../features/player/content_view_mode.dart';
 import '../../features/player/playback_episode_cache.dart';
+import '../../features/player/stream_warmer.dart';
 import '../../features/settings/bloc/profile_management_cubit.dart';
 import '../../features/settings/bloc/settings_cubit.dart';
 import '../../features/settings/data/settings_repository.dart';
@@ -33,12 +36,24 @@ final GetIt getIt = GetIt.instance;
 // Tracks the channel currently backing AuthGrpcClient/MediaGrpcClient so
 // rebuildGrpcClients can shut the old one down instead of leaking it — see
 // rebuildGrpcClients for why this matters.
-// The abstract ClientChannel interface from service_api.dart (NOT the
-// concrete http2 ClientChannel from package:grpc/grpc.dart): both
-// createGrpcChannel() results — native ClientChannel and web
-// GrpcWebClientChannel — implement it, and it pulls no dart:io, so this
+// Wraps either createGrpcChannel() result (native HTTP/2 or web
+// GrpcWebClientChannel) behind the abstract ClientChannel interface, so this
 // storage + the client ctors below stay web-compilable.
-ClientChannel? _currentChannel;
+ReconnectableChannel? _currentChannel;
+
+// Shared by every client so a deadline on any call can ask for a fresh
+// connection — see StaleConnectionInterceptor.
+final _connectionWatch =
+    StaleConnectionInterceptor((reason) => reconnectGrpcChannel(reason));
+
+/// Drops the current gRPC connection and opens a fresh one for new calls —
+/// see ReconnectableChannel for when the old one can't be trusted. No-op on
+/// web: gRPC-Web is one browser request per call, nothing long-lived to
+/// replace.
+void reconnectGrpcChannel(String reason) {
+  if (kIsWeb) return;
+  _currentChannel?.reconnect(reason);
+}
 
 // Shared by every bloc/repo's `onProfileLocked` callback below, mirroring
 // the equally-repeated SessionExpiredEvent dispatch — see grpc_errors.dart's
@@ -52,6 +67,7 @@ Future<void> configureDependencies() async {
   // 1. Storage locale (device session / local profiles / layout cache / prefs)
   final prefs = await SharedPreferences.getInstance();
   getIt.registerSingleton<SharedPreferences>(prefs);
+  Metrics.attach(prefs);
 
   // 2. Interceptor JWT (singleton — aggiornato post-login)
   final interceptor = AuthInterceptor();
@@ -89,19 +105,21 @@ Future<void> configureDependencies() async {
     remotePort = session?.remotePort;
   } catch (_) {}
   interceptor.setGrpcHost(host, remote: remote, remotePort: remotePort);
-  final channel = createGrpcChannel(
-    host: host,
-    grpcPort: remote ? (remotePort ?? ServerPorts.remoteHttps) : grpcPort,
-    tlsFingerprint: remote ? null : tlsFingerprint,
-    remote: remote,
-  );
+  final channel = ReconnectableChannel(() => createGrpcChannel(
+        host: host,
+        grpcPort: remote ? (remotePort ?? ServerPorts.remoteHttps) : grpcPort,
+        tlsFingerprint: remote ? null : tlsFingerprint,
+        remote: remote,
+      ));
   _currentChannel = channel;
 
   // 4. Client gRPC
   getIt.registerLazySingleton<AuthGrpcClient>(
-      () => AuthGrpcClient(channel, interceptor));
+      () => AuthGrpcClient(channel, interceptor,
+          connectionWatch: _connectionWatch));
   getIt.registerLazySingleton<MediaGrpcClient>(
-      () => MediaGrpcClient(channel, interceptor));
+      () => MediaGrpcClient(channel, interceptor,
+          connectionWatch: _connectionWatch));
 
   // 5. Repository
   getIt.registerLazySingleton<AuthRepository>(
@@ -114,6 +132,13 @@ Future<void> configureDependencies() async {
     repo.onProfileLocked = _dispatchProfileLocked;
     return repo;
   });
+  // Session-long: its "already warmed" set must outlive the screens. The
+  // repository is looked up per call — rebuildGrpcClients replaces it on a
+  // server switch.
+  getIt.registerLazySingleton<StreamWarmer>(() => StreamWarmer(
+        warm: (p, s) => getIt<MediaRepository>().warmStream(p, s),
+        canWarm: (p) => getIt<MediaRepository>().canWarm(p),
+      ));
   getIt.registerLazySingleton<SettingsRepository>(
     () => SettingsRepository(
       getIt<SharedPreferences>(),
@@ -227,14 +252,14 @@ Future<void> rebuildGrpcClients(
   clearPlaybackEpisodeCache();
   final prefs = getIt<SharedPreferences>();
   final oldChannel = _currentChannel;
-  final channel = createGrpcChannel(
-    host: host,
-    grpcPort: remote
-        ? (remotePort ?? ServerPorts.remoteHttps)
-        : (grpcPort != null && grpcPort > 0) ? grpcPort : ServerPorts.grpc,
-    tlsFingerprint: remote ? null : tlsFingerprint,
-    remote: remote,
-  );
+  final channel = ReconnectableChannel(() => createGrpcChannel(
+        host: host,
+        grpcPort: remote
+            ? (remotePort ?? ServerPorts.remoteHttps)
+            : (grpcPort != null && grpcPort > 0) ? grpcPort : ServerPorts.grpc,
+        tlsFingerprint: remote ? null : tlsFingerprint,
+        remote: remote,
+      ));
   _currentChannel = channel;
   // Every call here used to leave the previous HTTP/2 connection open until
   // its own 30s idle timeout — harmless once, but re-discovery can happen
@@ -260,9 +285,11 @@ Future<void> rebuildGrpcClients(
   }
 
   getIt.registerLazySingleton<AuthGrpcClient>(
-      () => AuthGrpcClient(channel, interceptor));
+      () => AuthGrpcClient(channel, interceptor,
+          connectionWatch: _connectionWatch));
   getIt.registerLazySingleton<MediaGrpcClient>(
-      () => MediaGrpcClient(channel, interceptor));
+      () => MediaGrpcClient(channel, interceptor,
+          connectionWatch: _connectionWatch));
   getIt.registerLazySingleton<AuthRepository>(
     () => AuthRepository(
         prefs, getIt<AuthGrpcClient>(), getIt<AuthInterceptor>()),

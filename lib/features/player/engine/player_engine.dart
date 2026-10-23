@@ -1086,9 +1086,21 @@ class _MpvPlayerEngine extends PlayerEngine {
         // never worth failing the whole open() over.
       }
     }
+    // Web + HLS: media_kit's web player never applies Media.start on its
+    // hls.js path (only as a `#t=` fragment on a plain `src`), yet its
+    // timeupdate handler still clamps the reported position to >= start —
+    // so the stream played from 0 while `position` read the resume point,
+    // ResumeSeekController took that as "already landed" and never seeked,
+    // and every progress save wrote the resume point back unchanged
+    // (Continue Watching "always restarts from the beginning" on Tizen/
+    // webOS). Leave start out there; ResumeSeekController's seek on the
+    // first real position tick does the resume instead.
+    final hlsOnWeb = kIsWeb && url.toLowerCase().contains('m3u8');
     await _player.open(mk.Media(url,
         httpHeaders: headers,
-        start: (startPosition != null && startPosition > Duration.zero)
+        start: (startPosition != null &&
+                startPosition > Duration.zero &&
+                !hlsOnWeb)
             ? startPosition
             : null));
     _emit();

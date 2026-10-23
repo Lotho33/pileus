@@ -3,8 +3,10 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 
 import '../../../core/grpc/clients/media_client.dart' show ResolveResponse;
 import '../../../core/grpc/grpc_errors.dart';
+import '../../../core/utils/metrics.dart';
 import '../../../core/utils/perf_log.dart';
 import '../../../features/media/data/media_repository.dart';
+import '../source_continuity.dart';
 import 'playback_event.dart';
 import 'playback_state.dart';
 
@@ -22,6 +24,9 @@ class PlaybackBloc extends Bloc<PlaybackEvent, PlaybackState> {
 
   PlaybackBloc(this._repo, {this.onSessionExpired, this.onProfileLocked})
       : super(const PlaybackInitial()) {
+    // One bloc per player screen: its creation is the Play, unless a tap
+    // site already started the clock while it fetched the sources.
+    Metrics.playBegin(join: true);
     on<InitializeVideoEvent>(_onInitialize);
     on<SelectStreamEvent>(_onSelectStream);
     on<UseDirectUrlEvent>(_onUseDirectUrl);
@@ -34,6 +39,13 @@ class PlaybackBloc extends Bloc<PlaybackEvent, PlaybackState> {
         resolvedUrl: event.url,
         httpHeaders: event.httpHeaders,
         format: event.format));
+    Metrics.playReady();
+  }
+
+  @override
+  Future<void> close() {
+    Metrics.playAbandon();
+    return super.close();
   }
 
   Future<void> _onInitialize(
@@ -41,23 +53,17 @@ class PlaybackBloc extends Bloc<PlaybackEvent, PlaybackState> {
     perf('bloc: InitializeVideoEvent → getStreams(${event.mediaId})');
     emit(const FetchingStreams());
     try {
+      final sw = Stopwatch()..start();
       final response = await _repo.getStreams(event.pluginId, event.mediaId);
+      Metrics.record(Metrics.sources, sw.elapsedMilliseconds);
       perf('bloc: getStreams done (${response.sources.length} sources)');
       if (response.sources.isEmpty) {
         emit(const PlaybackFailed('Nessuna sorgente disponibile.'));
         return;
       }
-      // Auto-select: preferred label match → else first source
-      final source = event.preferredLabel.isNotEmpty
-          ? (response.sources
-                  .where(
-                    (s) =>
-                        s.label.toLowerCase() ==
-                        event.preferredLabel.toLowerCase(),
-                  )
-                  .firstOrNull ??
-              response.sources.first)
-          : response.sources.first;
+      // Auto-select: preferred label match → else first source. The same
+      // function the stream warmer uses — see pickSourceByLabel.
+      final source = pickSourceByLabel(response.sources, event.preferredLabel)!;
       add(SelectStreamEvent(
           pluginId: event.pluginId,
           streamId: source.id,
@@ -98,6 +104,7 @@ class PlaybackBloc extends Bloc<PlaybackEvent, PlaybackState> {
         if (isClosed) return;
       }
       ResolveResponse? resolved;
+      final sw = Stopwatch()..start();
       try {
         // Server-streaming: zero or more {progress} updates while the plugin
         // resolves the stream, then exactly one {result} that ends the
@@ -192,6 +199,11 @@ class PlaybackBloc extends Bloc<PlaybackEvent, PlaybackState> {
       }
       perf('bloc: PlaybackReady (resolve done, attempt $attempt) '
           'isLive=${resolved.isLive}');
+      // This attempt only: earlier failed attempts and their back-off
+      // delays still count in Metrics.play.
+      Metrics.record(Metrics.resolve, sw.elapsedMilliseconds,
+          detail: 'attempt $attempt');
+      Metrics.playReady();
       emit(PlaybackReady(
         resolvedUrl: resolved.resolvedUrl,
         httpHeaders: resolved.httpHeaders,

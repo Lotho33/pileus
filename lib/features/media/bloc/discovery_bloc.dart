@@ -1,6 +1,8 @@
+import 'package:collection/collection.dart' show ListEquality;
 import 'package:flutter/foundation.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
+import '../../../core/grpc/clients/media_client.dart' show CatalogItem;
 import '../../../core/grpc/grpc_errors.dart';
 import '../data/media_repository.dart';
 import 'discovery_event.dart';
@@ -78,6 +80,9 @@ class DiscoveryBloc extends Bloc<DiscoveryEvent, DiscoveryState> {
         catalogId: event.catalogId,
         currentPage: event.page,
       ));
+      if (result.stale) {
+        await _revalidate(event, myGeneration, result.catalog.items, emit);
+      }
     } catch (e) {
       if (myGeneration != _catalogGeneration) return;
       if (isUnauthenticated(e)) {
@@ -89,6 +94,51 @@ class DiscoveryBloc extends Bloc<DiscoveryEvent, DiscoveryState> {
         return;
       }
       emit(DiscoveryError(e.toString()));
+    }
+  }
+
+  // The row is on screen from a cache past its TTL (stale-while-revalidate,
+  // see MediaRepository.getCatalog): fetch the live one and swap it in only
+  // if it differs — an identical answer must not rebuild a carousel the
+  // user may already be moving through — and only if nothing happened to
+  // the row meanwhile (a newer load, a "load more" in flight or done).
+  // A failure keeps the cached row: that's the point of having it.
+  Future<void> _revalidate(LoadCatalogEvent event, int generation,
+      List<CatalogItem> shown, Emitter<DiscoveryState> emit) async {
+    try {
+      final fresh = await _repo.getCatalog(
+        event.pluginId,
+        event.catalogId,
+        page: event.page,
+        ttlSeconds: event.cacheTtlSeconds,
+        forceRefresh: true,
+      );
+      if (generation != _catalogGeneration) return;
+      final current = state;
+      if (current is! DiscoveryLoaded ||
+          current.isLoadingMore ||
+          current.currentPage != event.page) {
+        return;
+      }
+      // Compared on what the row shows: items read back from the disk
+      // cache carry only a subset of the wire fields, so a plain equality
+      // would see every refresh as a change.
+      List<String> shape(List<CatalogItem> items) => [
+            for (final i in items)
+              '${i.id}|${i.title}|${i.posterUrl}|${i.logoUrl}'
+          ];
+      if (const ListEquality<String>()
+          .equals(shape(fresh.catalog.items), shape(shown))) {
+        return;
+      }
+      emit(current.copyWith(
+        items: fresh.catalog.items,
+        hasMore: fresh.catalog.hasMore,
+        fromCache: false,
+      ));
+    } catch (e) {
+      if (isUnauthenticated(e)) onSessionExpired?.call();
+      if (isProfileLocked(e)) onProfileLocked?.call();
     }
   }
 
@@ -104,11 +154,23 @@ class DiscoveryBloc extends Bloc<DiscoveryEvent, DiscoveryState> {
 
     emit(current.copyWith(isLoadingMore: true));
     try {
-      final result = await _repo.getCatalog(
+      var result = await _repo.getCatalog(
         event.pluginId,
         event.catalogId,
         page: current.currentPage + 1,
       );
+      // A stale next page would not line up with a first page that was
+      // just revalidated — try the live one, fall back to the stale one.
+      if (result.stale) {
+        try {
+          result = await _repo.getCatalog(
+            event.pluginId,
+            event.catalogId,
+            page: current.currentPage + 1,
+            forceRefresh: true,
+          );
+        } catch (_) {}
+      }
       if (myGeneration != _catalogGeneration) return;
       emit(current.copyWith(
         items: [...current.items, ...result.catalog.items],

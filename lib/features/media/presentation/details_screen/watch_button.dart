@@ -79,18 +79,28 @@ class _WatchButtonState extends State<_WatchButton> {
   FocusNode _sourceFn(int i) =>
       i == 0 ? _watchFn : _sourceFns.putIfAbsent(i, () => FocusNode());
   bool _initialFocusRequested = false;
+  WarmTicket? _warm;
 
   @override
   void initState() {
     super.initState();
     if (!widget.isAudio) {
-      _checkResume();
-      _loadSources();
+      final ready = Future.wait([_checkResume(), _loadSources()]);
+      // Resolve ahead of Play what this button will play: the resume row's
+      // stream, else the auto-focused first language (see pickSourceByLabel).
+      _warm = getIt<StreamWarmer>().schedule(widget.pluginId, () async {
+        await ready;
+        final resume = _resume;
+        if (resume != null) return resume.playableID;
+        if (_sourcesError) return null;
+        return pickSourceByLabel(_sources, '')?.id;
+      });
     }
   }
 
   @override
   void dispose() {
+    _warm?.cancel();
     _resumeFn.dispose();
     _watchFn.dispose();
     _retryFn.dispose();
@@ -283,8 +293,11 @@ class _WatchButtonState extends State<_WatchButton> {
       );
     }
 
-    // Una sola sorgente (o nessuna) → bottone singolo
-    if (_sources.length <= 1) {
+    // Nessuna sorgente, o una sola senza etichetta → bottone singolo. Una
+    // sola sorgente CON etichetta (es. film solo in inglese) mostra la
+    // lingua invece di un "Guarda" generico.
+    if (_sources.isEmpty ||
+        (_sources.length == 1 && _sources.first.label.isEmpty)) {
       void onActivate() => _sources.isEmpty
           ? _playDirect(context)
           : _play(context, _sources.first);
@@ -319,12 +332,12 @@ class _WatchButtonState extends State<_WatchButton> {
       );
     }
 
-    // Più sorgenti → selezione lingua
+    // Più sorgenti → selezione lingua (una sola → lingua disponibile)
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(
-          'SELEZIONA LINGUA',
+          _sources.length == 1 ? 'LINGUA DISPONIBILE' : 'SELEZIONA LINGUA',
           style: TextStyle(
             color: AppTheme.textLow,
             fontSize: MediaQuery.sizeOf(context).height * (11.0 / 1080.0),

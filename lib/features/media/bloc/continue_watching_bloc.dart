@@ -18,11 +18,26 @@ class ContinueWatchingBloc
     LoadContinueWatchingEvent event,
     Emitter<ContinueWatchingState> emit,
   ) async {
+    // First load of the session: the row as the last session left it, on
+    // screen at once (see MediaRepository.cachedContinueWatching).
+    final hadNothing = state is ContinueWatchingInitial;
+    if (hadNothing) {
+      final cached = _repo.cachedContinueWatching();
+      if (cached != null) emit(ContinueWatchingLoaded(cached));
+    }
     try {
-      final items = await _repo.getContinueWatching();
-      emit(ContinueWatchingLoaded(items));
+      final items = await _repo.fetchContinueWatching();
+      if (items != null) {
+        emit(ContinueWatchingLoaded(items));
+      } else if (state is ContinueWatchingInitial) {
+        // Failed with nothing drawn yet — an empty row, as before. A row
+        // already on screen (from disk or an earlier load) stays.
+        emit(const ContinueWatchingLoaded([]));
+      }
     } catch (_) {
-      emit(const ContinueWatchingLoaded([]));
+      if (state is ContinueWatchingInitial) {
+        emit(const ContinueWatchingLoaded([]));
+      }
     }
   }
 

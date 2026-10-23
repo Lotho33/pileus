@@ -26,6 +26,7 @@ import '../../../core/theme/app_scale.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/update/update_prompt.dart';
 import '../../../core/utils/image_sizing.dart';
+import '../../../core/utils/metrics.dart';
 import '../data/media_repository.dart';
 import '../../player/episode_poster.dart' show episodeBadge;
 import '../../../shared/sdui/sdui_block.dart';
@@ -56,6 +57,7 @@ import '../bloc/plugin_state.dart';
 import '../data/continue_watching_item.dart';
 import '../../player/continue_watching_launch.dart';
 import '../../player/resolve_and_play.dart' show PlayerLaunchGuard;
+import '../../player/stream_warmer.dart';
 import 'package:cached_network_image_platform_interface/cached_network_image_platform_interface.dart'
     show ImageRenderMethodForWeb;
 

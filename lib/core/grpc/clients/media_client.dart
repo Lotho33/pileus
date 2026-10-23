@@ -2,6 +2,7 @@ import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:grpc/grpc.dart' show GrpcError, StatusCode;
 import 'package:grpc/service_api.dart';
 
+import '../../utils/metrics.dart';
 import '../../utils/perf_log.dart';
 import '../auth_interceptor.dart';
 import '../request_gate.dart';
@@ -44,6 +45,8 @@ export '../generated/media.pbgrpc.dart'
         DeleteProgressResponse,
         ReleasePlaybackRequest,
         ReleasePlaybackResponse,
+        WarmStreamRequest,
+        WarmStreamResponse,
         ContinueWatchingItem,
         ContinueWatchingRequest,
         ContinueWatchingResponse,
@@ -115,7 +118,7 @@ final RequestGate? _contentGate = kIsWeb ? RequestGate(3) : null;
 int _rpcInFlight = 0;
 
 Future<T> _gated<T>(String name, String pluginId, Future<T> Function() call,
-    {bool urgent = false}) {
+    {bool urgent = false, bool low = false}) {
   Future<T> timed() async {
     final sw = Stopwatch()..start();
     _rpcInFlight++;
@@ -123,6 +126,7 @@ Future<T> _gated<T>(String name, String pluginId, Future<T> Function() call,
       for (var attempt = 1;; attempt++) {
         try {
           final r = await call();
+          Metrics.rpcOk();
           perf('rpc $name $pluginId ok ${sw.elapsedMilliseconds}ms'
               ' (in flight $_rpcInFlight)'
               '${attempt > 1 ? ' (retry)' : ''}');
@@ -144,16 +148,20 @@ Future<T> _gated<T>(String name, String pluginId, Future<T> Function() call,
 
   return _contentGate == null || urgent
       ? timed()
-      : _contentGate!.run(timed, group: pluginId);
+      : _contentGate!.run(timed, group: pluginId, low: low);
 }
 
 class MediaGrpcClient {
   late final MediaPipelineClient _mediaStub;
   late final PluginServiceClient _pluginStub;
 
-  MediaGrpcClient(ClientChannel channel, AuthInterceptor interceptor) {
-    _mediaStub = MediaPipelineClient(channel, interceptors: [interceptor]);
-    _pluginStub = PluginServiceClient(channel, interceptors: [interceptor]);
+  /// [connectionWatch]: see StaleConnectionInterceptor
+  /// (reconnectable_channel.dart).
+  MediaGrpcClient(ClientChannel channel, AuthInterceptor interceptor,
+      {ClientInterceptor? connectionWatch}) {
+    final interceptors = [interceptor, if (connectionWatch != null) connectionWatch];
+    _mediaStub = MediaPipelineClient(channel, interceptors: interceptors);
+    _pluginStub = PluginServiceClient(channel, interceptors: interceptors);
   }
 
   Future<CatalogResponse> getCatalog(CatalogRequest request) => _gated(
@@ -223,6 +231,16 @@ class MediaGrpcClient {
   Future<ReleasePlaybackResponse> releasePlayback() =>
       _mediaStub.releasePlayback(ReleasePlaybackRequest(),
           options: CallOptions(timeout: _defaultRpcTimeout));
+
+  /// Asks the server to resolve a stream ahead of Play — see
+  /// MediaRepository.warmStream. The server answers at once; low priority in
+  /// the web gate so it never delays a read a screen is waiting on.
+  Future<WarmStreamResponse> warmStream(WarmStreamRequest request) => _gated(
+      'warmStream',
+      request.pluginId,
+      low: true,
+      () => _mediaStub.warmStream(request,
+          options: CallOptions(timeout: _defaultRpcTimeout)));
 
   Future<ContinueWatchingResponse> getContinueWatching(
           ContinueWatchingRequest request) =>

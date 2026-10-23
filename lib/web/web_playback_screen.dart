@@ -9,6 +9,7 @@ import 'package:web/web.dart' as web;
 
 import '../core/app_lifecycle.dart';
 import '../core/di/injection.dart';
+import '../core/utils/metrics.dart';
 import '../core/utils/perf_log.dart' show kPerfDiagnostics;
 import '../core/grpc/clients/media_client.dart' show ProgressResponse;
 import '../features/media/data/media_repository.dart';
@@ -553,6 +554,7 @@ class _ViewState extends State<_View> {
       // true) — the cover only ever waits on the first real frame here.
       if (!_videoStarted && _video.currentTime > 0) {
         _resumeCoverSafetyTimer?.cancel();
+        Metrics.playFirstFrame();
         setState(() => _videoStarted = true);
       }
       return;
@@ -586,6 +588,7 @@ class _ViewState extends State<_View> {
     // itself never lands.
     if (!_videoStarted && pos > Duration.zero && _resumeSeek.isDone) {
       _resumeCoverSafetyTimer?.cancel();
+      Metrics.playFirstFrame();
       setState(() => _videoStarted = true);
     }
 

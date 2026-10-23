@@ -78,7 +78,7 @@ class _SplashScreenState extends State<SplashScreen>
   void initState() {
     super.initState();
     _ctrl =
-        AnimationController(vsync: this, duration: AuthBloc.minSplashDuration);
+        AnimationController(vsync: this, duration: _authBloc.splashDuration);
     _ctrl.forward();
     _closeCtrl = AnimationController(vsync: this, duration: _kCloseDuration);
     // Dispatched exactly once here, not from build() — build() re-running

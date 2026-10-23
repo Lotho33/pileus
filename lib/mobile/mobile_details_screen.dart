@@ -24,6 +24,8 @@ import '../features/player/continue_watching_launch.dart';
 import '../features/player/episode_poster.dart';
 import '../features/player/resolve_and_play.dart';
 import '../features/player/resume_lookup.dart';
+import '../features/player/source_continuity.dart' show defaultPlayStreamId;
+import '../features/player/stream_warmer.dart';
 import '../shared/widgets/error_retry_view.dart';
 import 'package:cached_network_image_platform_interface/cached_network_image_platform_interface.dart'
     show ImageRenderMethodForWeb;
@@ -442,11 +444,25 @@ class _PlayButtonState extends State<_PlayButton> {
   // Re-check on return from the player — see _onNav.
   GoRouter? _router;
   bool _playerWasActive = false;
+  WarmTicket? _warm;
 
   @override
   void initState() {
     super.initState();
-    _checkResume();
+    final checked = _checkResume();
+    // Resolve ahead of Play what this button will play — the resume row's
+    // stream, else what "play from the start" picks (see _play).
+    _warm = getIt<StreamWarmer>().schedule(widget.pluginId, () async {
+      await checked;
+      final resume = _resume;
+      if (resume != null) return resume.playableID;
+      final d = widget.details;
+      return defaultPlayStreamId(getIt<MediaRepository>(),
+          pluginId: widget.pluginId,
+          itemId: widget.item.id,
+          isSeries: widget.isSeries,
+          seasons: d != null && d.hasSeries() ? d.series.seasons : const []);
+    });
   }
 
   @override
@@ -462,6 +478,7 @@ class _PlayButtonState extends State<_PlayButton> {
 
   @override
   void dispose() {
+    _warm?.cancel();
     _router?.routerDelegate.removeListener(_onNav);
     super.dispose();
   }
@@ -526,7 +543,7 @@ class _PlayButtonState extends State<_PlayButton> {
         final BrowseResponse browse;
         try {
           browse = await getIt<MediaRepository>()
-              .browse(widget.pluginId, season.directoryId, '');
+              .browse(widget.pluginId, season.directoryId, '', cache: true);
         } catch (e) {
           // Used to be unguarded: a network error left the tap doing nothing
           // at all (and an uncaught async error behind it).
@@ -784,7 +801,7 @@ class _SeasonsState extends State<_Seasons> {
     });
     try {
       final b = await getIt<MediaRepository>()
-          .browse(widget.pluginId, s.directoryId, '');
+          .browse(widget.pluginId, s.directoryId, '', cache: true);
       _cache[s.directoryId] = b.episodes;
     } catch (_) {
       _failed.add(s.directoryId);

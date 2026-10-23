@@ -1,25 +1,12 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!--
-  Tizen (Samsung Smart TV) packaging manifest for Pileus — see
-  docs/TIZEN_WEBOS.md for how this fits into the build.
+  Tizen (Samsung Smart TV) packaging manifest for Pileus — built by
+  scripts/build-tizen.sh (see docs/TIZEN_WEBOS.md), which copies it into
+  build/tizen/app/ with `version` synced from pubspec.yaml and signs the
+  .wgt with the active Tizen Studio certificate profile.
 
-  Copy this file (and icon.png from this same directory) into the built web
-  output before packaging:
-
-    flutter build web -t lib/main_web_tv.dart
-    cp packaging/tizen/config.xml packaging/tizen/icon.png build/web/
-
-  Then either:
-    - open build/web/ as a Tizen Web project in Tizen Studio and build/run
-      from there (it reads this file directly), or
-    - package from the CLI: `tizen package -t wgt -s <profile> [path to] build/web`
-
-  `id`/`tizen:application id`/`package` below are PLACEHOLDERS — Tizen
-  requires a real author certificate (Tizen Studio > Certificate Manager)
-  whose 10-character author ID becomes the actual package/app ID prefix.
-  Generate one and replace PLACEHOLDERAUTH below with it before signing;
-  an unsigned/placeholder-ID package will build but won't install on a
-  real TV or in the emulator.
+  `tizen:application id`/`package` (pileustv01) must never change once the
+  app is on the Samsung store: it's the app's identity across updates.
 -->
 <widget xmlns="http://www.w3.org/ns/widgets"
         xmlns:tizen="http://tizen.org/ns/widgets"
@@ -41,6 +28,15 @@
        blocks outgoing requests entirely at the platform level, independent
        of any CORS/CSP configured on the server side. -->
   <tizen:privilege name="http://tizen.org/privilege/internet"/>
+
+  <!-- Media keys (Play/Pause/Stop/FF/RW) reach the app only after
+       tizen.tvinputdevice.registerKey() — see web/index.html. -->
+  <tizen:privilege name="http://tizen.org/privilege/tv.inputdevice"/>
+
+  <!-- webapis.network.getIp(): the TV's own LAN IP for the discovery
+       screen's /24 sweep (web/index.html, pileusLocalIps). Public-level
+       Samsung privilege, unlike the platform-level network.get below. -->
+  <tizen:privilege name="http://developer.samsung.com/privilege/network.public"/>
 
   <!-- network.get was declared here defensively for a hypothetical future
        native Tizen network-info API — never actually reached by any Dart
@@ -71,6 +67,6 @@
   <!-- Lets the remote's dedicated Return/Back key reach the app as a key
        event at all — without this some Tizen TV profiles intercept it at
        the platform level before it ever reaches the WebView. Paired with
-       web/index.html's key bridge (keyCode 10009 → synthetic Escape). -->
+       web/index.html's key bridge (keyCode 10009 → GoBack). -->
   <tizen:metadata key="http://samsung.com/tv/metadata/use.dialog.hwkey" value="true"/>
 </widget>

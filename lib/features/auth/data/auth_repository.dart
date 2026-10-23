@@ -55,6 +55,11 @@ class AuthRepository {
         jsonEncode(profiles.map((p) => p.toJson()).toList()),
       );
 
+  /// The stored session, read synchronously and without touching the
+  /// interceptor — for the splash's "can the home come from disk?" check
+  /// (AuthBloc.splashDuration), before AppStartedEvent has run.
+  DeviceSession? peekStoredSession() => DeviceSession.readFrom(_prefs);
+
   Future<DeviceSession?> getStoredSession() async {
     final session = DeviceSession.readFrom(_prefs);
     if (session != null &&

@@ -109,11 +109,25 @@ only intercepts keyCodes explicitly listed in the map.
 
 ## HLS playback
 
-Already handled, nothing new needed: `web_playback_screen.dart` checks
-`video.canPlayType('application/vnd.apple.mpegurl')` and falls back to the
-bundled `web/hls.min.js` whenever it's not `'probably'` (true for every
-Chromium-based browser, Tizen/webOS included — only Safari plays HLS
-natively) — see its own extensive doc comment for the exact decision.
+The TV-web entry point (`main_web_tv.dart`) uses the TV app's own player
+screen, so playback goes through `PlayerEngine` → media_kit's web player
+(not `web_playback_screen.dart`, which only the PWA `main_web.dart` uses).
+media_kit picks hls.js only when `canPlayType('application/vnd.apple.mpegurl')`
+is empty. Tizen answers `"maybe"`, and its native HLS engine fails our VOD
+streams (separate audio rendition + AES-128: black frame, position -00:01),
+so `web/index.html` makes `canPlayType` answer `""` for HLS on Tizen and
+every stream goes to hls.js. media_kit also never applies `Media.start` on
+its hls.js path while still clamping the reported position to it, which
+broke Continue Watching resume; `_MpvPlayerEngine.open` leaves `start` out
+for web HLS and `ResumeSeekController` seeks instead. webOS may have the
+same `canPlayType` answer — unchecked.
+
+**Emulator only**: in the Tizen 10.0 emulator, hls.js (any MSE playback)
+stalls for ~1–2 s every few seconds, with any hls.js config, TS or fMP4,
+even at 320×184, while the native player plays the same stream smoothly —
+it's the emulator's MSE pipeline, not the app. Judge smoothness on a real
+TV (or Samsung Remote Test Lab), not the emulator.
+
 The bundled `hls.min.js` is already an ES5-transpiled build (verified: no
 arrow functions/`class`/
 `async` in it), which is what makes it runnable on an old TV's Chromium in
@@ -157,10 +171,9 @@ want a Tizen/webOS manifest sitting in their own output).
 ```sh
 flutter build web -t lib/main_web_tv.dart --release --base-href /
 
-# Tizen
-cp packaging/tizen/config.xml packaging/tizen/icon.png build/web/
-# then open build/web/ as a Tizen Web project in Tizen Studio, or:
-tizen package -t wgt -s <your-certificate-profile> -- build/web
+# Tizen — use the script (Tizen Studio CLI in ~/tizen-studio):
+scripts/build-tizen.sh               # → build/tizen/app/ + build/tizen/Pileus.wgt
+scripts/build-tizen.sh --install     # …then install + launch on the first sdb target
 
 # webOS — use the script, not these steps by hand:
 scripts/build-webos.sh               # → build/webos/app/ + build/webos/com.lotho33.pileus_<ver>_all.ipk
@@ -179,10 +192,19 @@ the property outright, even when false). The same base-href issue
 almost certainly applies to Tizen's `.wgt` (also `file://`-style) —
 unverified.
 
-`packaging/tizen/config.xml` has a placeholder `PLACEHOLDERAUTH` author/
-package ID — Tizen requires a real author certificate (Tizen Studio >
-Certificate Manager) before it'll install anywhere; replace the
-placeholder with the 10-character ID that certificate generates. webOS's
+`scripts/build-tizen.sh` applies the same fix-ups (base href, no CDN,
+version synced into `config.xml`) and additionally injects
+`$WEBAPIS/webapis/webapis.js` — Samsung's `webapis` object only exists when
+the page loads it. The `.wgt` is signed with the active Tizen Studio
+certificate profile (`TIZEN_PROFILE` to override). The package ID
+`pileustv01` is fixed: it's the app's identity on the Samsung store.
+
+Tizen Studio's package manager ships pointing at
+`usa.sdk-dl.tizen.org`, which now answers 403 — change
+`~/tizen-studio/.info/repository.info` to
+`https://download.tizen.org/sdk/tizenstudio` (same tree) before installing
+the TV extension (`TV-SAMSUNG-Public-*`, which only offers the 10.0
+emulator now). webOS's
 `appinfo.json` has no equivalent signing requirement for sideloading onto
 a developer-mode TV or the Simulator.
 

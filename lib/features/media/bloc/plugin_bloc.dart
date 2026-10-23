@@ -42,10 +42,20 @@ class PluginBloc extends Bloc<PluginEvent, PluginState> {
     on<ReorderPluginEvent>(_onReorder, transformer: _sequential());
   }
 
-  // Full load — emits PluginLoading first (shown on first open).
+  // Full load. With a list on disk from the last session (see
+  // MediaRepository.cachedPlugins) the home is drawn from it at once and the
+  // live answer replaces it; without one, PluginLoading first as before.
   Future<void> _onLoad(
       LoadPluginsEvent event, Emitter<PluginState> emit) async {
-    emit(const PluginLoading());
+    List<PluginInfo>? cached;
+    try {
+      cached = await _repo.cachedPlugins();
+    } catch (_) {}
+    if (cached != null && cached.isNotEmpty) {
+      emit(PluginsLoaded(cached));
+    } else {
+      emit(const PluginLoading());
+    }
     try {
       final plugins = await _repo.listPlugins();
       emit(PluginsLoaded(plugins));
@@ -59,7 +69,15 @@ class PluginBloc extends Bloc<PluginEvent, PluginState> {
         onProfileLocked?.call();
         return;
       }
-      emit(PluginError(e.toString(), certMismatch: looksLikeCertificateMismatch(e)));
+      final certMismatch = looksLikeCertificateMismatch(e);
+      // Drawn from disk and the server just didn't answer: keep the home
+      // up and let the poll catch up when it's back. A changed certificate
+      // is different — only the error screen can say what to do about it.
+      if (cached != null && cached.isNotEmpty && !certMismatch) {
+        _startPolling();
+        return;
+      }
+      emit(PluginError(e.toString(), certMismatch: certMismatch));
     }
   }
 

@@ -22,6 +22,7 @@ import 'core/grpc/auth_interceptor.dart';
 import 'core/device_profile.dart';
 import 'core/perf_profile.dart';
 import 'core/utils/error_hooks.dart';
+import 'core/utils/metrics.dart';
 import 'core/utils/perf_log.dart';
 import 'core/utils/perf_probes.dart';
 import 'features/player/android_video_settings.dart';
@@ -74,6 +75,7 @@ Future<void> _enterNativeFullscreen() async {
 }
 
 void main() async {
+  Metrics.markAppStart();
   // `flutter run/build --flavor mobile` defaults to this entrypoint; hand
   // off to the phone/tablet UI so the `-t lib/main_mobile.dart` argument is
   // optional. `appFlavor` is a compile-time const, so the branch not taken

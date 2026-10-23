@@ -6,6 +6,7 @@ import '../../../core/db/models/device_session.dart';
 import '../../../core/di/injection.dart';
 import '../../../core/grpc/auth_interceptor.dart';
 import '../../../core/grpc/grpc_errors.dart' show isUnauthenticated;
+import '../../../core/utils/metrics.dart';
 import '../../media/active_plugin_controller.dart';
 import '../../media/bloc/continue_watching_bloc.dart';
 import '../../media/bloc/continue_watching_event.dart';
@@ -79,6 +80,34 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
   // synced copy (`_kSplashDuration`) — the two used to drift by construction
   // any time one was tuned without remembering the other.
   static const minSplashDuration = Duration(milliseconds: 2000);
+
+  // The floor when the remembered profile's home can be drawn from disk
+  // (plugin list, Continue Watching and catalogs from the last session —
+  // see MediaRepository.cachedPlugins): nothing is being loaded behind the
+  // splash any more, it's only there for the reveal. Short enough not to
+  // be a wait, long enough for the lockup to land.
+  static const warmSplashDuration = Duration(milliseconds: 1000);
+
+  /// The splash hold for this launch — [warmSplashDuration] when the home
+  /// will come from disk, [minSplashDuration] otherwise. Decided once, from
+  /// synchronous local reads, so splash_screen.dart's reveal and this
+  /// bloc's floor use the same value.
+  Duration get splashDuration => _splashDuration ??= _computeSplashDuration();
+  Duration? _splashDuration;
+
+  Duration _computeSplashDuration() {
+    try {
+      final session = _repo.peekStoredSession();
+      final pid = session?.lastActiveProfileId ?? '';
+      if (session != null &&
+          session.isAuthorized &&
+          pid.isNotEmpty &&
+          getIt<MediaRepository>().hasStartupSnapshot(pid)) {
+        return warmSplashDuration;
+      }
+    } catch (_) {}
+    return minSplashDuration;
+  }
 
   // Upper bound on top of minSplashDuration for _waitForPluginsReady below —
   // generous enough for a real gRPC round-trip over a slow LAN/Wi-Fi link
@@ -205,11 +234,12 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
       AppStartedEvent event, Emitter<AuthState> emit) async {
     emit(const AuthLoading());
     final started = DateTime.now();
+    final hold = splashDuration;
     Future<void> floor() async {
       if (!event.splashFloor) return;
       final elapsed = DateTime.now().difference(started);
-      if (elapsed < minSplashDuration) {
-        await Future<void>.delayed(minSplashDuration - elapsed);
+      if (elapsed < hold) {
+        await Future<void>.delayed(hold - elapsed);
       }
     }
 
@@ -225,6 +255,7 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
           session.expiresAtTimestamp > 0 &&
           session.expiresAtTimestamp <= nowSecs;
       if (session == null || !session.isAuthorized || expired) {
+        Metrics.startupPath(direct: false);
         await floor();
         if (session?.grpcHost == null) {
           emit(const ServerDiscoveryRequired());
@@ -266,6 +297,7 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
           rememberedProfile.pinProtected &&
           !rememberedProfile.unlocked;
       final defaultProfile = lockedDefault ? null : rememberedProfile;
+      Metrics.startupPath(direct: defaultProfile != null);
       if (defaultProfile != null) {
         // Must happen before LoadPluginsEvent below: PluginBloc's first
         // listPlugins() reads the plugin-order cache key scoped by

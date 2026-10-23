@@ -97,6 +97,33 @@
       }
       window.addEventListener('keydown', bridge, true);
       window.addEventListener('keyup', bridge, true);
+      // Tizen only delivers the media keys to an app that registered them
+      // (Back and the arrows come through regardless).
+      try {
+        if (window.tizen && tizen.tvinputdevice) {
+          ['MediaPlay', 'MediaPause', 'MediaPlayPause', 'MediaStop',
+           'MediaRewind', 'MediaFastForward'].forEach(function (k) {
+            try { tizen.tvinputdevice.registerKey(k); } catch (_) {}
+          });
+        }
+      } catch (_) {}
+
+      // Tizen answers "maybe" for HLS, and media_kit's web player
+      // (_isHLS in media_kit/lib/src/player/web/player/real.dart) takes any
+      // non-empty answer as "play it natively" and skips hls.js. The TV's
+      // own HLS engine then fails a VOD master playlist with a separate
+      // audio rendition + AES-128 segments (MM_ERROR_PLAYER_CODEC_NOT_FOUND:
+      // black frame, position -00:01), while hls.js over MSE plays it.
+      // Saying "" for the HLS MIME types sends every stream to hls.js.
+      try {
+        if (/Tizen/.test(navigator.userAgent)) {
+          var nativeCanPlay = HTMLMediaElement.prototype.canPlayType;
+          HTMLMediaElement.prototype.canPlayType = function (type) {
+            if (/mpegurl/i.test(String(type))) return '';
+            return nativeCanPlay.call(this, type);
+          };
+        }
+      } catch (_) {}
 
       // Called by lib/core/utils/app_exit_web.dart — SystemNavigator.pop()
       // is a no-op on web. A plain browser tab ignores window.close().

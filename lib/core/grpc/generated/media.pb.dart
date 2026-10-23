@@ -3569,6 +3569,138 @@ class ReleasePlaybackResponse extends $pb.GeneratedMessage {
   void clearOk() => $_clearField(1);
 }
 
+class WarmStreamRequest extends $pb.GeneratedMessage {
+  factory WarmStreamRequest({
+    $core.String? pluginId,
+    $core.String? streamId,
+  }) {
+    final result = create();
+    if (pluginId != null) result.pluginId = pluginId;
+    if (streamId != null) result.streamId = streamId;
+    return result;
+  }
+
+  WarmStreamRequest._();
+
+  factory WarmStreamRequest.fromBuffer($core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromBuffer(data, registry);
+  factory WarmStreamRequest.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromJson(json, registry);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'WarmStreamRequest',
+      package: const $pb.PackageName(_omitMessageNames ? '' : 'mycelium'),
+      createEmptyInstance: create)
+    ..aOS(1, _omitFieldNames ? '' : 'pluginId')
+    ..aOS(2, _omitFieldNames ? '' : 'streamId')
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  WarmStreamRequest clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  WarmStreamRequest copyWith(void Function(WarmStreamRequest) updates) =>
+      super.copyWith((message) => updates(message as WarmStreamRequest))
+          as WarmStreamRequest;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static WarmStreamRequest create() => WarmStreamRequest._();
+  @$core.override
+  WarmStreamRequest createEmptyInstance() => create();
+  @$core.pragma('dart2js:noInline')
+  static WarmStreamRequest getDefault() => _defaultInstance ??=
+      $pb.GeneratedMessage.$_defaultFor<WarmStreamRequest>(create);
+  static WarmStreamRequest? _defaultInstance;
+
+  @$pb.TagNumber(1)
+  $core.String get pluginId => $_getSZ(0);
+  @$pb.TagNumber(1)
+  set pluginId($core.String value) => $_setString(0, value);
+  @$pb.TagNumber(1)
+  $core.bool hasPluginId() => $_has(0);
+  @$pb.TagNumber(1)
+  void clearPluginId() => $_clearField(1);
+
+  @$pb.TagNumber(2)
+  $core.String get streamId => $_getSZ(1);
+  @$pb.TagNumber(2)
+  set streamId($core.String value) => $_setString(1, value);
+  @$pb.TagNumber(2)
+  $core.bool hasStreamId() => $_has(1);
+  @$pb.TagNumber(2)
+  void clearStreamId() => $_clearField(2);
+}
+
+class WarmStreamResponse extends $pb.GeneratedMessage {
+  factory WarmStreamResponse({
+    $core.String? outcome,
+    $core.String? reason,
+  }) {
+    final result = create();
+    if (outcome != null) result.outcome = outcome;
+    if (reason != null) result.reason = reason;
+    return result;
+  }
+
+  WarmStreamResponse._();
+
+  factory WarmStreamResponse.fromBuffer($core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromBuffer(data, registry);
+  factory WarmStreamResponse.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromJson(json, registry);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'WarmStreamResponse',
+      package: const $pb.PackageName(_omitMessageNames ? '' : 'mycelium'),
+      createEmptyInstance: create)
+    ..aOS(1, _omitFieldNames ? '' : 'outcome')
+    ..aOS(2, _omitFieldNames ? '' : 'reason')
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  WarmStreamResponse clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  WarmStreamResponse copyWith(void Function(WarmStreamResponse) updates) =>
+      super.copyWith((message) => updates(message as WarmStreamResponse))
+          as WarmStreamResponse;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static WarmStreamResponse create() => WarmStreamResponse._();
+  @$core.override
+  WarmStreamResponse createEmptyInstance() => create();
+  @$core.pragma('dart2js:noInline')
+  static WarmStreamResponse getDefault() => _defaultInstance ??=
+      $pb.GeneratedMessage.$_defaultFor<WarmStreamResponse>(create);
+  static WarmStreamResponse? _defaultInstance;
+
+  @$pb.TagNumber(1)
+  $core.String get outcome => $_getSZ(0);
+  @$pb.TagNumber(1)
+  set outcome($core.String value) => $_setString(0, value);
+  @$pb.TagNumber(1)
+  $core.bool hasOutcome() => $_has(0);
+  @$pb.TagNumber(1)
+  void clearOutcome() => $_clearField(1);
+
+  @$pb.TagNumber(2)
+  $core.String get reason => $_getSZ(1);
+  @$pb.TagNumber(2)
+  set reason($core.String value) => $_setString(1, value);
+  @$pb.TagNumber(2)
+  $core.bool hasReason() => $_has(1);
+  @$pb.TagNumber(2)
+  void clearReason() => $_clearField(2);
+}
+
 class DeleteProgressRequest extends $pb.GeneratedMessage {
   factory DeleteProgressRequest({
     $core.String? pluginId,

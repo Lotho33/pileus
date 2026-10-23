@@ -36,8 +36,12 @@ const _defaultRpcTimeout = Duration(seconds: 20);
 class AuthGrpcClient {
   late final AuthServiceClient _stub;
 
-  AuthGrpcClient(ClientChannel channel, AuthInterceptor interceptor) {
-    _stub = AuthServiceClient(channel, interceptors: [interceptor]);
+  /// [connectionWatch]: see StaleConnectionInterceptor
+  /// (reconnectable_channel.dart).
+  AuthGrpcClient(ClientChannel channel, AuthInterceptor interceptor,
+      {ClientInterceptor? connectionWatch}) {
+    _stub = AuthServiceClient(channel,
+        interceptors: [interceptor, if (connectionWatch != null) connectionWatch]);
   }
 
   Future<AuthorizeDeviceResponse> authorizeDevice(

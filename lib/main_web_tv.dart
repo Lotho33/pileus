@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'core/app_lifecycle.dart';
 import 'core/di/injection.dart';
 import 'core/perf_profile.dart';
+import 'core/utils/metrics.dart';
 import 'core/utils/perf_log.dart';
 import 'features/settings/data/settings_repository.dart';
 import 'main.dart' show PileusApp;
@@ -38,6 +39,7 @@ import 'main.dart' show PileusApp;
 void main() => runWebTvApp();
 
 Future<void> runWebTvApp() async {
+  Metrics.markAppStart();
   WidgetsFlutterBinding.ensureInitialized();
 
   PaintingBinding.instance.imageCache.maximumSizeBytes = 64 << 20;

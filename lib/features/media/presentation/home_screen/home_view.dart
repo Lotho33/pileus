@@ -111,6 +111,8 @@ class _HomeViewState extends State<_HomeView> {
   @override
   void initState() {
     super.initState();
+    // Startup clock (Metrics.startup) ends on the home's first frame.
+    WidgetsBinding.instance.addPostFrameCallback((_) => Metrics.homeShown());
     // One "newer release available" check per home mount — best-effort,
     // rate-limited and a silent no-op unless UpdateConfig is configured.
     WidgetsBinding.instance.addPostFrameCallback((_) {

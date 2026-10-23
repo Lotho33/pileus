@@ -284,6 +284,13 @@ class MediaPipelineClient extends $grpc.Client {
     return $createUnaryCall(_$releasePlayback, request, options: options);
   }
 
+  $grpc.ResponseFuture<$0.WarmStreamResponse> warmStream(
+    $0.WarmStreamRequest request, {
+    $grpc.CallOptions? options,
+  }) {
+    return $createUnaryCall(_$warmStream, request, options: options);
+  }
+
   // method descriptors
 
   static final _$getCatalog =
@@ -381,6 +388,11 @@ class MediaPipelineClient extends $grpc.Client {
           '/mycelium.MediaPipeline/ReleasePlayback',
           ($0.ReleasePlaybackRequest value) => value.writeToBuffer(),
           $0.ReleasePlaybackResponse.fromBuffer);
+  static final _$warmStream =
+      $grpc.ClientMethod<$0.WarmStreamRequest, $0.WarmStreamResponse>(
+          '/mycelium.MediaPipeline/WarmStream',
+          ($0.WarmStreamRequest value) => value.writeToBuffer(),
+          $0.WarmStreamResponse.fromBuffer);
 }
 
 @$pb.GrpcServiceName('mycelium.MediaPipeline')
@@ -542,6 +554,15 @@ abstract class MediaPipelineServiceBase extends $grpc.Service {
         ($core.List<$core.int> value) =>
             $0.ReleasePlaybackRequest.fromBuffer(value),
         ($0.ReleasePlaybackResponse value) => value.writeToBuffer()));
+    $addMethod(
+        $grpc.ServiceMethod<$0.WarmStreamRequest, $0.WarmStreamResponse>(
+            'WarmStream',
+            warmStream_Pre,
+            false,
+            false,
+            ($core.List<$core.int> value) =>
+                $0.WarmStreamRequest.fromBuffer(value),
+            ($0.WarmStreamResponse value) => value.writeToBuffer()));
   }
 
   $async.Future<$0.CatalogResponse> getCatalog_Pre($grpc.ServiceCall $call,
@@ -706,4 +727,12 @@ abstract class MediaPipelineServiceBase extends $grpc.Service {
 
   $async.Future<$0.ReleasePlaybackResponse> releasePlayback(
       $grpc.ServiceCall call, $0.ReleasePlaybackRequest request);
+
+  $async.Future<$0.WarmStreamResponse> warmStream_Pre($grpc.ServiceCall $call,
+      $async.Future<$0.WarmStreamRequest> $request) async {
+    return warmStream($call, await $request);
+  }
+
+  $async.Future<$0.WarmStreamResponse> warmStream(
+      $grpc.ServiceCall call, $0.WarmStreamRequest request);
 }

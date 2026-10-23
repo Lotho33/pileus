@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../core/theme/app_theme.dart';
+import '../core/utils/metrics.dart';
 import 'mobile_home_screen.dart';
 import 'mobile_search_screen.dart';
 import 'mobile_settings_screen.dart';
@@ -20,6 +21,13 @@ class MobileShell extends StatefulWidget {
 class _MobileShellState extends State<MobileShell> {
   late int _tab = widget.initialTab;
   DateTime? _lastBack;
+
+  @override
+  void initState() {
+    super.initState();
+    // Startup clock (Metrics.startup) ends on the home's first frame.
+    WidgetsBinding.instance.addPostFrameCallback((_) => Metrics.homeShown());
+  }
 
   void _onBack(bool didPop, Object? _) {
     if (didPop) return;

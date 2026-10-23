@@ -380,9 +380,23 @@ class _ContinueWatchingCardState extends State<_ContinueWatchingCard> {
   // tap. The timer fires the context menu independently of repeats (same
   // approach _PosterCardView already uses in card_carousel_block_view.dart).
   Timer? _holdTimer;
+  // Resting on a card is the strongest "about to resume" signal the home
+  // has: warm the exact stream the tap will resume (playableID, see
+  // continueWatchingPlayerExtra). Passing over it cancels before the delay.
+  WarmTicket? _warm;
+
+  void _onFocusChange(bool v) {
+    setState(() => _focused = v);
+    _warm?.cancel();
+    _warm = v
+        ? getIt<StreamWarmer>().schedule(
+            widget.item.providerID, () async => widget.item.playableID)
+        : null;
+  }
 
   @override
   void dispose() {
+    _warm?.cancel();
     _holdTimer?.cancel();
     _leftGate.dispose();
     super.dispose();
@@ -418,7 +432,7 @@ class _ContinueWatchingCardState extends State<_ContinueWatchingCard> {
     final scale = _focused ? AppScale.focusScaleCard : 1.0;
     return Focus(
       focusNode: widget.focusNode,
-      onFocusChange: (v) => setState(() => _focused = v),
+      onFocusChange: _onFocusChange,
       onKeyEvent: (_, event) {
         // See _PosterCardView's onKeyEvent in card_carousel_block_view.dart
         // for why arrowUp/arrowDown report onHoldChanged on both press and

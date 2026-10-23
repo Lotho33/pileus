@@ -21,7 +21,7 @@ class ResolvingMediaStream extends PlaybackState {
 }
 
 /// Intermediate update from the ResolveStream RPC while a stage of the
-/// resolve is in progress (e.g. "falling back to the extractor…"). `status`
+/// resolve is in progress (e.g. "trying another source…"). `status`
 /// is "loading"|"success"|"error"|"warning" — the UI must only use it to
 /// pick an icon/animation, never branch logic on `message`'s text. An
 /// unrecognized status must be treated like "loading" (safe default).

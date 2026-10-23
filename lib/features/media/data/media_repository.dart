@@ -3,6 +3,7 @@ import 'dart:convert';
 
 import 'package:fixnum/fixnum.dart' show Int64;
 import 'package:flutter/foundation.dart' show debugPrint, kDebugMode;
+import 'package:grpc/grpc.dart' show GrpcError, StatusCode;
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../../core/db/models/layout_cache.dart';
@@ -10,6 +11,7 @@ import '../../../core/di/injection.dart' show getIt;
 import '../../../core/grpc/auth_interceptor.dart';
 import '../../../core/grpc/clients/media_client.dart' hide ContinueWatchingItem;
 import '../../../core/grpc/grpc_errors.dart';
+import '../../../core/utils/perf_log.dart';
 import '../../auth/data/auth_repository.dart';
 import '../../player/content_view_mode.dart';
 import '../../settings/data/settings_repository.dart';
@@ -34,6 +36,10 @@ class MediaRepository {
   SettingsRepository get _settings => getIt<SettingsRepository>();
 
   static const int _cacheTtlSeconds = 86400; // 24h default for static catalogs
+  // Past its TTL a cached catalog is still shown at once — and refreshed in
+  // the background (see getCatalog's `stale`) — up to this age. Older than
+  // that it's too far from the real thing to show even for a moment.
+  static const int _staleMaxSeconds = 7 * 86400;
   // Sentinel: cacheTtlSeconds = -1 means "bypass cache entirely" (live/dynamic).
   static const int _noCache = -1;
   // Bump this when the cache schema or field names change to force a full wipe.
@@ -187,7 +193,13 @@ class MediaRepository {
   //   _noCache → bypass cache entirely; always fetch fresh and do NOT persist.
   //
   // forceRefresh: skip TTL check and always fetch from network (still persists).
-  Future<({CatalogResponse catalog, bool fromCache})> getCatalog(
+  //
+  // Stale-while-revalidate: a cached response past its TTL (but younger
+  // than _staleMaxSeconds) is returned at once with `stale: true` instead of
+  // blocking on the network — the caller shows it and then asks again with
+  // forceRefresh (DiscoveryBloc does). The home paints from disk even when
+  // the server is slow or unreachable.
+  Future<({CatalogResponse catalog, bool fromCache, bool stale})> getCatalog(
     String pluginId,
     String catalogId, {
     int page = 1,
@@ -203,7 +215,8 @@ class MediaRepository {
 
       final nowSec = DateTime.now().millisecondsSinceEpoch ~/ 1000;
 
-      if (cached != null && (nowSec - cached.cachedAtTimestamp) < ttl) {
+      final age = cached == null ? 0 : nowSec - cached.cachedAtTimestamp;
+      if (cached != null && age < _staleMaxSeconds) {
         final parsed = _parseCachedCatalog(cached.jsonLayoutStructure);
         // Only use cache if it has items with valid poster URLs.
         if (parsed.items.isNotEmpty &&
@@ -215,7 +228,7 @@ class MediaRepository {
               .toList();
           final hasAnyLogo = mediaCards.any((i) => i.logoUrl.isNotEmpty);
           if (mediaCards.isEmpty || hasAnyLogo) {
-            return (catalog: parsed, fromCache: true);
+            return (catalog: parsed, fromCache: true, stale: age >= ttl);
           }
         }
       }
@@ -228,7 +241,7 @@ class MediaRepository {
     // Don't persist live/no-cache catalogs — their data is always stale
     // by the time it would be read back.
     if (!skipCache) await _updateCache(endpoint, response);
-    return (catalog: response, fromCache: false);
+    return (catalog: response, fromCache: false, stale: false);
   }
 
   // Filters are static per plugin (the plugins themselves cache them for
@@ -356,13 +369,139 @@ class MediaRepository {
     }
   }
 
-  Future<BrowseResponse> browse(
-          String pluginId, String parentId, String childId) =>
-      _client.browse(BrowseRequest(
-          pluginId: pluginId, parentId: parentId, childId: childId));
+  // Opt-in short cache + single flight ([cache]), like getStreams below: a
+  // series' details screen loads a season, and its Play button (and the
+  // stream warmer working out that button's episode) asks for the very same
+  // one. Opt-in because other directories are live (a sports plugin's
+  // events) and must stay fresh.
+  static const _browseCacheTtl = Duration(minutes: 3);
+  final Map<String, (BrowseResponse, DateTime)> _browseCache = {};
+  final Map<String, Future<BrowseResponse>> _browseInFlight = {};
 
-  Future<StreamsResponse> getStreams(String pluginId, String mediaId) =>
-      _client.getStreams(StreamsRequest(pluginId: pluginId, mediaId: mediaId));
+  Future<BrowseResponse> browse(
+      String pluginId, String parentId, String childId,
+      {bool cache = false}) async {
+    if (!cache) {
+      return _client.browse(BrowseRequest(
+          pluginId: pluginId, parentId: parentId, childId: childId));
+    }
+    _checkSessionClient();
+    final key = '${_interceptor.profileId ?? ''}|$pluginId|$parentId|$childId';
+    final cached = _browseCache[key];
+    if (cached != null &&
+        DateTime.now().difference(cached.$2) < _browseCacheTtl) {
+      return cached.$1;
+    }
+    final inFlight = _browseInFlight[key];
+    if (inFlight != null) return inFlight;
+    final future = _fetchAndCacheBrowse(pluginId, parentId, childId, key);
+    _browseInFlight[key] = future;
+    return future;
+  }
+
+  Future<BrowseResponse> _fetchAndCacheBrowse(
+      String pluginId, String parentId, String childId, String key) async {
+    try {
+      final resp = await _client.browse(BrowseRequest(
+          pluginId: pluginId, parentId: parentId, childId: childId));
+      if (resp.items.isNotEmpty || resp.episodes.isNotEmpty) {
+        _browseCache[key] = (resp, DateTime.now());
+      }
+      return resp;
+    } finally {
+      _browseInFlight.remove(key);
+    }
+  }
+
+  // Short session cache + single flight, like getDetails. The sources of a
+  // title are asked for by its details screen, then again by the Play (the
+  // bloc), the episode popup, the resume lookup and the stream warmer — one
+  // call now serves them all. Keyed by profile too: a plugin may order the
+  // sources by the profile's last language (the last one used first), and
+  // that order decides which source a Play picks. Only successes are kept.
+  static const _streamsCacheTtl = Duration(minutes: 3);
+  final Map<String, (StreamsResponse, DateTime)> _streamsCache = {};
+  final Map<String, Future<StreamsResponse>> _streamsInFlight = {};
+  // The client the session caches/flags below belong to: a server switch
+  // (rebuildGrpcClients) registers a new one, and nothing learned from the
+  // old server may leak onto the new one.
+  MediaGrpcClient? _sessionClient;
+
+  void _checkSessionClient() {
+    final c = _client;
+    if (identical(c, _sessionClient)) return;
+    _sessionClient = c;
+    _streamsCache.clear();
+    _browseCache.clear();
+    _warmUnsupported = false;
+    _warmDisabledPlugins.clear();
+  }
+
+  Future<StreamsResponse> getStreams(String pluginId, String mediaId) async {
+    _checkSessionClient();
+    final key = '${_interceptor.profileId ?? ''}|$pluginId|$mediaId';
+    final cached = _streamsCache[key];
+    if (cached != null &&
+        DateTime.now().difference(cached.$2) < _streamsCacheTtl) {
+      return cached.$1;
+    }
+    final inFlight = _streamsInFlight[key];
+    if (inFlight != null) return inFlight;
+    final future = _fetchAndCacheStreams(pluginId, mediaId, key);
+    _streamsInFlight[key] = future;
+    return future;
+  }
+
+  // Plain async/await + try/finally — see _fetchAndCacheDetails.
+  Future<StreamsResponse> _fetchAndCacheStreams(
+      String pluginId, String mediaId, String key) async {
+    try {
+      final resp = await _client.getStreams(
+          StreamsRequest(pluginId: pluginId, mediaId: mediaId));
+      // An empty list can be a plugin that isn't ready yet — never let it
+      // stick (same rule as the search filters).
+      if (resp.sources.isNotEmpty) _streamsCache[key] = (resp, DateTime.now());
+      return resp;
+    } finally {
+      _streamsInFlight.remove(key);
+    }
+  }
+
+  // WarmStream state for this session: a server without the RPC
+  // (UNIMPLEMENTED) and the plugins it said it won't warm
+  // (skipped/disabled) aren't asked again until the server changes.
+  bool _warmUnsupported = false;
+  final Set<String> _warmDisabledPlugins = {};
+
+  /// False once the server said it won't warm [pluginId] (or can't warm at
+  /// all) — lets the caller skip working out a stream id for nothing.
+  bool canWarm(String pluginId) {
+    _checkSessionClient();
+    return !_warmUnsupported && !_warmDisabledPlugins.contains(pluginId);
+  }
+
+  /// Asks the server to prepare [streamId] ahead of Play (WarmStream, see
+  /// proto/media.proto). Fire-and-forget, never awaited and never retried:
+  /// `started`/`joined`/`skipped` all need nothing more from us. [streamId]
+  /// must be exactly the one the Play will send to ResolveStream — see
+  /// pickSourceByLabel.
+  void warmStream(String pluginId, String streamId) {
+    if (pluginId.isEmpty || streamId.isEmpty || !canWarm(pluginId)) return;
+    unawaited(_client
+        .warmStream(WarmStreamRequest(pluginId: pluginId, streamId: streamId))
+        .then((r) {
+      perf('warm $pluginId $streamId → ${r.outcome}'
+          '${r.reason.isEmpty ? '' : ' (${r.reason})'}');
+      if (r.outcome == 'skipped' && r.reason == 'disabled') {
+        _warmDisabledPlugins.add(pluginId);
+      }
+    }).catchError((Object e) {
+      if (e is GrpcError && e.code == StatusCode.unimplemented) {
+        _warmUnsupported = true;
+      }
+      perf('warm $pluginId $streamId failed: $e');
+    }));
+  }
 
   /// [startPositionSec]: the Continue Watching resume point, when applicable
   /// (see resume_seek.dart's resolveStartPositionSec) — lets the server warm
@@ -439,8 +578,63 @@ class MediaRepository {
   Future<PluginListResponse> _fetchPluginList() => _listPluginsInFlight ??=
       _client.listPlugins().whenComplete(() => _listPluginsInFlight = null);
 
+  // Last ListPlugins answer per profile, on disk (a layoutcache row, so
+  // "Svuota cache" and a cache-version bump drop it too): what the home is
+  // drawn from at the next cold start before the server has answered —
+  // see cachedPlugins / PluginBloc._onLoad. Written only when it changed:
+  // the 30 s poll would otherwise rewrite the same bytes forever.
+  static const String _pluginsSnapshotPrefix = '__plugins_snapshot__:';
+  String? _lastPluginsSnapshot;
+
+  void _savePluginsSnapshot(PluginListResponse resp) {
+    final pid = _interceptor.profileId;
+    if (pid == null || pid.isEmpty) return;
+    final encoded = base64Encode(resp.writeToBuffer());
+    if ('$pid|$encoded' == _lastPluginsSnapshot) return;
+    _lastPluginsSnapshot = '$pid|$encoded';
+    unawaited(_writeEntry(LayoutCache()
+      ..screenEndpoint = '$_pluginsSnapshotPrefix$pid'
+      ..jsonLayoutStructure = encoded
+      ..cachedAtTimestamp = DateTime.now().millisecondsSinceEpoch ~/ 1000));
+  }
+
+  PluginListResponse? _readPluginsSnapshot(String profileId) {
+    final entry = _readEntry('$_pluginsSnapshotPrefix$profileId');
+    if (entry == null || entry.jsonLayoutStructure.isEmpty) return null;
+    try {
+      return PluginListResponse.fromBuffer(
+          base64Decode(entry.jsonLayoutStructure));
+    } catch (_) {
+      return null;
+    }
+  }
+
+  /// Synchronous — the splash asks it before AuthBloc has done anything:
+  /// can the home be drawn from disk for [profileId] right away?
+  bool hasStartupSnapshot(String profileId) =>
+      profileId.isNotEmpty && _readPluginsSnapshot(profileId) != null;
+
+  /// The plugin list as of the last successful ListPlugins for the active
+  /// profile — same order and home customisation as [listPlugins], no
+  /// network. Null when there's none. Plugin statuses in it are as old as
+  /// the snapshot; the caller replaces them with the live answer.
+  Future<List<PluginInfo>?> cachedPlugins() async {
+    final pid = _interceptor.profileId;
+    if (pid == null || pid.isEmpty) return null;
+    final resp = _readPluginsSnapshot(pid);
+    if (resp == null || resp.plugins.isEmpty) return null;
+    return _applyPluginPrefs(await _orderPlugins(resp), await loadPluginPrefs());
+  }
+
   Future<List<PluginInfo>> _orderedPlugins() async {
     final resp = await _fetchPluginList();
+    _savePluginsSnapshot(resp);
+    final sorted = await _orderPlugins(resp);
+    _lastOrdered = sorted;
+    return sorted;
+  }
+
+  Future<List<PluginInfo>> _orderPlugins(PluginListResponse resp) async {
     // mycelium-core's ListPlugins ranges over a Go map internally, so the
     // wire order is randomized on every single call — never rely on it.
     // Sorting here gives a stable fallback (both for a profile that never
@@ -470,7 +664,6 @@ class MediaRepository {
       }
       sorted.addAll(byId.values); // newly added plugins go to the end, by name
     }
-    _lastOrdered = sorted;
     return sorted;
   }
 
@@ -711,6 +904,7 @@ class MediaRepository {
         pluginId: providerID,
         mediaId: playableID,
       ));
+      _dropFromCwSnapshot(providerID, playableID);
       return true;
     } catch (e) {
       if (_handledSessionExpiry(e)) return false;
@@ -728,6 +922,15 @@ class MediaRepository {
   /// ask "is there progress for this specific series/movie?" instead of
   /// fetching the whole list and filtering client-side.
   Future<List<ContinueWatchingItem>> getContinueWatching(
+      {int limit = 20, String? parentId, String? pluginId}) async =>
+      await fetchContinueWatching(
+              limit: limit, parentId: parentId, pluginId: pluginId) ??
+          const [];
+
+  /// [getContinueWatching] that tells a failure (null) apart from an empty
+  /// list — ContinueWatchingBloc must not replace the row it drew from disk
+  /// with nothing just because the server didn't answer.
+  Future<List<ContinueWatchingItem>?> fetchContinueWatching(
       {int limit = 20, String? parentId, String? pluginId}) async {
     try {
       final resp = await _client.getContinueWatching(ContinueWatchingRequest(
@@ -735,7 +938,69 @@ class MediaRepository {
         parentId: parentId,
         pluginId: pluginId,
       ));
-      final items = resp.items
+      // The home row (unfiltered) is kept on disk per profile — drawn at the
+      // next cold start before the server answers (cachedContinueWatching).
+      if (parentId == null && pluginId == null) _saveCwSnapshot(resp);
+      final items = _cwItems(resp);
+      // A format remembered for a content lasts as long as its Continue
+      // Watching row — only a successful, unfiltered fetch can say which
+      // rows are gone (never the [] an error returns below).
+      if (parentId == null && pluginId == null) {
+        contentViewModes.prune(items, complete: items.length < limit);
+      }
+      return items;
+    } catch (e) {
+      if (_handledSessionExpiry(e)) return null;
+      if (_handledProfileLock(e)) return null;
+      if (kDebugMode) debugPrint('[MediaRepo] getContinueWatching error: $e');
+      return null;
+    }
+  }
+
+  static const String _cwSnapshotPrefix = '__cw_snapshot__:';
+
+  void _saveCwSnapshot(ContinueWatchingResponse resp) {
+    final pid = _interceptor.profileId;
+    if (pid == null || pid.isEmpty) return;
+    unawaited(_writeEntry(LayoutCache()
+      ..screenEndpoint = '$_cwSnapshotPrefix$pid'
+      ..jsonLayoutStructure = base64Encode(resp.writeToBuffer())
+      ..cachedAtTimestamp = DateTime.now().millisecondsSinceEpoch ~/ 1000));
+  }
+
+  // A removed row must not come back from disk at the next cold start (for
+  // the second or two before the live list replaces it).
+  void _dropFromCwSnapshot(String pluginId, String mediaId) {
+    final pid = _interceptor.profileId;
+    if (pid == null || pid.isEmpty) return;
+    final entry = _readEntry('$_cwSnapshotPrefix$pid');
+    if (entry == null || entry.jsonLayoutStructure.isEmpty) return;
+    try {
+      final resp = ContinueWatchingResponse.fromBuffer(
+          base64Decode(entry.jsonLayoutStructure));
+      resp.items.removeWhere(
+          (i) => i.pluginId == pluginId && i.mediaId == mediaId);
+      _saveCwSnapshot(resp);
+    } catch (_) {}
+  }
+
+  /// The home's Continue Watching row as of the last successful fetch for
+  /// the active profile, no network. Null when there's none.
+  List<ContinueWatchingItem>? cachedContinueWatching() {
+    final pid = _interceptor.profileId;
+    if (pid == null || pid.isEmpty) return null;
+    final entry = _readEntry('$_cwSnapshotPrefix$pid');
+    if (entry == null || entry.jsonLayoutStructure.isEmpty) return null;
+    try {
+      return _cwItems(ContinueWatchingResponse.fromBuffer(
+          base64Decode(entry.jsonLayoutStructure)));
+    } catch (_) {
+      return null;
+    }
+  }
+
+  List<ContinueWatchingItem> _cwItems(ContinueWatchingResponse resp) =>
+      resp.items
           .map((i) => ContinueWatchingItem(
                 providerID: i.pluginId,
                 playableID: i.mediaId,
@@ -753,20 +1018,6 @@ class MediaRepository {
                 episodeNumber: i.episodeNumber,
               ))
           .toList();
-      // A format remembered for a content lasts as long as its Continue
-      // Watching row — only a successful, unfiltered fetch can say which
-      // rows are gone (never the [] an error returns below).
-      if (parentId == null && pluginId == null) {
-        contentViewModes.prune(items, complete: items.length < limit);
-      }
-      return items;
-    } catch (e) {
-      if (_handledSessionExpiry(e)) return [];
-      if (_handledProfileLock(e)) return [];
-      if (kDebugMode) debugPrint('[MediaRepo] getContinueWatching error: $e');
-      return [];
-    }
-  }
 
   // ── Offline downloads ────────────────────────────────────────────────────
   // Thin pass-throughs, deliberately NOT swallowing errors here (unlike

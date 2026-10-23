@@ -11,7 +11,9 @@ import '../../../core/theme/app_scale.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../player/android_video_settings.dart';
 import '../../../shared/widgets/ambient_glow_background.dart';
+import '../../../shared/widgets/metrics_dialog.dart';
 import '../../../shared/widgets/settings/settings_header.dart';
+import '../../../shared/widgets/settings/settings_nav_row.dart';
 import '../../../shared/widgets/settings/settings_section_header.dart';
 import '../../../shared/widgets/settings/settings_toggle_row.dart';
 import '../../../shared/widgets/settings/subtitle_style_section.dart';
@@ -141,6 +143,12 @@ class _PreferencesBodyState extends State<_PreferencesBody> {
         SizedBox(height: AppScale.space(context, 12)),
         const SettingsSectionHeader('Avanzate'),
         const _DiagnosticsPrefRow(),
+        SettingsNavRow(
+          icon: Icons.timer_outlined,
+          label: 'Tempi di risposta',
+          subtitle: 'Avvio, apertura titoli, Play → primo frame',
+          onTap: () => showMetricsDialog(context),
+        ),
         const SizedBox(height: 16),
       ],
     );

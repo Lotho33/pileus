@@ -6,6 +6,7 @@ import 'core/app_lifecycle.dart';
 import 'core/di/injection.dart';
 import 'core/perf_profile.dart';
 import 'core/utils/error_hooks.dart';
+import 'core/utils/metrics.dart';
 import 'core/utils/perf_log.dart';
 import 'desktop/desktop_app.dart';
 import 'features/settings/data/settings_repository.dart';
@@ -24,6 +25,7 @@ import 'features/settings/data/settings_repository.dart';
 void main() => runDesktopApp();
 
 Future<void> runDesktopApp() async {
+  Metrics.markAppStart();
   WidgetsFlutterBinding.ensureInitialized();
   installErrorHooks();
 

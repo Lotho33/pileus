@@ -15,6 +15,8 @@ import '../../../shared/widgets/error_retry_view.dart';
 import '../../../shared/widgets/pileus_spinner.dart';
 import '../../../shared/widgets/tv_focusable.dart';
 import '../data/media_repository.dart';
+import '../../player/source_continuity.dart' show pickSourceByLabel;
+import '../../player/stream_warmer.dart';
 import 'package:cached_network_image_platform_interface/cached_network_image_platform_interface.dart'
     show ImageRenderMethodForWeb;
 
@@ -81,12 +83,25 @@ class _EpisodeDetailScreenState extends State<EpisodeDetailScreen> {
   List<StreamSource> _sources = [];
   bool _loading = true;
   String? _error;
+  WarmTicket? _warm;
 
   @override
   void initState() {
     super.initState();
     _repo = getIt<MediaRepository>();
-    _load();
+    final loaded = _load();
+    // Resolve ahead of Play the first (auto-focused) source — the Play's own
+    // choice too, see pickSourceByLabel.
+    _warm = getIt<StreamWarmer>().schedule(widget.pluginId, () async {
+      await loaded;
+      return pickSourceByLabel(_sources, '')?.id;
+    });
+  }
+
+  @override
+  void dispose() {
+    _warm?.cancel();
+    super.dispose();
   }
 
   Future<void> _load() async {
@@ -594,7 +609,8 @@ class _EpisodeBodyState extends State<_EpisodeBody> {
                             Text('Nessun flusso disponibile.',
                                 style: TextStyle(
                                     color: Colors.white54, fontSize: 15 * s))
-                          else if (sources.length == 1)
+                          else if (sources.length == 1 &&
+                              sources.first.label.isEmpty)
                             Wrap(
                               spacing: 12 * s,
                               runSpacing: 12 * s,
@@ -624,7 +640,9 @@ class _EpisodeBodyState extends State<_EpisodeBody> {
                             )
                           else ...[
                             Text(
-                              'SELEZIONA LINGUA',
+                              sources.length == 1
+                                  ? 'LINGUA DISPONIBILE'
+                                  : 'SELEZIONA LINGUA',
                               style: TextStyle(
                                 color: Colors.white38,
                                 fontSize: 11 * s,

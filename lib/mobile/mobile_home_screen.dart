@@ -27,6 +27,7 @@ import '../features/media/data/media_repository.dart';
 import '../features/player/continue_watching_launch.dart';
 import '../features/player/episode_poster.dart' show episodeBadge;
 import '../features/player/resolve_and_play.dart' show PlayerLaunchGuard;
+import '../features/player/stream_warmer.dart';
 import 'widgets/mobile_hero.dart';
 import 'widgets/mobile_poster_card.dart';
 import 'widgets/plugin_switcher_pill.dart';
@@ -654,6 +655,11 @@ class _CwCard extends StatelessWidget {
   void _sheet(BuildContext context) {
     if (!TapGuard.acquire()) return; // double tap — see tap_guard.dart
     final cwBloc = context.read<ContinueWatchingBloc>();
+    // The sheet open is a "maybe resume": warm the exact stream "Riprendi"
+    // resumes (playableID, see continueWatchingPlayerExtra). Closing it
+    // before the delay cancels.
+    final warm = getIt<StreamWarmer>()
+        .schedule(item.providerID, () async => item.playableID);
     showModalBottomSheet<void>(
       context: context,
       backgroundColor: AppTheme.surface,
@@ -723,7 +729,7 @@ class _CwCard extends StatelessWidget {
           ],
         ),
       ),
-    );
+    ).whenComplete(warm.cancel);
   }
 
   @override

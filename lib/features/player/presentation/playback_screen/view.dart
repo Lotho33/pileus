@@ -269,8 +269,8 @@ class _PlaybackViewState extends State<_PlaybackView> {
     final chosenSec = args.isLive
         ? _settings.getLiveBufferSec()
         : _settings.getVodBufferSec();
-    _bufferSec = appliedReserveSec(chosenSec,
-        live: args.isLive, lowPower: lowPowerUi);
+    _bufferSec =
+        appliedReserveSec(chosenSec, live: args.isLive, lowPower: lowPowerUi);
     perf('screen: buffer reserve chosen=${chosenSec}s applied=${_bufferSec}s'
         '${_bufferSec != chosenSec ? ' (hardware modesto cap)' : ''}');
 
@@ -522,8 +522,12 @@ class _PlaybackViewState extends State<_PlaybackView> {
       // (which, unlike live, means a real seek back to the resume point —
       // cheap to avoid doing twice).
       final threshold = isLive
-          ? (buffering ? const Duration(seconds: 18) : const Duration(seconds: 9))
-          : (buffering ? const Duration(seconds: 25) : const Duration(seconds: 15));
+          ? (buffering
+              ? const Duration(seconds: 18)
+              : const Duration(seconds: 9))
+          : (buffering
+              ? const Duration(seconds: 25)
+              : const Duration(seconds: 15));
       if (stalledFor < threshold) return;
 
       // VOD's reopen must land back where playback actually stalled, same
@@ -535,7 +539,8 @@ class _PlaybackViewState extends State<_PlaybackView> {
         if (!isLive) {
           final retrySec =
               _lastEnginePos > Duration.zero ? _lastEnginePos.inSeconds : 0;
-          _resumeSeek = ResumeSeekController(targetSec: retrySec, isLive: false);
+          _resumeSeek =
+              ResumeSeekController(targetSec: retrySec, isLive: false);
           _reresolveCurrent(startSec: retrySec);
         } else {
           _reresolveCurrent(startSec: 0);
@@ -628,8 +633,8 @@ class _PlaybackViewState extends State<_PlaybackView> {
       return;
     }
     final now = DateTime.now();
-    _autoRestarts.removeWhere(
-        (t) => now.difference(t) > kVideoFrozenRestartWindow);
+    _autoRestarts
+        .removeWhere((t) => now.difference(t) > kVideoFrozenRestartWindow);
     if (_autoRestarts.length >= kVideoFrozenRestartBudget) {
       perf('screen: video frozen — auto-restart budget used up, manual only');
       return;
@@ -1152,6 +1157,7 @@ class _PlaybackViewState extends State<_PlaybackView> {
         _resumeSeek.isDone) {
       perf('screen: ***** FIRST FRAME VISIBLE ***** (videoStarted)');
       _resumeCoverSafetyTimer?.cancel();
+      Metrics.playFirstFrame();
       setState(() => _videoStarted = true);
       _uiCubit.onVideoStarted();
       // The overlay is visible from the start (PlayerUiState.overlayVisible
@@ -1282,34 +1288,34 @@ class _PlaybackViewState extends State<_PlaybackView> {
             sourceLabel: sourceLabel,
             prefetched: prefetched,
           ).then((nextStreamId) => repo.updateProgress(
-            pluginId: pluginId,
-            mediaId: nextStreamId,
-            parentId: parentId,
-            // 31 s, and totalDuration left at 0 on purpose: the card's bar
-            // reads 0% (progressFraction needs total_time), and resuming
-            // this row starts ~30 s in — past the recap/logo stings on most
-            // episodes.
-            position: const Duration(seconds: 31),
-            title: nextTitle.isNotEmpty ? nextTitle : _showTitle,
-            showTitle: _showTitle,
-            // The *next* episode's own thumbnail, not the one currently
-            // playing's — see _currentEpisodePoster()'s doc comment.
-            poster: posterForEpisode(
-              episodeThumbs: _currentEpisodeThumbs,
-              index: _currentEpisodeIndex + 1,
-              seriesCoverUrl: widget.args.seriesCoverUrl,
-              seriesPoster: widget.args.seriesPoster,
-              fallback: widget.args.poster,
-            ),
-            rating: _rating,
-            genres: _genres,
-            plot: _plot,
-            year: _year,
-            seasonNumber: numberForEpisode(
-                _currentSeasonNumbers, _currentEpisodeIndex + 1),
-            episodeNumber: numberForEpisode(
-                _currentEpisodeNumbers, _currentEpisodeIndex + 1),
-          ));
+                pluginId: pluginId,
+                mediaId: nextStreamId,
+                parentId: parentId,
+                // 31 s, and totalDuration left at 0 on purpose: the card's bar
+                // reads 0% (progressFraction needs total_time), and resuming
+                // this row starts ~30 s in — past the recap/logo stings on most
+                // episodes.
+                position: const Duration(seconds: 31),
+                title: nextTitle.isNotEmpty ? nextTitle : _showTitle,
+                showTitle: _showTitle,
+                // The *next* episode's own thumbnail, not the one currently
+                // playing's — see _currentEpisodePoster()'s doc comment.
+                poster: posterForEpisode(
+                  episodeThumbs: _currentEpisodeThumbs,
+                  index: _currentEpisodeIndex + 1,
+                  seriesCoverUrl: widget.args.seriesCoverUrl,
+                  seriesPoster: widget.args.seriesPoster,
+                  fallback: widget.args.poster,
+                ),
+                rating: _rating,
+                genres: _genres,
+                plot: _plot,
+                year: _year,
+                seasonNumber: numberForEpisode(
+                    _currentSeasonNumbers, _currentEpisodeIndex + 1),
+                episodeNumber: numberForEpisode(
+                    _currentEpisodeNumbers, _currentEpisodeIndex + 1),
+              ));
           progressFuture.catchError((_) => null).whenComplete(() =>
               repo.deleteProgress(providerID: pluginId, playableID: currentId));
         } else if (!_hasNextEpisode && frac >= kCwDropThreshold) {
@@ -1332,9 +1338,9 @@ class _PlaybackViewState extends State<_PlaybackView> {
   //
   // Used to happen unconditionally in initState, i.e. the instant this
   // screen opened — before the plugin has even started resolving the
-  // stream (which for a live "embed" source can mean several seconds of
-  // server-side headless-browser work: "carico l'embed nel browser",
-  // "estrazione flusso video" in the UI). On the weak Amlogic TV boxes this
+  // stream (which for some live sources can mean several seconds of
+  // server-side work, narrated by the progress messages in the UI). On the
+  // weak Amlogic TV boxes this
   // screen also targets (Tanix W2 / S905W, Mali-450 — same class of
   // hardware behind the ImpellerBackend/EnableSurfaceControl workarounds in
   // AndroidManifest.xml), a hard whole-screen compositor freeze has been
@@ -1586,12 +1592,15 @@ class _PlaybackViewState extends State<_PlaybackView> {
         _progressCleared = false;
         _elsewhereReported = false;
       });
-      _resumeSeek = ResumeSeekController(targetSec: 0, isLive: widget.args.isLive);
+      _resumeSeek =
+          ResumeSeekController(targetSec: 0, isLive: widget.args.isLive);
       _startPlayback(
         prefetched.resolvedUrl,
         prefetched.httpHeaders,
-        {if (prefetched.skipTimesJson != null)
-          'skip_times': prefetched.skipTimesJson!},
+        {
+          if (prefetched.skipTimesJson != null)
+            'skip_times': prefetched.skipTimesJson!
+        },
       );
       return;
     }
@@ -1655,7 +1664,8 @@ class _PlaybackViewState extends State<_PlaybackView> {
         _elsewhereReported = false;
       });
       // A new episode starts from 0 — don't carry the resume target.
-      _resumeSeek = ResumeSeekController(targetSec: 0, isLive: widget.args.isLive);
+      _resumeSeek =
+          ResumeSeekController(targetSec: 0, isLive: widget.args.isLive);
       context.read<PlaybackBloc>().add(
             SelectStreamEvent(
                 pluginId: widget.args.epPluginId, streamId: match.id),
@@ -1751,6 +1761,13 @@ class _PlaybackViewState extends State<_PlaybackView> {
   // back to — context.pop() there just leaves a black screen — so fall back
   // to /home.
   void _exitPlayer() {
+    // Final save before stop(), which zeroes the position — dispose()'s own
+    // save then reads 0 and skips, so without this everything since the
+    // last 15s heartbeat was lost. Same order as the episode-switch saves in
+    // _resolveEpisodeAt. Not while a resume seek is still pending: the
+    // position then is the pre-seek one (a few seconds in), which would
+    // overwrite the real resume point _markOpened already stored.
+    if (!widget.args.isLive && _resumeSeek.isDone) _saveProgress();
     _engine.stop();
     // dispose() (below) calls MediaRepository.releasePlayback() as this
     // screen unmounts — no need to also do it here.
@@ -2176,7 +2193,8 @@ class _PlaybackViewState extends State<_PlaybackView> {
                         engine: _engine,
                         volume: _volume,
                         onClose: _closeSettings,
-                        onAudioTrackSelected: (t) => _audioPref.remember(t.label),
+                        onAudioTrackSelected: (t) =>
+                            _audioPref.remember(t.label),
                         onVolumeChanged: (v) {
                           setState(() => _volume = v);
                           _engine.setVolume(v);
@@ -2217,13 +2235,12 @@ class _PlaybackViewState extends State<_PlaybackView> {
                         // entirely).
                         _resumeSeek = ResumeSeekController(
                             targetSec: retrySec, isLive: widget.args.isLive);
-                        final direct =
-                            sameTitle ? widget.args.directUrl : null;
+                        final direct = sameTitle ? widget.args.directUrl : null;
                         if (direct != null && direct.isNotEmpty) {
                           context.read<PlaybackBloc>().add(UseDirectUrlEvent(
                               url: direct,
                               httpHeaders: widget.args.directUrlHeaders,
-              format: widget.args.directUrlFormat));
+                              format: widget.args.directUrlFormat));
                         } else {
                           _reresolveCurrent(
                               startSec: widget.args.isLive ? 0 : retrySec);

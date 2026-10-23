@@ -7,6 +7,7 @@ import 'package:go_router/go_router.dart';
 import '../core/di/injection.dart';
 import '../core/grpc/clients/media_client.dart' hide ContinueWatchingItem;
 import '../core/theme/app_theme.dart';
+import '../core/utils/metrics.dart';
 import '../features/auth/bloc/auth_bloc.dart';
 import '../features/auth/bloc/auth_event.dart';
 import '../features/media/bloc/continue_watching_bloc.dart';
@@ -49,6 +50,8 @@ class _DesktopShellState extends State<DesktopShell> {
   @override
   void initState() {
     super.initState();
+    // Startup clock (Metrics.startup) ends on the home's first frame.
+    WidgetsBinding.instance.addPostFrameCallback((_) => Metrics.homeShown());
     final pb = getIt<PluginBloc>();
     if (pb.state is PluginInitial) pb.add(const LoadPluginsEvent());
     final cw = getIt<ContinueWatchingBloc>();

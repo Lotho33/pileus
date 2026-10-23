@@ -125,7 +125,7 @@ class _ItemSheetState extends State<_ItemSheet> {
         if (seasons.isNotEmpty) {
           final s = seasons.firstWhere((x) => x.episodeCount > 0,
               orElse: () => seasons.first);
-          final b = await repo.browse(widget.pluginId, s.directoryId, '');
+          final b = await repo.browse(widget.pluginId, s.directoryId, '', cache: true);
           if (mounted && b.episodes.isNotEmpty) {
             final eps = b.episodes;
             final series = d.series;

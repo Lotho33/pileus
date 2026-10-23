@@ -59,4 +59,21 @@ void main() {
     await Future.wait([running, ...futures]);
     expect(order, ['new-1', 'new-2', 'old-1', 'old-2']);
   });
+
+  test('low-priority work waits for every normal waiter and never steals '
+      'the latest group', () async {
+    final gate = RequestGate(1);
+    final order = <String>[];
+    final hold = Completer<void>();
+    final running = gate.run(() => hold.future, group: 'a');
+    final futures = [
+      gate.run(() async => order.add('warm'), group: 'b', low: true),
+      gate.run(() async => order.add('a-1'), group: 'a'),
+      gate.run(() async => order.add('c-1'), group: 'c'),
+    ];
+    hold.complete();
+    await Future.wait([running, ...futures]);
+    // 'c' is still the latest group (the low task didn't take that over).
+    expect(order, ['c-1', 'a-1', 'warm']);
+  });
 }
