@@ -113,7 +113,8 @@ class _MobileSearchScreenState extends State<MobileSearchScreen> {
     _scrollCtrl.addListener(_onScroll);
     _recentSub = _bloc.stream.listen((s) {
       if (s is DiscoveryLoaded && s.searchQuery.isNotEmpty) {
-        _recent.settled(s.searchQuery, hasResults: s.items.isNotEmpty);
+        _recent.settled(s.pluginId, s.searchQuery,
+            hasResults: s.items.isNotEmpty);
       }
     });
   }
@@ -352,7 +353,7 @@ class _MobileSearchScreenState extends State<MobileSearchScreen> {
                             : 'Cerca film, serie, canali…',
                         onChanged: _onQueryChanged,
                         onSubmitted: () {
-                          _recent.submit(_ctrl.text);
+                          _recent.submit(_pluginId ?? '', _ctrl.text);
                           _run();
                         },
                         onClear: _clearQuery,
@@ -375,8 +376,8 @@ class _MobileSearchScreenState extends State<MobileSearchScreen> {
                               ? const SizedBox(
                                   width: 20,
                                   height: 20,
-                                  child: CircularProgressIndicator(
-                                      strokeWidth: 2),
+                                  child:
+                                      CircularProgressIndicator(strokeWidth: 2),
                                 )
                               : const Icon(Icons.tune_rounded),
                         ),
@@ -414,6 +415,7 @@ class _MobileSearchScreenState extends State<MobileSearchScreen> {
                   builder: (context, s) {
                     if (_submitted.isEmpty) {
                       return RecentSearchesList(
+                        pluginId: _pluginId ?? '',
                         onPick: (q) {
                           _ctrl.text = q;
                           _run();
@@ -470,8 +472,8 @@ class _MobileSearchScreenState extends State<MobileSearchScreen> {
                                   ScrollViewKeyboardDismissBehavior.onDrag,
                               slivers: [
                                 SliverPadding(
-                                  padding: const EdgeInsets.fromLTRB(
-                                      16, 6, 16, 8),
+                                  padding:
+                                      const EdgeInsets.fromLTRB(16, 6, 16, 8),
                                   sliver: SliverGrid(
                                     gridDelegate:
                                         const SliverGridDelegateWithMaxCrossAxisExtent(
@@ -611,7 +613,10 @@ class _Hint extends StatelessWidget {
   final String? actionLabel;
   final VoidCallback? onAction;
   const _Hint(
-      {required this.icon, required this.text, this.actionLabel, this.onAction});
+      {required this.icon,
+      required this.text,
+      this.actionLabel,
+      this.onAction});
 
   @override
   Widget build(BuildContext context) {

@@ -58,6 +58,10 @@ external JSAny? get _hlsGlobal;
 @JS('Hls.isSupported')
 external bool _hlsIsSupportedRaw();
 
+// Safari and every iOS browser report Apple as the vendor (Chromium says
+// "Google Inc.", Firefox "").
+bool get _isAppleWebKit => web.window.navigator.vendor.contains('Apple');
+
 bool get _hlsUsable {
   if (_hlsGlobal == null) return false;
   try {
@@ -162,7 +166,7 @@ const _hlsTraceEvents = [
 /// Web player — a plain HTML5 `<video>` behind an [HtmlElementView].
 ///
 /// SPIKE-LEVEL. Known limits (see docs/WEB.md):
-///  * HLS: native where the browser supports it (Safari), else hls.js
+///  * HLS: native on Apple's WebKit (Safari, iOS), else hls.js
 ///    (bundled). Progressive MP4/WebM plays directly everywhere.
 ///  * `<video>` can't send custom HTTP headers, so header-authenticated
 ///    streams won't load. The mycelium proxy is expected to hand back a
@@ -1119,7 +1123,13 @@ class _ViewState extends State<_View> {
     // (confirmed on Brave: `<video> element error: code=4`
     // MEDIA_ERR_SRC_NOT_SUPPORTED — the exact playlist played back fine in
     // VLC seconds later, so this was never a server-side/playlist problem).
-    final nativeHls =
+    // Chrome on Android, though, *does* answer "probably" (it has its own
+    // HLS player), and that player fails the same streams Tizen's did — a
+    // separate audio rendition, AES-128 segments: black video. So native
+    // HLS only on Apple's WebKit (Safari, every iOS browser, the iOS PWA),
+    // where it's the reference player and MSE may not even exist;
+    // everywhere else hls.js whenever it can run.
+    final nativeHls = _isAppleWebKit &&
         _video.canPlayType('application/vnd.apple.mpegurl') == 'probably';
     // The actual branch decision — without this there's no way to tell
     // "hls.js never got a chance to run" (wrong looksHls, or nativeHls true

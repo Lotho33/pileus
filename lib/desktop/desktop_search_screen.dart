@@ -72,7 +72,8 @@ class _DesktopSearchScreenState extends State<DesktopSearchScreen> {
     _filtersLoader.setVisible(widget.visible);
     _recentSub = _bloc.stream.listen((s) {
       if (s is DiscoveryLoaded && s.searchQuery.isNotEmpty) {
-        _recent.settled(s.searchQuery, hasResults: s.items.isNotEmpty);
+        _recent.settled(s.pluginId, s.searchQuery,
+            hasResults: s.items.isNotEmpty);
       }
     });
   }
@@ -241,7 +242,7 @@ class _DesktopSearchScreenState extends State<DesktopSearchScreen> {
                                 : 'Cerca…',
                             onChanged: _onQueryChanged,
                             onSubmit: () {
-                              _recent.submit(_ctrl.text);
+                              _recent.submit(_pluginId ?? '', _ctrl.text);
                               _run();
                             },
                           ),
@@ -270,8 +271,8 @@ class _DesktopSearchScreenState extends State<DesktopSearchScreen> {
                               ? const SizedBox(
                                   width: 16,
                                   height: 16,
-                                  child: CircularProgressIndicator(
-                                      strokeWidth: 2),
+                                  child:
+                                      CircularProgressIndicator(strokeWidth: 2),
                                 )
                               : const Icon(Icons.tune_rounded, size: 18),
                           label: const Text('Filtri'),
@@ -309,6 +310,7 @@ class _DesktopSearchScreenState extends State<DesktopSearchScreen> {
                     builder: (context, s) {
                       if (_submitted.isEmpty) {
                         return RecentSearchesList(
+                          pluginId: _pluginId ?? '',
                           onPick: (q) {
                             _ctrl.text = q;
                             _run();
@@ -329,8 +331,8 @@ class _DesktopSearchScreenState extends State<DesktopSearchScreen> {
                         return PosterGridSkeleton(
                           maxCrossAxisExtent: bp.cardWidth + 24,
                           childAspectRatio: (bp.cardWidth + 24) / cellH,
-                          padding: EdgeInsets.fromLTRB(
-                              bp.gutter, 10, bp.gutter, 10),
+                          padding:
+                              EdgeInsets.fromLTRB(bp.gutter, 10, bp.gutter, 10),
                           spacing: 18,
                         );
                       }
@@ -380,8 +382,8 @@ class _DesktopSearchScreenState extends State<DesktopSearchScreen> {
                               SliverToBoxAdapter(
                                 child: _LoadMoreFooter(
                                   isLoading: s.isLoadingMore,
-                                  onPressed: () => _bloc
-                                      .add(const LoadMoreSearchEvent()),
+                                  onPressed: () =>
+                                      _bloc.add(const LoadMoreSearchEvent()),
                                 ),
                               ),
                           ],

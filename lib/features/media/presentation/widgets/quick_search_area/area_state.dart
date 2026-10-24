@@ -68,7 +68,8 @@ class _QuickSearchAreaState extends State<QuickSearchArea> {
     super.initState();
     _resultsSub = _bloc.stream.listen((s) {
       if (s is DiscoveryLoaded && s.searchQuery.isNotEmpty) {
-        _recent.settled(s.searchQuery, hasResults: s.items.isNotEmpty);
+        _recent.settled(s.pluginId, s.searchQuery,
+            hasResults: s.items.isNotEmpty);
       }
     });
     _controller.addListener(_onQueryChanged);
@@ -118,7 +119,8 @@ class _QuickSearchAreaState extends State<QuickSearchArea> {
         _expanded = v;
         // Re-read on every open: searches kept on other screens count too.
         if (v) {
-          _recentQueries = RecentSearches.list().take(_recentShown).toList();
+          _recentQueries =
+              RecentSearches.list(widget.pluginId).take(_recentShown).toList();
         }
       });
     }
@@ -131,7 +133,7 @@ class _QuickSearchAreaState extends State<QuickSearchArea> {
 
   void _pickRecent(String q) {
     _focusKeyboard();
-    _recent.submit(q);
+    _recent.submit(widget.pluginId, q);
     _controller.value = TextEditingValue(
         text: q, selection: TextSelection.collapsed(offset: q.length));
     _search(q);
@@ -139,7 +141,7 @@ class _QuickSearchAreaState extends State<QuickSearchArea> {
 
   void _clearRecent() {
     _focusKeyboard();
-    RecentSearches.clear();
+    RecentSearches.clear(widget.pluginId);
     setState(() => _recentQueries = const []);
   }
 
@@ -333,7 +335,7 @@ class _QuickSearchAreaState extends State<QuickSearchArea> {
     // Escape/Back later then lands on a home screen that still has it open,
     // not the clean home the user actually expects to return to.
     final query = _controller.text;
-    _recent.submit(query);
+    _recent.submit(widget.pluginId, query);
     _dismiss();
     context.push('/search/${widget.pluginId}', extra: {
       'pluginName': widget.pluginName,
@@ -592,7 +594,8 @@ class _QuickSearchAreaState extends State<QuickSearchArea> {
                                               // safety-net Focus below), which reads
                                               // as Back doing nothing — stuck with
                                               // the search bar open.
-                                              _recent.submit(_controller.text);
+                                              _recent.submit(widget.pluginId,
+                                                  _controller.text);
                                               _dismiss();
                                               openCatalogItem(context,
                                                   widget.pluginId, item);

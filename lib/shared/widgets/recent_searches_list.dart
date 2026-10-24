@@ -3,29 +3,43 @@ import 'package:flutter/material.dart';
 import '../../core/theme/app_theme.dart';
 import '../../features/media/data/recent_searches.dart';
 
-/// "Ricerche recenti" while the search box is empty (mobile, desktop, web).
-/// Shows [fallback] when there are none. Tapping one runs it again.
+/// "Ricerche recenti" of the active profile in [pluginId], while the search
+/// box is empty (mobile, desktop, web). Shows [fallback] when there are
+/// none. Tapping one runs it again.
 class RecentSearchesList extends StatefulWidget {
+  final String pluginId;
   final ValueChanged<String> onPick;
   final Widget fallback;
 
   const RecentSearchesList(
-      {super.key, required this.onPick, required this.fallback});
+      {super.key,
+      required this.pluginId,
+      required this.onPick,
+      required this.fallback});
 
   @override
   State<RecentSearchesList> createState() => _RecentSearchesListState();
 }
 
 class _RecentSearchesListState extends State<RecentSearchesList> {
-  late List<String> _items = RecentSearches.list();
+  late List<String> _items = RecentSearches.list(widget.pluginId);
+
+  @override
+  void didUpdateWidget(RecentSearchesList old) {
+    super.didUpdateWidget(old);
+    // Another plugin picked on the same screen: its own list.
+    if (old.pluginId != widget.pluginId) {
+      _items = RecentSearches.list(widget.pluginId);
+    }
+  }
 
   Future<void> _remove(String q) async {
-    await RecentSearches.remove(q);
-    if (mounted) setState(() => _items = RecentSearches.list());
+    await RecentSearches.remove(widget.pluginId, q);
+    if (mounted) setState(() => _items = RecentSearches.list(widget.pluginId));
   }
 
   Future<void> _clear() async {
-    await RecentSearches.clear();
+    await RecentSearches.clear(widget.pluginId);
     if (mounted) setState(() => _items = const []);
   }
 

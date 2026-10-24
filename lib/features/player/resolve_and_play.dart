@@ -71,6 +71,7 @@ Future<void> resolveAndPlay(
   String mediaId, {
   Map<String, dynamic>? extra,
   bool chooseLanguage = false,
+  EpisodeInfo? episode,
 }) async {
   // Capture everything that depends on `context` up-front and synchronously:
   // the caller (e.g. a long-press sheet) pops its own route right before
@@ -97,7 +98,10 @@ Future<void> resolveAndPlay(
 
   try {
     await _resolveAndPush(router, navigator, messenger, pluginId, mediaId,
-        extra: extra, chooseLanguage: chooseLanguage, hideSpinner: hideSpinner);
+        extra: extra,
+        chooseLanguage: chooseLanguage,
+        episode: episode,
+        hideSpinner: hideSpinner);
   } finally {
     hideSpinner();
     PlayerLaunchGuard._busy = false;
@@ -112,8 +116,16 @@ Future<void> _resolveAndPush(
   String mediaId, {
   Map<String, dynamic>? extra,
   bool chooseLanguage = false,
+  EpisodeInfo? episode,
   required VoidCallback hideSpinner,
 }) async {
+  // The language sheet also describes the episode: ask for its details
+  // alongside the sources, not after.
+  final details = chooseLanguage
+      ? getIt<MediaRepository>()
+          .getDetails(pluginId, mediaId, urgent: true)
+          .then<DetailsResponse?>((d) => d, onError: (_) => null)
+      : null;
   List<StreamSource> sources;
   Object? fetchError;
   try {
@@ -162,6 +174,8 @@ Future<void> _resolveAndPush(
       sources: preferredFirst(sources, pluginId: pluginId, seriesId: seriesId),
       title: (extra?['title'] as String?) ?? '',
       showTitle: (extra?['showTitle'] as String?) ?? '',
+      episode: episode,
+      details: details,
     );
     if (chosen == null || !navigator.mounted) {
       Metrics.playAbandon();

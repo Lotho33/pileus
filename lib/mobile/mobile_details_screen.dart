@@ -358,6 +358,7 @@ class _Body extends StatelessWidget {
                         pluginId,
                         eps[i].id,
                         chooseLanguage: true,
+                        episode: eps[i],
                         extra: <String, dynamic>{
                           'title': eps[i].title,
                           'showTitle': item.title,

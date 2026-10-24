@@ -97,7 +97,8 @@ class _SearchViewState extends State<_SearchView> {
     _controller.addListener(_onControllerChanged);
     _recentSub = context.read<DiscoveryBloc>().stream.listen((s) {
       if (s is DiscoveryLoaded && s.searchQuery.isNotEmpty) {
-        _recent.settled(s.searchQuery, hasResults: s.items.isNotEmpty);
+        _recent.settled(s.pluginId, s.searchQuery,
+            hasResults: s.items.isNotEmpty);
       }
     });
     _filtersLoader.setPlugin(widget.pluginId);
@@ -151,7 +152,7 @@ class _SearchViewState extends State<_SearchView> {
         isLoadingMore: state.isLoadingMore,
         screenH: h,
         onFirstCardFocus: (fn) => _firstResultFocus.set(fn),
-        onItemOpened: () => _recent.submit(_controller.text),
+        onItemOpened: () => _recent.submit(widget.pluginId, _controller.text),
         onNavigateUp: () {
           // Back up out of the results → land on the keyboard (re-shown),
           // the natural place to keep refining the query.
