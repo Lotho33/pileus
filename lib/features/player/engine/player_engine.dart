@@ -9,6 +9,7 @@ import 'package:media_kit_video/media_kit_video.dart' as mkv;
 
 import '../../../core/utils/metrics.dart';
 import '../../../core/utils/perf_log.dart';
+import '../live_sync.dart';
 import 'buffer_policy.dart';
 import 'decoder_capability_fallback.dart';
 import 'media_track.dart';
@@ -909,6 +910,13 @@ class _MpvPlayerEngine extends PlayerEngine {
 
   mk.Tracks _tracks = const mk.Tracks();
   mk.Track _track = const mk.Track();
+  // Live: same distance from the edge as every other device (LiveSync).
+  // mpv doesn't steer a live stream on its own, nor does media_kit's web
+  // player; the edge is read as the end of what's buffered — a live stream
+  // is fetched up to its newest segment, as long as the reserve reaches it.
+  bool _isLive = false;
+  final _liveSync = LiveSync();
+  Timer? _liveTimer;
   double _volume = 100;
   bool _buffering = false;
   double _bufferPct = 0;
@@ -935,6 +943,7 @@ class _MpvPlayerEngine extends PlayerEngine {
     required int bufferSeconds,
   }) async {
     _style = style;
+    _isLive = isLive;
     // The reserve is time-based (demuxer-readahead-secs / cache-secs, set
     // below once mpv is up); bufferSize (→ demuxer-max-bytes) is only a
     // safety ceiling now, not the user's choice — see buffer_policy.dart.
@@ -1084,13 +1093,39 @@ class _MpvPlayerEngine extends PlayerEngine {
             ? startPosition
             : null));
     _emit();
+    if (_isLive) {
+      _liveSync.reset();
+      _liveTimer?.cancel();
+      _liveTimer = Timer.periodic(LiveSync.checkEvery, (_) => _syncLive());
+    }
+  }
+
+  void _syncLive() {
+    if (!_playerCreated) return;
+    final st = _player.state;
+    if (!st.playing || st.buffering) return;
+    final behind = st.buffer - st.position;
+    if (behind <= Duration.zero) return; // edge not known yet
+    final step = _liveSync.step(behind);
+    if (step.jumpTo != null) {
+      perf('mpv: live ${behind.inSeconds}s behind the edge '
+          '(target ${_liveSync.target?.inSeconds}s) → jumping back');
+      unawaited(_player.seek(st.buffer - step.jumpTo!));
+    }
+    if ((st.rate - step.rate).abs() > 0.001) {
+      unawaited(_player.setRate(step.rate));
+    }
   }
 
   @override
-  Future<void> stop() => _playerCreated ? _player.stop() : Future.value();
+  Future<void> stop() {
+    _liveTimer?.cancel();
+    return _playerCreated ? _player.stop() : Future.value();
+  }
 
   @override
   void dispose() {
+    _liveTimer?.cancel();
     for (final s in _subs) {
       s.cancel();
     }

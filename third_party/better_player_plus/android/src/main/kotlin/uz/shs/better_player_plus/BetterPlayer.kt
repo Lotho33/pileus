@@ -118,6 +118,7 @@ internal class BetterPlayer(
         override fun run() {
             checkVideoFrozen()
             checkDecoderStall()
+            checkLiveLatency()
             maybeSendVideoStats()
             frozenHandler.postDelayed(this, FROZEN_CHECK_INTERVAL_MS)
         }
@@ -133,6 +134,8 @@ internal class BetterPlayer(
     private var stallReported = false
     // PILEUS PATCH: BehindLiveWindowException recoveries, see onPlayerError.
     private val liveWindowRecoveries = ArrayDeque<Long>()
+    // PILEUS PATCH: last jump back to the live target, see checkLiveLatency().
+    private var lastLiveJump = 0L
 
     init {
         val loadBuilder = DefaultLoadControl.Builder()
@@ -448,6 +451,17 @@ internal class BetterPlayer(
         }
         val mediaItemBuilder = MediaItem.Builder()
         mediaItemBuilder.setUri(uri)
+        // PILEUS PATCH: live catch-up. ExoPlayer already steers a live
+        // stream towards its target distance from the edge (the playlist's
+        // HOLD-BACK / EXT-X-START) by nudging the speed; widen the default
+        // 0.97–1.03 so a device that fell a few seconds behind rejoins the
+        // others sooner. Pitch is preserved. No effect on VOD.
+        mediaItemBuilder.setLiveConfiguration(
+            MediaItem.LiveConfiguration.Builder()
+                .setMinPlaybackSpeed(LIVE_MIN_SPEED)
+                .setMaxPlaybackSpeed(LIVE_MAX_SPEED)
+                .build()
+        )
         if (!cacheKey.isNullOrEmpty()) {
             mediaItemBuilder.setCustomCacheKey(cacheKey)
         }
@@ -897,6 +911,31 @@ internal class BetterPlayer(
         return true
     }
 
+    // PILEUS PATCH. Live too far behind its target (after a long
+    // buffering): speeding up at ≤1.05× would take minutes, so jump straight
+    // back to the target (the default position of a live window). "Too far"
+    // = more than one more target behind, at least 12s — the same rule as
+    // the other platforms (lib/features/player/live_sync.dart).
+    private fun checkLiveLatency() {
+        val player = exoPlayer ?: return
+        if (!player.isCurrentMediaItemLive) return
+        if (player.playbackState != Player.STATE_READY || !player.playWhenReady) return
+        val now = SystemClock.elapsedRealtime()
+        if (now - lastLiveJump < LIVE_JUMP_COOLDOWN_MS) return
+        val offset = player.currentLiveOffset
+        if (offset == C.TIME_UNSET) return
+        val timeline = player.currentTimeline
+        if (timeline.isEmpty) return
+        val window = timeline.getWindow(player.currentMediaItemIndex, Timeline.Window())
+        val target = window.liveConfiguration?.targetOffsetMs ?: return
+        if (target == C.TIME_UNSET || target <= 0) return
+        if (offset > target + max(target, LIVE_MIN_JUMP_MS)) {
+            Log.w(TAG, "live ${offset}ms behind the edge (target ${target}ms) → jumping back")
+            lastLiveJump = now
+            player.seekToDefaultPosition()
+        }
+    }
+
     // PILEUS PATCH. A decoder that silently can't handle the stream (no
     // exception: e.g. a variant declared 1920x1080 in the playlist that is
     // really 1920x1440, on a stick whose decoder claims to cope) leaves
@@ -1023,6 +1062,10 @@ internal class BetterPlayer(
     companion object {
         private const val TAG = "BetterPlayer"
         private const val FROZEN_CHECK_INTERVAL_MS = 2000L
+        private const val LIVE_MIN_SPEED = 0.97f
+        private const val LIVE_MAX_SPEED = 1.05f
+        private const val LIVE_MIN_JUMP_MS = 12_000L
+        private const val LIVE_JUMP_COOLDOWN_MS = 10_000L
         private const val FROZEN_TICKS = 3
         private const val FORMAT_SS = "ss"
         private const val FORMAT_DASH = "dash"

@@ -1437,7 +1437,9 @@ class _PlaybackViewState extends State<_PlaybackView> {
       subtitle: (_currentTitle ?? '').isNotEmpty ? widget.args.showTitle : '',
       artworkUrl: _currentEpisodePoster(),
       onPlay: _engine.play,
-      onPause: _engine.pause,
+      // No pause on a live (the remote's pause key is ignored too). A no-op,
+      // not null: without a handler the browser pauses the <video> itself.
+      onPause: widget.args.isLive ? () {} : _engine.pause,
       onSeekBy: widget.args.isLive
           ? null
           : (s) => _engine.seek(_engine.position + Duration(seconds: s)),

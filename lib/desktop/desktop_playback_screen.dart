@@ -961,7 +961,13 @@ class _ViewState extends State<_View> with WindowListener {
   }
 
   void _togglePlay() {
-    _engine.playOrPause();
+    // No pause on a live: whoever resumed later would be behind everyone
+    // else on the shared stream. Only a stopped live can be restarted.
+    if (widget.args.isLive) {
+      if (!_engine.playing) _engine.play();
+    } else {
+      _engine.playOrPause();
+    }
     _wake();
   }
 
@@ -1423,13 +1429,16 @@ class _ControlsLayer extends StatelessWidget {
                   ),
                 Row(
                   children: [
-                    _CtlBtn(
-                      icon: engine.playing
-                          ? Icons.pause_rounded
-                          : Icons.play_arrow_rounded,
-                      size: 40,
-                      onTap: onPlayPause,
-                    ),
+                    // A live has no pause (see _togglePlay): the button only
+                    // shows when it stopped on its own.
+                    if (!args.isLive || !engine.playing)
+                      _CtlBtn(
+                        icon: engine.playing
+                            ? Icons.pause_rounded
+                            : Icons.play_arrow_rounded,
+                        size: 40,
+                        onTap: onPlayPause,
+                      ),
                     if (!args.isLive) ...[
                       _CtlBtn(
                           icon: Icons.replay_10_rounded,

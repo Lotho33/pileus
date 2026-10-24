@@ -1646,20 +1646,24 @@ class _MobilePlayerViewState extends State<_MobilePlayerView> {
                         color: Colors.white),
                     onPressed: () => _seekBy(-10),
                   ),
-                IconButton(
-                  tooltip: _engine.playing ? 'Pausa' : 'Riproduci',
-                  iconSize: 64,
-                  icon: Icon(
-                    _engine.playing
-                        ? Icons.pause_circle_filled_rounded
-                        : Icons.play_circle_fill_rounded,
-                    color: Colors.white,
+                // No pause on a live: whoever resumed later would be behind
+                // everyone else on the shared stream. The button only shows
+                // when it stopped on its own.
+                if (!widget.args.isLive || !_engine.playing)
+                  IconButton(
+                    tooltip: _engine.playing ? 'Pausa' : 'Riproduci',
+                    iconSize: 64,
+                    icon: Icon(
+                      _engine.playing
+                          ? Icons.pause_circle_filled_rounded
+                          : Icons.play_circle_fill_rounded,
+                      color: Colors.white,
+                    ),
+                    onPressed: () {
+                      _engine.playOrPause();
+                      _armAutoHide();
+                    },
                   ),
-                  onPressed: () {
-                    _engine.playOrPause();
-                    _armAutoHide();
-                  },
-                ),
                 if (!widget.args.isLive)
                   IconButton(
                     tooltip: 'Avanti di 10 secondi',

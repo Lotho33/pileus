@@ -66,6 +66,13 @@ the verbatim upstream backport (3):
     to "auto"). A cap set with setTrack() afterwards came too late: on a
     fast LAN ExoPlayer had already picked the top variant at prepare.
 
+14. `BetterPlayer.kt` live catch-up: every media item gets a
+    `LiveConfiguration` with speed 0.97–1.05× (ExoPlayer's own live speed
+    control, towards the playlist's HOLD-BACK); `checkLiveLatency` (in the
+    2s watchdog) jumps back with `seekToDefaultPosition()` when a playing
+    live is more than `target + max(target, 12s)` behind the edge, at most
+    once every 10s.
+
 Upgrading to 2.0.0+: patch 3 is upstream there; re-apply all the others.
 Upgrading: re-copy the new upstream release here and re-apply both patches
 (or drop the fork once upstream fixes 1.).

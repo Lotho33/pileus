@@ -25,6 +25,7 @@ import '../features/player/episode_nav.dart';
 import '../features/player/episode_poster.dart';
 import '../features/player/episode_prefetch.dart';
 import '../features/player/live_stall_watchdog.dart';
+import '../features/player/live_sync.dart';
 import '../features/player/models/playback_args.dart';
 import '../features/player/models/skip_interval.dart';
 import '../features/player/player_tuning.dart';
@@ -121,6 +122,15 @@ extension type _HlsConfig._(JSObject _) implements JSObject {
     double maxBufferLength,
     double maxMaxBufferLength,
   });
+
+  // Live only — the same distance from the edge as every other device (the
+  // server's HOLD-BACK is three segments): start and stay
+  // [liveSyncDurationCount] segments back, catch up at up to
+  // [maxLiveSyncPlaybackRate] (hls.js' default 1 leaves it off), and jump
+  // back once more than [liveMaxLatencyDurationCount] segments behind.
+  external set liveSyncDurationCount(int segments);
+  external set maxLiveSyncPlaybackRate(double rate);
+  external set liveMaxLatencyDurationCount(int segments);
 }
 
 // hls.js's error-event payload — only the fields read here. `type`/`details`
@@ -240,6 +250,11 @@ class _ViewState extends State<_View> {
 
   _Hls? _hls;
   Timer? _progressTimer;
+  // Live without hls.js (Safari's own HLS: iOS, the iOS PWA): nothing
+  // steers it back to the shared distance from the edge — LiveSync does,
+  // from the <video>'s seekable end. hls.js does it itself (_HlsConfig).
+  final _liveSync = LiveSync();
+  Timer? _liveSyncTimer;
   // "Tracce": the stream's audio and subtitle tracks, from hls.js (the
   // browser's native HLS — Safari — has its own menu in the video controls).
   // MediaTrack.raw is the hls.js index. Same remembered audio language as
@@ -521,6 +536,43 @@ class _ViewState extends State<_View> {
       'timeupdate',
       ((web.Event _) => _onTimeUpdate()).toJS,
     );
+    // No pause on a live: the browser's controls still show the button, so
+    // a pause is undone at once — whoever resumed later would be out of the
+    // shared stream, behind everyone else. Not when the page is in the
+    // background (the browser pauses it there), stopped on an error or
+    // taken over by another device.
+    _video.addEventListener(
+      'pause',
+      ((web.Event _) {
+        if (!widget.args.isLive ||
+            !mounted ||
+            _fatalError != null ||
+            _takeoverPrompt != null ||
+            AppLifecycleReactor.instance.isBackgrounded) {
+          return;
+        }
+        _video.play().toDart.catchError((_) => null);
+      }).toJS,
+    );
+  }
+
+  void _syncLive() {
+    if (_video.paused || _buffering) return;
+    final ranges = _video.seekable;
+    if (ranges.length == 0) return;
+    final edge = ranges.end(ranges.length - 1);
+    final behindSec = edge - _video.currentTime;
+    if (behindSec.isNaN || behindSec <= 0) return;
+    final step =
+        _liveSync.step(Duration(milliseconds: (behindSec * 1000).round()));
+    if (step.jumpTo != null) {
+      _dlog('[web player] live ${behindSec.round()}s behind the edge '
+          '(target ${_liveSync.target?.inSeconds}s) → jumping back');
+      _video.currentTime = edge - step.jumpTo!.inMilliseconds / 1000;
+    }
+    if ((_video.playbackRate - step.rate).abs() > 0.001) {
+      _video.playbackRate = step.rate;
+    }
   }
 
   void _onLifecycle() {
@@ -542,6 +594,7 @@ class _ViewState extends State<_View> {
     _mediaSession.clear();
     AppLifecycleReactor.instance.state.removeListener(_onLifecycle);
     _progressTimer?.cancel();
+    _liveSyncTimer?.cancel();
     _errorGrace?.cancel();
     _resumeCoverSafetyTimer?.cancel();
     _liveWatchdog?.disarm();
@@ -1041,7 +1094,9 @@ class _ViewState extends State<_View> {
       subtitle: _curTitle.isNotEmpty ? widget.args.showTitle : '',
       artworkUrl: _currentEpisodePoster(),
       onPlay: () => _video.play().toDart.catchError((_) => null),
-      onPause: () => _video.pause(),
+      // No pause on a live (see the 'pause' listener). A no-op, not null:
+      // without a handler the browser pauses the <video> itself.
+      onPause: widget.args.isLive ? () {} : () => _video.pause(),
       onSeekBy: widget.args.isLive
           ? null
           : (s) => _video.currentTime = _video.currentTime + s,
@@ -1106,6 +1161,8 @@ class _ViewState extends State<_View> {
   }
 
   void _attachSource(String url, {Duration? startPosition}) {
+    _liveSyncTimer?.cancel();
+    _video.playbackRate = 1;
     _updateMediaSession();
     // A new stream: its own tracks, and the audio preference applies again.
     _audioPref.reset();
@@ -1152,14 +1209,21 @@ class _ViewState extends State<_View> {
         _dlog('[web player] buffer reserve ${reserve}s → '
             'maxBufferLength=${buf.maxBufferLength}s '
             'maxMaxBufferLength=${buf.maxMaxBufferLength}s');
-        final h = _Hls((startPosition != null && startPosition > Duration.zero)
+        final config = (startPosition != null && startPosition > Duration.zero)
             ? _HlsConfig(
                 startPosition: startPosition.inSeconds.toDouble(),
                 maxBufferLength: buf.maxBufferLength,
                 maxMaxBufferLength: buf.maxMaxBufferLength)
             : _HlsConfig(
                 maxBufferLength: buf.maxBufferLength,
-                maxMaxBufferLength: buf.maxMaxBufferLength));
+                maxMaxBufferLength: buf.maxMaxBufferLength);
+        if (widget.args.isLive) {
+          config
+            ..liveSyncDurationCount = 3
+            ..maxLiveSyncPlaybackRate = 1.05
+            ..liveMaxLatencyDurationCount = 7;
+        }
+        final h = _Hls(config);
         // Registered before loadSource/attachMedia so an error on the very
         // first manifest fetch can't fire before this is wired up. hls.js
         // otherwise fails a lot of this silently from Dart's side — no
@@ -1230,6 +1294,10 @@ class _ViewState extends State<_View> {
       }
     }
     _video.src = url;
+    if (widget.args.isLive) {
+      _liveSync.reset();
+      _liveSyncTimer = Timer.periodic(LiveSync.checkEvery, (_) => _syncLive());
+    }
     if (startPosition != null && startPosition > Duration.zero) {
       _video.addEventListener(
         'loadedmetadata',
