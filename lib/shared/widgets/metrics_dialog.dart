@@ -101,6 +101,18 @@ class _MetricsDialogState extends State<_MetricsDialog> {
                                     color: f.slowPct > 5
                                         ? const Color(0xFFFFB74D)
                                         : AppTheme.textHigh)),
+                            // Which thread made them slow: UI = building
+                            // and layout, GPU = painting.
+                            SizedBox(
+                              width: 150,
+                              child: Text(
+                                  f.slowPct == 0
+                                      ? ''
+                                      : 'UI ${f.uiPct.round()} · GPU ${100 - f.uiPct.round()} %',
+                                  textAlign: TextAlign.right,
+                                  style: const TextStyle(
+                                      color: AppTheme.textLow, fontSize: 12)),
+                            ),
                             SizedBox(
                               width: 90,
                               child: Text('${f.frames}',

@@ -95,7 +95,8 @@ class PlaybackProgress {
 
   final ResumeSeekController _resumeSeek;
 
-  final AudioLangPref _audioPref = AudioLangPref();
+  late final AudioLangPref _audioPref =
+      AudioLangPref(() => (pluginId: args.epPluginId, seriesId: args.parentId));
   bool _elsewhereReported = false;
 
   // Once [maybeClear] has cleared the continue-watching entry (≥95% watched,

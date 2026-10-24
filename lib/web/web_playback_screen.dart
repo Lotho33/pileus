@@ -244,7 +244,8 @@ class _ViewState extends State<_View> {
   // browser's native HLS — Safari — has its own menu in the video controls).
   // MediaTrack.raw is the hls.js index. Same remembered audio language as
   // the other players (AudioLangPref).
-  final _audioPref = AudioLangPref();
+  late final _audioPref = AudioLangPref(
+      () => (pluginId: widget.args.epPluginId, seriesId: widget.args.parentId));
   List<MediaTrack> _audioTracks = const [];
   List<MediaTrack> _subTracks = const [];
   int _audioIdx = -1;

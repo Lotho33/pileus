@@ -1,27 +1,43 @@
 import '../media/data/media_repository.dart';
 import 'models/playback_args.dart';
 
+/// One season's episodes, as parallel lists (the shape every player keeps).
+class SeasonEpisodes {
+  final List<String> ids;
+  final List<String> titles;
+  final List<String> thumbs;
+  final List<int> episodeNumbers;
+  final List<int> seasonNumbers;
+
+  const SeasonEpisodes({
+    required this.ids,
+    required this.titles,
+    required this.thumbs,
+    required this.episodeNumbers,
+    required this.seasonNumbers,
+  });
+}
+
+/// The episodes of season directory [seasonId], or null when it has none —
+/// what every player needs to cross a season boundary (next episode after
+/// the last one, previous before the first).
+///
 /// Episodes-first, items-as-fallback: a season-directory browse returns real
 /// episode data (title, thumbnail, …) in `episodes` — mycelium only routes
 /// media tagged as an episode there (see mycelium-core's
 /// lua_pipeline.go:Browse), `items` holds everything else. Reading `items`
-/// directly for an episode listing (a pre-existing bug found and fixed
-/// elsewhere — TV's playback_screen/view.dart and
-/// mobile_playback_screen.dart's own season-crossing code) got an empty-or-
-/// wrong list for a properly-tagged season, silently failing or producing a
-/// Continue Watching entry with a generic title and no poster.
-Future<
-    List<
-        ({
-          String id,
-          String title,
-          String thumb,
-          int episodeNumber,
-          int seasonNumber
-        })>> _browseEpisodes(
-    MediaRepository repo, String pluginId, String parentId) async {
-  final res = await repo.browse(pluginId, parentId, '');
-  return res.episodes.isNotEmpty
+/// for a properly-tagged season got an empty-or-wrong list: the switch
+/// silently did nothing, or the Continue Watching entry got a generic title
+/// and no poster.
+///
+/// Times out after [seasonBrowseTimeout]: a hung browse would otherwise
+/// leave the player's "changing episode" spinner up forever (callers only
+/// catch errors).
+Future<SeasonEpisodes?> loadSeasonEpisodes(
+    MediaRepository repo, String pluginId, String seasonId) async {
+  final res =
+      await repo.browse(pluginId, seasonId, '').timeout(seasonBrowseTimeout);
+  final eps = res.episodes.isNotEmpty
       ? [
           for (final e in res.episodes)
             (
@@ -43,7 +59,17 @@ Future<
                 seasonNumber: i.seasonNumber,
               )
         ];
+  if (eps.isEmpty) return null;
+  return SeasonEpisodes(
+    ids: [for (final e in eps) e.id],
+    titles: [for (final e in eps) e.title],
+    thumbs: [for (final e in eps) e.thumb],
+    episodeNumbers: [for (final e in eps) e.episodeNumber],
+    seasonNumbers: [for (final e in eps) e.seasonNumber],
+  );
 }
+
+const seasonBrowseTimeout = Duration(seconds: 20);
 
 /// Resolves the next/previous episode across season boundaries — same
 /// strategy as the TV player's `_resolveEpisodeAt`
@@ -160,13 +186,13 @@ class EpisodeNavState {
       if (allSeasonIds.isEmpty || seasonIndex <= 0) return null;
       newSeasonIndex = seasonIndex - 1;
       newParentId = allSeasonIds[newSeasonIndex];
-      final eps = await _browseEpisodes(repo, pluginId, newParentId);
-      if (eps.isEmpty) return null;
-      list = [for (final e in eps) e.id];
-      titles = [for (final e in eps) e.title];
-      thumbs = [for (final e in eps) e.thumb];
-      epNums = [for (final e in eps) e.episodeNumber];
-      seasonNums = [for (final e in eps) e.seasonNumber];
+      final eps = await loadSeasonEpisodes(repo, pluginId, newParentId);
+      if (eps == null) return null;
+      list = eps.ids;
+      titles = eps.titles;
+      thumbs = eps.thumbs;
+      epNums = eps.episodeNumbers;
+      seasonNums = eps.seasonNumbers;
       newIndex = list.length - 1;
     } else if (newIndex >= list.length) {
       if (allSeasonIds.isEmpty || seasonIndex + 1 >= allSeasonIds.length) {
@@ -174,13 +200,13 @@ class EpisodeNavState {
       }
       newSeasonIndex = seasonIndex + 1;
       newParentId = allSeasonIds[newSeasonIndex];
-      final eps = await _browseEpisodes(repo, pluginId, newParentId);
-      if (eps.isEmpty) return null;
-      list = [for (final e in eps) e.id];
-      titles = [for (final e in eps) e.title];
-      thumbs = [for (final e in eps) e.thumb];
-      epNums = [for (final e in eps) e.episodeNumber];
-      seasonNums = [for (final e in eps) e.seasonNumber];
+      final eps = await loadSeasonEpisodes(repo, pluginId, newParentId);
+      if (eps == null) return null;
+      list = eps.ids;
+      titles = eps.titles;
+      thumbs = eps.thumbs;
+      epNums = eps.episodeNumbers;
+      seasonNums = eps.seasonNumbers;
       newIndex = 0;
     }
     if (newIndex < 0 || newIndex >= list.length) return null;

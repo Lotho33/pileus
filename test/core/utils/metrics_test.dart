@@ -89,13 +89,14 @@ void main() {
   });
 
   group('fluidity', () {
-    FrameTiming frame(int ms) => FrameTiming(
+    // [ms] on the UI thread, then [raster] on the GPU thread.
+    FrameTiming frame(int ms, {int raster = 0}) => FrameTiming(
           vsyncStart: 0,
           buildStart: 0,
           buildFinish: ms * 1000,
           rasterStart: ms * 1000,
-          rasterFinish: ms * 1000,
-          rasterFinishWallTime: ms * 1000,
+          rasterFinish: (ms + raster) * 1000,
+          rasterFinishWallTime: (ms + raster) * 1000,
         );
 
     test('screen of a route', () {
@@ -117,6 +118,15 @@ void main() {
       expect(f.first.slowPct, 25);
       expect(f.last.label, 'Scheda titolo');
       expect(f.last.slowPct, 0);
+    });
+
+    test('slow frames blamed on the slower thread', () {
+      perfScreen = '/home';
+      Metrics.recordFrames(
+          [frame(40), frame(5, raster: 30), frame(2, raster: 40), frame(8)]);
+      final f = Metrics.fluidity().single;
+      expect(f.slowPct, 75);
+      expect(f.uiPct, closeTo(33.3, 0.1));
     });
   });
 

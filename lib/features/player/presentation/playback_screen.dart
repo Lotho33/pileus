@@ -33,6 +33,7 @@ import '../audio_lang_pref.dart';
 import '../content_view_mode.dart';
 import '../engine/player_engine.dart';
 import '../episode_poster.dart';
+import '../episode_nav.dart' show loadSeasonEpisodes;
 import '../episode_prefetch.dart';
 import '../models/playback_args.dart';
 import '../models/skip_interval.dart';

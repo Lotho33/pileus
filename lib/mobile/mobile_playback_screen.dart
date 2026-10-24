@@ -19,6 +19,7 @@ import '../features/player/bloc/playback_event.dart';
 import '../features/player/bloc/playback_state.dart';
 import '../features/player/engine/player_engine.dart';
 import '../features/player/episode_poster.dart';
+import '../features/player/episode_nav.dart' show loadSeasonEpisodes;
 import '../features/player/episode_prefetch.dart';
 import '../features/player/live_stall_watchdog.dart';
 import '../features/player/models/playback_args.dart';
@@ -1075,56 +1076,17 @@ class _MobilePlayerViewState extends State<_MobilePlayerView> {
         if (mounted) setState(() => _resolvingEpisode = false);
         return;
       }
-      // Timeout: this await isn't inside its own try/catch, only the outer
-      // one in _goToNextEpisode/_goToPreviousEpisode — which catches a
-      // thrown error fine, but not a hang (nothing would ever throw, the
-      // spinner would just never clear). Same reasoning as the calls below.
-      final browseRes = await repo
-          .browse(widget.args.epPluginId, allSeasonIds[newSeasonIndex], '')
-          .timeout(const Duration(seconds: 20));
-      // Same episodes-first, items-as-fallback pattern the TV player uses
-      // (playback_screen/view.dart) — a season-directory browse returns real
-      // episode data (title, thumbnail, …) in `episodes`; mycelium only
-      // routes media tagged as an episode there (see mycelium-core's
-      // lua_pipeline.go:Browse), `items` holds everything else. Reading
-      // `items` directly (as this used to) got an empty-or-wrong list for a
-      // properly-tagged season, producing a Continue Watching entry with a
-      // generic title and no poster once the auto-advance/roll-forward write
-      // fired for it. This path only became reachable once
-      // mobile_details_screen.dart started actually populating
-      // allSeasonIds/allSeasonLabels, so it went unnoticed until a
-      // multi-season binge crossed a season boundary for the first time.
-      final newEpisodes = browseRes.episodes.isNotEmpty
-          ? [
-              for (final e in browseRes.episodes)
-                (
-                  id: e.id,
-                  title: e.title,
-                  thumb: e.thumbnailUrl,
-                  episodeNumber: e.episodeNumber,
-                  seasonNumber: e.seasonNumber,
-                )
-            ]
-          : [
-              for (final i in browseRes.items)
-                if (!i.isDir)
-                  (
-                    id: i.id,
-                    title: i.title,
-                    thumb: i.posterUrl,
-                    episodeNumber: i.episodeNumber,
-                    seasonNumber: i.seasonNumber,
-                  ),
-            ];
-      if (newEpisodes.isEmpty) {
+      final season = await loadSeasonEpisodes(
+          repo, widget.args.epPluginId, allSeasonIds[newSeasonIndex]);
+      if (season == null) {
         if (mounted) setState(() => _resolvingEpisode = false);
         return;
       }
-      final newIds = newEpisodes.map((e) => e.id).toList();
-      final newTitles = newEpisodes.map((e) => e.title).toList();
-      final newThumbs = newEpisodes.map((e) => e.thumb).toList();
-      final newEpNums = newEpisodes.map((e) => e.episodeNumber).toList();
-      final newSeasonNums = newEpisodes.map((e) => e.seasonNumber).toList();
+      final newIds = season.ids;
+      final newTitles = season.titles;
+      final newThumbs = season.thumbs;
+      final newEpNums = season.episodeNumbers;
+      final newSeasonNums = season.seasonNumbers;
       if (mounted) {
         setState(() {
           _curEpisodeList = newIds;

@@ -291,12 +291,15 @@ class Metrics {
   // frame timings over in batches, counting them is nearly free. "Slow" is
   // past 1.5 frames at 60 Hz — a hitch you can see, not a missed vsync.
   // Counts are halved past [_fluidityWindow] frames so the number follows
-  // the current build/settings, not the whole install's history.
+  // the current build/settings, not the whole install's history. Each slow
+  // frame is also blamed on the thread that took longer — UI (build/layout)
+  // or GPU (raster) — so the fix goes to the right side.
 
   static const _fluidityKey = 'metrics.fluidity.v1';
   static const _slowFrame = Duration(milliseconds: 25);
   static const _fluidityWindow = 20000;
-  static final Map<String, List<int>> _fluidity = {}; // screen → [frames, slow]
+  static final Map<String, List<int>> _fluidity =
+      {}; // screen → [frames, slow, slow on the UI thread]
   static bool _fluidityInstalled = false;
 
   static const screenLabels = {
@@ -326,7 +329,8 @@ class Metrics {
         final m = jsonDecode(raw) as Map<String, dynamic>;
         for (final e in m.entries) {
           final v = (e.value as List).whereType<int>().toList();
-          if (v.length == 2) _fluidity[e.key] = v;
+          if (v.length == 2) v.add(0); // saved before the UI/GPU split
+          if (v.length == 3) _fluidity[e.key] = v;
         }
       }
     } catch (_) {}
@@ -335,26 +339,33 @@ class Metrics {
 
   @visibleForTesting
   static void recordFrames(List<FrameTiming> timings) {
-    final c = _fluidity[screenOf(perfScreen)] ??= [0, 0];
+    final c = _fluidity[screenOf(perfScreen)] ??= [0, 0, 0];
     for (final t in timings) {
       c[0]++;
-      if (t.totalSpan > _slowFrame) c[1]++;
+      if (t.totalSpan > _slowFrame) {
+        c[1]++;
+        if (t.buildDuration >= t.rasterDuration) c[2]++;
+      }
     }
     if (c[0] > _fluidityWindow) {
-      c[0] ~/= 2;
-      c[1] ~/= 2;
+      for (var i = 0; i < c.length; i++) {
+        c[i] ~/= 2;
+      }
     }
     _scheduleSave();
   }
 
-  /// (label, slow frames %, frames) per screen seen, busiest first.
-  static List<({String label, double slowPct, int frames})> fluidity() {
+  /// (label, slow frames %, share of those due to the UI thread %, frames)
+  /// per screen seen, busiest first.
+  static List<({String label, double slowPct, double uiPct, int frames})>
+      fluidity() {
     final out = [
       for (final e in _fluidity.entries)
         if (e.value[0] > 0)
           (
             label: screenLabels[e.key] ?? 'Altro',
             slowPct: e.value[1] * 100 / e.value[0],
+            uiPct: e.value[1] == 0 ? 0.0 : e.value[2] * 100 / e.value[1],
             frames: e.value[0],
           ),
     ]..sort((a, b) => b.frames.compareTo(a.frames));
