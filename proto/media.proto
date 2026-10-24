@@ -57,6 +57,9 @@ message EpisodeInfo {
   string plot           = 9;
   string show_id        = 10;
   string parent_id      = 11;  // season directory_id
+  // Same convention as CatalogItem.extra. "lang": the language versions of
+  // this episode — "" / "both" (nothing to flag), "ita", "jap", "eng".
+  map<string, string> extra = 12;
 }
 
 // SeasonInfo lives inside SeriesDetails.

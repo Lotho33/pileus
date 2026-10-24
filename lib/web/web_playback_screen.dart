@@ -18,7 +18,9 @@ import '../features/settings/data/settings_repository.dart';
 import '../features/player/bloc/playback_bloc.dart';
 import '../features/player/bloc/playback_event.dart';
 import '../features/player/bloc/playback_state.dart';
+import '../features/player/audio_lang_pref.dart';
 import '../features/player/engine/buffer_policy.dart' show hlsJsBuffer;
+import '../features/player/engine/media_track.dart';
 import '../features/player/episode_nav.dart';
 import '../features/player/episode_poster.dart';
 import '../features/player/episode_prefetch.dart';
@@ -72,7 +74,30 @@ extension type _Hls._(JSObject _) implements JSObject {
   external void attachMedia(web.HTMLVideoElement media);
   external void destroy();
   external void on(String event, JSFunction listener);
+  // Tracks of the stream (the "Tracce" menu): index into the list; -1 on
+  // subtitleTrack = none.
+  external JSArray<_HlsMediaTrack> get audioTracks;
+  external int get audioTrack;
+  external set audioTrack(int index);
+  external JSArray<_HlsMediaTrack> get subtitleTracks;
+  external int get subtitleTrack;
+  external set subtitleTrack(int index);
+  external set subtitleDisplay(bool show);
 }
+
+// One entry of hls.js's audioTracks/subtitleTracks — only the fields read.
+extension type _HlsMediaTrack._(JSObject _) implements JSObject {
+  external String? get name;
+  external String? get lang;
+}
+
+// Track list changes and switches — refresh the "Tracce" menu.
+const _hlsTrackEvents = [
+  'hlsAudioTracksUpdated',
+  'hlsAudioTrackSwitched',
+  'hlsSubtitleTracksUpdated',
+  'hlsSubtitleTrackSwitch',
+];
 
 // hls.js's own constructor config — only the one field this needs.
 // `startPosition` (seconds, default -1 = hls.js's own "from the start/live
@@ -211,6 +236,15 @@ class _ViewState extends State<_View> {
 
   _Hls? _hls;
   Timer? _progressTimer;
+  // "Tracce": the stream's audio and subtitle tracks, from hls.js (the
+  // browser's native HLS — Safari — has its own menu in the video controls).
+  // MediaTrack.raw is the hls.js index. Same remembered audio language as
+  // the other players (AudioLangPref).
+  final _audioPref = AudioLangPref();
+  List<MediaTrack> _audioTracks = const [];
+  List<MediaTrack> _subTracks = const [];
+  int _audioIdx = -1;
+  int _subIdx = -1;
   bool _opened = false;
   // First real frame AND (if applicable) the resume seek confirmed landed —
   // see _onTimeUpdate's own gate and kResumeCoverSafetyTimeout's doc. Drives
@@ -459,7 +493,16 @@ class _ViewState extends State<_View> {
     // paused), so either clears it.
     _video.addEventListener(
       'waiting',
-      ((web.Event _) => _buffering = true).toJS,
+      ((web.Event _) {
+        _buffering = true;
+        Metrics.playbackTick(_videoPosition, playing: true, buffering: true);
+      }).toJS,
+    );
+    // Seek and rebuffer times (Preferenze → "Tempi di risposta"), as the
+    // engine reports them on the other players.
+    _video.addEventListener(
+      'seeking',
+      ((web.Event _) => Metrics.seekBegin(_videoPosition)).toJS,
     );
     _video.addEventListener(
       'playing',
@@ -526,9 +569,8 @@ class _ViewState extends State<_View> {
   }
 
   // "Lingua": the language versions of what's playing (see
-  // playerLanguageOptions). The browser player doesn't expose a stream's
-  // audio tracks, so here every set of separate language streams is offered
-  // — on vix too, where this is the only way to switch.
+  // playerLanguageOptions) — hidden, as on the other players, when the
+  // stream itself carries several audio tracks ("Tracce" switches those).
   List<StreamSource> _langSources = const [];
   String? _langFor;
 
@@ -548,7 +590,7 @@ class _ViewState extends State<_View> {
           (widget.args.directUrl ?? '').isNotEmpty ||
           _langFor != _curMediaId
       ? const []
-      : playerLanguageOptions(_langSources, audioTracks: 0);
+      : playerLanguageOptions(_langSources, audioTracks: _audioTracks.length);
 
   /// Same title, same position, other language version.
   void _switchLanguage(StreamSource src) {
@@ -661,8 +703,17 @@ class _ViewState extends State<_View> {
     return true;
   }
 
+  Duration get _videoPosition {
+    final t = _video.currentTime;
+    return t.isFinite && t > 0
+        ? Duration(milliseconds: (t * 1000).round())
+        : Duration.zero;
+  }
+
   void _onTimeUpdate() {
     if (!mounted) return;
+    Metrics.playbackTick(_videoPosition,
+        playing: !_video.paused, buffering: false);
     _liveWatchdog?.recordProgress();
     _liveFailover?.playing();
     if (widget.args.isLive) {
@@ -995,8 +1046,68 @@ class _ViewState extends State<_View> {
     );
   }
 
+  static String _trackLabel(_HlsMediaTrack t, int i) {
+    final lang = (t.lang ?? '').trim();
+    final name = (t.name ?? '').trim();
+    final parts = [
+      if (lang.isNotEmpty) lang.toUpperCase(),
+      if (name.isNotEmpty && name.toLowerCase() != lang.toLowerCase()) name,
+    ];
+    return parts.isEmpty ? 'Traccia ${i + 1}' : parts.join(' · ');
+  }
+
+  List<MediaTrack> _tracksOf(JSArray<_HlsMediaTrack> list) {
+    final l = list.toDart;
+    return [
+      for (var i = 0; i < l.length; i++)
+        MediaTrack(id: '$i', label: _trackLabel(l[i], i), raw: i)
+    ];
+  }
+
+  void _refreshTracks(_Hls h) {
+    if (!mounted || !identical(h, _hls)) return;
+    try {
+      final audio = _tracksOf(h.audioTracks);
+      final subs = _tracksOf(h.subtitleTracks);
+      final ai = h.audioTrack;
+      setState(() {
+        _audioTracks = audio;
+        _subTracks = subs;
+        _audioIdx = ai;
+        _subIdx = h.subtitleTrack;
+      });
+      final active = ai >= 0 && ai < audio.length ? audio[ai] : null;
+      final want = _audioPref.pick(audio, active);
+      if (want != null) h.audioTrack = want.raw as int;
+    } catch (_) {
+      // An hls.js without these fields: no menu.
+    }
+  }
+
+  void _selectAudio(MediaTrack t) {
+    final h = _hls;
+    if (h == null) return;
+    h.audioTrack = t.raw as int;
+    _audioPref.remember(t.label);
+    setState(() => _audioIdx = t.raw as int);
+  }
+
+  void _selectSubtitle(int index) {
+    final h = _hls;
+    if (h == null) return;
+    h.subtitleDisplay = index >= 0;
+    h.subtitleTrack = index;
+    setState(() => _subIdx = index);
+  }
+
   void _attachSource(String url, {Duration? startPosition}) {
     _updateMediaSession();
+    // A new stream: its own tracks, and the audio preference applies again.
+    _audioPref.reset();
+    _audioTracks = const [];
+    _subTracks = const [];
+    _audioIdx = -1;
+    _subIdx = -1;
     final looksHls = url.toLowerCase().contains('.m3u8');
     // canPlayType returns "" (no), "maybe", or "probably" per spec — only
     // Safari genuinely plays HLS natively and returns "probably" for it.
@@ -1095,6 +1206,9 @@ class _ViewState extends State<_View> {
               ((JSAny? _, JSAny? __) {
                 _dlog('[web player] hls.js event: $evt url=$url');
               }).toJS);
+        }
+        for (final evt in _hlsTrackEvents) {
+          h.on(evt, ((JSAny? _, JSAny? __) => _refreshTracks(h)).toJS);
         }
         h.loadSource(url);
         h.attachMedia(_video);
@@ -1400,6 +1514,66 @@ class _ViewState extends State<_View> {
                                         style: const TextStyle(
                                             color: Colors.white)),
                                   ),
+                              ],
+                            ),
+                          if (_audioTracks.length >= 2 || _subTracks.isNotEmpty)
+                            PopupMenuButton<(bool, int)>(
+                              tooltip: 'Tracce',
+                              icon: const Icon(Icons.subtitles_outlined,
+                                  color: Colors.white70),
+                              color: const Color(0xFF141428),
+                              onSelected: (v) {
+                                final (audio, i) = v;
+                                if (audio) {
+                                  _selectAudio(_audioTracks[i]);
+                                } else {
+                                  _selectSubtitle(i);
+                                }
+                              },
+                              itemBuilder: (_) => [
+                                if (_audioTracks.length >= 2) ...[
+                                  const PopupMenuItem<(bool, int)>(
+                                    enabled: false,
+                                    child: Text('Audio',
+                                        style: TextStyle(
+                                            color: Colors.white54,
+                                            fontWeight: FontWeight.w700)),
+                                  ),
+                                  for (var i = 0; i < _audioTracks.length; i++)
+                                    CheckedPopupMenuItem<(bool, int)>(
+                                      value: (true, i),
+                                      checked: i == _audioIdx,
+                                      child: Text(_audioTracks[i].label,
+                                          style: const TextStyle(
+                                              color: Colors.white)),
+                                    ),
+                                ],
+                                if (_audioTracks.length >= 2 &&
+                                    _subTracks.isNotEmpty)
+                                  const PopupMenuDivider(),
+                                if (_subTracks.isNotEmpty) ...[
+                                  const PopupMenuItem<(bool, int)>(
+                                    enabled: false,
+                                    child: Text('Sottotitoli',
+                                        style: TextStyle(
+                                            color: Colors.white54,
+                                            fontWeight: FontWeight.w700)),
+                                  ),
+                                  CheckedPopupMenuItem<(bool, int)>(
+                                    value: (false, -1),
+                                    checked: _subIdx < 0,
+                                    child: const Text('Nessuno',
+                                        style: TextStyle(color: Colors.white)),
+                                  ),
+                                  for (var i = 0; i < _subTracks.length; i++)
+                                    CheckedPopupMenuItem<(bool, int)>(
+                                      value: (false, i),
+                                      checked: i == _subIdx,
+                                      child: Text(_subTracks[i].label,
+                                          style: const TextStyle(
+                                              color: Colors.white)),
+                                    ),
+                                ],
                               ],
                             ),
                           if (!widget.args.isLive && _nav.hasPrevious) ...[

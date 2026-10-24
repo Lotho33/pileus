@@ -21,6 +21,10 @@ class _SearchView extends StatefulWidget {
 
 class _SearchViewState extends State<_SearchView> {
   final _controller = TextEditingController();
+  // Recent searches — same rule as the quick search and the phone/desktop
+  // screens (RecentSearchRecorder): settled on results, or a result opened.
+  final _recent = RecentSearchRecorder();
+  StreamSubscription<DiscoveryState>? _recentSub;
   // Manual back button in the toolbar — now the screen's initial focus and
   // the top of the D-pad chain.
   final _backBtnFn = FocusNode();
@@ -91,6 +95,11 @@ class _SearchViewState extends State<_SearchView> {
     // keystroke came from — this is also why the display field below no
     // longer needs to be a real TextField/EditableText at all.
     _controller.addListener(_onControllerChanged);
+    _recentSub = context.read<DiscoveryBloc>().stream.listen((s) {
+      if (s is DiscoveryLoaded && s.searchQuery.isNotEmpty) {
+        _recent.settled(s.searchQuery, hasResults: s.items.isNotEmpty);
+      }
+    });
     _filtersLoader.setPlugin(widget.pluginId);
     // Open with results already on screen: an empty query is a valid
     // request — every plugin answers it with its default (popularity)
@@ -142,6 +151,7 @@ class _SearchViewState extends State<_SearchView> {
         isLoadingMore: state.isLoadingMore,
         screenH: h,
         onFirstCardFocus: (fn) => _firstResultFocus.set(fn),
+        onItemOpened: () => _recent.submit(_controller.text),
         onNavigateUp: () {
           // Back up out of the results → land on the keyboard (re-shown),
           // the natural place to keep refining the query.
@@ -151,6 +161,8 @@ class _SearchViewState extends State<_SearchView> {
 
   @override
   void dispose() {
+    _recentSub?.cancel();
+    _recent.dispose();
     _filtersLoader.dispose();
     _debounceTimer?.cancel();
     _controller.removeListener(_onControllerChanged);
@@ -182,6 +194,7 @@ class _SearchViewState extends State<_SearchView> {
   // for Invio/tap. onSubmitted below still exists for an immediate search.
   void _onQueryChanged(String value) {
     _debounceTimer?.cancel();
+    _recent.typing();
     // Don't show the pending spinner for a query that's too short to
     // actually dispatch (and won't, unless a filter is active) — same
     // rationale as quick search.
@@ -429,9 +442,7 @@ class _SearchViewState extends State<_SearchView> {
                                       final entries =
                                           _activeFilters.entries.toList();
                                       return [
-                                        for (var i = 0;
-                                            i < entries.length;
-                                            i++)
+                                        for (var i = 0; i < entries.length; i++)
                                           Builder(builder: (context) {
                                             final e = entries[i];
                                             final filter = _availableFilters

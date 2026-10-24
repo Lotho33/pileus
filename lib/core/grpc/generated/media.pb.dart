@@ -284,6 +284,7 @@ class EpisodeInfo extends $pb.GeneratedMessage {
     $core.String? plot,
     $core.String? showId,
     $core.String? parentId,
+    $core.Iterable<$core.MapEntry<$core.String, $core.String>>? extra,
   }) {
     final result = create();
     if (id != null) result.id = id;
@@ -297,6 +298,7 @@ class EpisodeInfo extends $pb.GeneratedMessage {
     if (plot != null) result.plot = plot;
     if (showId != null) result.showId = showId;
     if (parentId != null) result.parentId = parentId;
+    if (extra != null) result.extra.addEntries(extra);
     return result;
   }
 
@@ -324,6 +326,11 @@ class EpisodeInfo extends $pb.GeneratedMessage {
     ..aOS(9, _omitFieldNames ? '' : 'plot')
     ..aOS(10, _omitFieldNames ? '' : 'showId')
     ..aOS(11, _omitFieldNames ? '' : 'parentId')
+    ..m<$core.String, $core.String>(12, _omitFieldNames ? '' : 'extra',
+        entryClassName: 'EpisodeInfo.ExtraEntry',
+        keyFieldType: $pb.PbFieldType.OS,
+        valueFieldType: $pb.PbFieldType.OS,
+        packageName: const $pb.PackageName('mycelium'))
     ..hasRequiredFields = false;
 
   @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
@@ -443,6 +450,9 @@ class EpisodeInfo extends $pb.GeneratedMessage {
   $core.bool hasParentId() => $_has(10);
   @$pb.TagNumber(11)
   void clearParentId() => $_clearField(11);
+
+  @$pb.TagNumber(12)
+  $pb.PbMap<$core.String, $core.String> get extra => $_getMap(11);
 }
 
 /// SeasonInfo lives inside SeriesDetails.

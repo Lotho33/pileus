@@ -7,42 +7,18 @@ import 'package:flutter/material.dart';
 import 'package:media_kit/media_kit.dart' as mk;
 import 'package:media_kit_video/media_kit_video.dart' as mkv;
 
+import '../../../core/utils/metrics.dart';
 import '../../../core/utils/perf_log.dart';
 import 'buffer_policy.dart';
 import 'decoder_capability_fallback.dart';
+import 'media_track.dart';
 import 'stream_format.dart';
 import 'video_view_mode.dart';
 
 export 'buffer_policy.dart' show appliedReserveSec;
+export 'media_track.dart';
 export 'stream_format.dart';
 export 'video_view_mode.dart';
-
-/// One selectable playback track (audio language, subtitle language, video
-/// quality). Backend-agnostic: [raw] holds the native handle the concrete
-/// engine needs to actually switch to it.
-@immutable
-class MediaTrack {
-  final String id;
-  final String label;
-
-  /// The "no subtitles" pseudo-track. Only ever set on subtitle entries.
-  final bool isOff;
-  final Object? raw;
-
-  const MediaTrack({
-    required this.id,
-    required this.label,
-    this.isOff = false,
-    this.raw,
-  });
-
-  @override
-  bool operator ==(Object other) =>
-      other is MediaTrack && other.id == id && other.isOff == isOff;
-
-  @override
-  int get hashCode => Object.hash(id, isOff);
-}
 
 /// Subtitle rendering style, read once from settings and baked into the
 /// engine's video view at construction (neither backend restyles live).
@@ -125,6 +101,7 @@ abstract class PlayerEngine extends ChangeNotifier {
       _lastEmittedPlaying = pl;
       _playingCtrl.add(pl);
     }
+    Metrics.playbackTick(p, playing: pl, buffering: buffering);
     notifyListeners();
   }
 
@@ -403,7 +380,8 @@ class _ExoPlayerEngine extends PlayerEngine {
         _logVideoStats(e.parameters);
       case BetterPlayerEventType.videoFrozen:
         final p = e.parameters;
-        perf('exo: video frozen at ${(p?['position'] as Duration?)?.inSeconds}s '
+        perf(
+            'exo: video frozen at ${(p?['position'] as Duration?)?.inSeconds}s '
             '(rendered=${p?['rendered']} dropped=${p?['dropped']}), '
             'surface re-attach did not help');
         onVideoFrozen?.call();
@@ -663,7 +641,10 @@ class _ExoPlayerEngine extends PlayerEngine {
   Future<void> playOrPause() => playing ? _c.pause() : _c.play();
 
   @override
-  Future<void> seek(Duration to) => _c.seekTo(to);
+  Future<void> seek(Duration to) {
+    Metrics.seekBegin(to);
+    return _c.seekTo(to);
+  }
 
   @override
   Future<void> setVolume(double percent) =>
@@ -1060,8 +1041,7 @@ class _MpvPlayerEngine extends PlayerEngine {
     // would otherwise silently leak into every later episode/source with no
     // start of its own. Clear it explicitly first whenever this open() has
     // nothing to seek to.
-    if ((startPosition == null || startPosition <= Duration.zero) &&
-        !kIsWeb) {
+    if ((startPosition == null || startPosition <= Duration.zero) && !kIsWeb) {
       try {
         final dynamic native = _player.platform;
         // Same handle-not-ready-yet race initialize() already hit and fixed
@@ -1128,7 +1108,10 @@ class _MpvPlayerEngine extends PlayerEngine {
   Future<void> playOrPause() => _player.playOrPause();
 
   @override
-  Future<void> seek(Duration to) => _player.seek(to);
+  Future<void> seek(Duration to) {
+    Metrics.seekBegin(to);
+    return _player.seek(to);
+  }
 
   @override
   Future<void> setVolume(double percent) {

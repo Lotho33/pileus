@@ -24,6 +24,7 @@ import '../bloc/discovery_bloc.dart';
 import '../bloc/discovery_event.dart';
 import '../bloc/discovery_state.dart';
 import '../data/media_repository.dart';
+import '../data/recent_searches.dart';
 import '../data/search_filters_loader.dart';
 
 part 'search_screen/view.dart';

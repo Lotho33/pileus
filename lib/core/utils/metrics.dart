@@ -57,6 +57,10 @@ class Metrics {
       'Dallo stream pronto al primo fotogramma (player del dispositivo).');
   static const wake = Metric('ripresa', 'Ripresa dopo standby',
       'Dal risveglio alla prima risposta del server.');
+  static const seek = Metric('seek', 'Spostamento nel video',
+      'Da un salto (barra, avanti/indietro, salta intro) alla ripresa.');
+  static const rebuffer = Metric('interruzioni', 'Interruzioni',
+      'Pause per caricamento durante la visione (salti esclusi).');
 
   static const all = [
     startup,
@@ -65,7 +69,9 @@ class Metrics {
     sources,
     resolve,
     firstFrame,
-    wake
+    wake,
+    seek,
+    rebuffer,
   ];
 
   static const _prefsKey = 'metrics.samples.v1';
@@ -175,6 +181,7 @@ class Metrics {
     if (join && p != null && p.elapsed < _playJoinWindow) return;
     _play = Stopwatch()..start();
     _sinceReady = null;
+    _stopWatching();
   }
 
   /// The stream is resolved and handed to the engine.
@@ -185,6 +192,7 @@ class Metrics {
   /// The first frame is on screen. Ends the clock: later "started" flips in
   /// the same player (episode switches, reopen after an error) don't count.
   static void playFirstFrame() {
+    _watching = true;
     final p = _play;
     if (p == null) return;
     final r = _sinceReady;
@@ -198,6 +206,69 @@ class Metrics {
   static void playAbandon() {
     _play = null;
     _sinceReady = null;
+    _stopWatching();
+  }
+
+  // ── Seek and rebuffering ──────────────────────────────────────────────────
+  //
+  // Only between the first frame and the next Play: the opening wait is the
+  // Play clock's. Fed by the players: [seekBegin] on every seek, and
+  // [playbackTick] whenever position/playing/buffering change.
+
+  static bool _watching = false;
+  static Stopwatch? _seek;
+  static Duration _seekTarget = Duration.zero;
+  static Stopwatch? _stall;
+  // Shorter stalls are a blip nobody notices, not an interruption.
+  static const _minStallMs = 300;
+  // A seek whose landing is never seen (out of range, player closed).
+  static const _seekGiveUp = Duration(seconds: 30);
+
+  static void _stopWatching() {
+    _watching = false;
+    _seek = null;
+    _stall = null;
+  }
+
+  static void seekBegin(Duration to) {
+    if (!_watching) return;
+    _seek = Stopwatch()..start();
+    _seekTarget = to;
+    _stall = null;
+  }
+
+  static void playbackTick(Duration position,
+      {required bool playing, required bool buffering}) {
+    if (!_watching) return;
+    if (!playing && !buffering) {
+      // Paused: time spent here is the user's, not a wait.
+      _seek = null;
+      _stall = null;
+      return;
+    }
+    if (buffering) {
+      if (_seek == null) _stall ??= Stopwatch()..start();
+      return;
+    }
+    final s = _seek;
+    if (s != null) {
+      // Moving again at the target — not a stale tick from before the seek
+      // landed.
+      final d = position - _seekTarget;
+      if (d >= const Duration(seconds: -1) && d <= const Duration(seconds: 5)) {
+        _seek = null;
+        record(seek, s.elapsedMilliseconds);
+      } else if (s.elapsed > _seekGiveUp) {
+        _seek = null;
+      }
+    }
+    final st = _stall;
+    if (st != null) {
+      _stall = null;
+      if (st.elapsedMilliseconds >= _minStallMs) {
+        record(rebuffer, st.elapsedMilliseconds);
+      }
+    }
   }
 
   // ── Standby ────────────────────────────────────────────────────────────────
@@ -301,5 +372,6 @@ class Metrics {
     _play = null;
     _sinceReady = null;
     _wake = null;
+    _stopWatching();
   }
 }

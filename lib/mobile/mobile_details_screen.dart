@@ -26,6 +26,7 @@ import '../features/player/resolve_and_play.dart';
 import '../features/player/resume_lookup.dart';
 import '../features/player/source_continuity.dart' show defaultPlayStreamId;
 import '../features/player/stream_warmer.dart';
+import '../shared/widgets/language_badge.dart';
 import '../shared/widgets/language_chips.dart';
 import '../shared/widgets/error_retry_view.dart';
 import 'package:cached_network_image_platform_interface/cached_network_image_platform_interface.dart'
@@ -356,6 +357,7 @@ class _Body extends StatelessWidget {
                         context,
                         pluginId,
                         eps[i].id,
+                        chooseLanguage: true,
                         extra: <String, dynamic>{
                           'title': eps[i].title,
                           'showTitle': item.title,
@@ -920,11 +922,7 @@ class _SeasonsState extends State<_Seasons> {
                   style:
                       const TextStyle(color: AppTheme.textHigh, fontSize: 14),
                 ),
-                subtitle: eps[i].duration > 0
-                    ? Text('${eps[i].duration} min',
-                        style: const TextStyle(
-                            color: AppTheme.textLow, fontSize: 12))
-                    : null,
+                subtitle: _episodeSubtitle(eps[i]),
                 trailing: DownloadButton(
                   pluginId: widget.pluginId,
                   target: _episodeTarget(eps[i]),
@@ -948,6 +946,23 @@ class _SeasonsState extends State<_Seasons> {
       ],
     );
   }
+}
+
+/// Duration and, when the plugin says, the episode's own language badge
+/// (JAP on an episode not dubbed yet, …).
+Widget? _episodeSubtitle(EpisodeInfo ep) {
+  final lang = ep.extra['lang'] ?? '';
+  final hasBadge = languageBadge(lang) != null;
+  if (ep.duration <= 0 && !hasBadge) return null;
+  return Row(
+    children: [
+      if (ep.duration > 0)
+        Text('${ep.duration} min',
+            style: const TextStyle(color: AppTheme.textLow, fontSize: 12)),
+      if (ep.duration > 0 && hasBadge) const SizedBox(width: 8),
+      if (hasBadge) LanguageBadgePill(lang: lang),
+    ],
+  );
 }
 
 /// "Correlati" / "Simili" — decoded from `details.item.extra['related' |

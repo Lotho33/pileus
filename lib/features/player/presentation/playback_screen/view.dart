@@ -342,7 +342,10 @@ class _PlaybackViewState extends State<_PlaybackView> {
     // One-shot per stream (no-op once applied) — audio tracks are only
     // known a moment after playback starts, so check on every tick until
     // they are. Same as the mobile/desktop players.
-    if (playing) _audioPref.maybeApply(_engine);
+    if (playing) {
+      final t = _audioPref.pick(_engine.audioTracks, _engine.activeAudioTrack);
+      if (t != null) _engine.selectAudioTrack(t);
+    }
     if (!_uiCubit.isClosed) {
       final b = _engine.buffering;
       if (b != _lastBuffering) {

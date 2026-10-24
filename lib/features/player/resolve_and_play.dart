@@ -9,6 +9,7 @@ import '../../core/grpc/grpc_errors.dart';
 import '../../shared/utils/tap_guard.dart';
 import '../../core/theme/app_scale.dart';
 import '../../core/utils/metrics.dart';
+import '../../shared/widgets/episode_language_sheet.dart';
 import '../../shared/widgets/pileus_spinner.dart';
 import '../media/data/media_repository.dart';
 import 'source_preference.dart';
@@ -17,7 +18,9 @@ import 'source_preference.dart';
 /// (choosePlaySource — never a question at Play) and navigate to the
 /// player. `extra` carries the playback context (title, episode list,
 /// resume position, …); its 'sourceLabel', when set, is a language the user
-/// chose explicitly (a details screen's chips).
+/// chose explicitly (a details screen's chips). [chooseLanguage] — a tap on
+/// an episode — asks first instead, on the episode language sheet, when
+/// the sources are language versions.
 
 /// One player launch at a time. GetStreams can take seconds on a slow
 /// plugin, and with no feedback a second (third…) tap on Play / an episode /
@@ -67,6 +70,7 @@ Future<void> resolveAndPlay(
   String pluginId,
   String mediaId, {
   Map<String, dynamic>? extra,
+  bool chooseLanguage = false,
 }) async {
   // Capture everything that depends on `context` up-front and synchronously:
   // the caller (e.g. a long-press sheet) pops its own route right before
@@ -93,7 +97,7 @@ Future<void> resolveAndPlay(
 
   try {
     await _resolveAndPush(router, navigator, messenger, pluginId, mediaId,
-        extra: extra, hideSpinner: hideSpinner);
+        extra: extra, chooseLanguage: chooseLanguage, hideSpinner: hideSpinner);
   } finally {
     hideSpinner();
     PlayerLaunchGuard._busy = false;
@@ -107,6 +111,7 @@ Future<void> _resolveAndPush(
   String pluginId,
   String mediaId, {
   Map<String, dynamic>? extra,
+  bool chooseLanguage = false,
   required VoidCallback hideSpinner,
 }) async {
   List<StreamSource> sources;
@@ -140,14 +145,36 @@ Future<void> _resolveAndPush(
     return;
   }
 
-  // No question at Play: the language is a preference (Preferenze →
-  // "Lingua preferita", the series' last one, or the label the caller
-  // passes — a details screen's language chips). source_preference.dart.
-  final chosen = choosePlaySource(sources,
-      explicitLabel: (extra?['sourceLabel'] as String?) ?? '',
+  // The language is a preference (Preferenze → "Lingua preferita", the
+  // series' last one, or the label the caller passes — a details screen's
+  // language chips), source_preference.dart. The one question: a tap on an
+  // episode shows its languages first, the rule's pick highlighted.
+  final explicitLabel = (extra?['sourceLabel'] as String?) ?? '';
+  final seriesId = (extra?['parentId'] as String?) ?? '';
+  StreamSource? chosen;
+  final ask = chooseLanguage &&
+      explicitLabel.isEmpty &&
+      sources.any((s) => languageOfLabel(s.label) != null);
+  if (ask) {
+    chosen = await showEpisodeLanguageSheet(
+      navigator,
       pluginId: pluginId,
-      seriesId: (extra?['parentId'] as String?) ?? '');
-  final notice = languageNotice(sources, chosen);
+      sources: preferredFirst(sources, pluginId: pluginId, seriesId: seriesId),
+      title: (extra?['title'] as String?) ?? '',
+      showTitle: (extra?['showTitle'] as String?) ?? '',
+    );
+    if (chosen == null || !navigator.mounted) {
+      Metrics.playAbandon();
+      return;
+    }
+    // The clock measures Play → first frame, not the time spent choosing.
+    Metrics.playBegin();
+  } else {
+    chosen = choosePlaySource(sources,
+        explicitLabel: explicitLabel, pluginId: pluginId, seriesId: seriesId);
+  }
+  // The sheet already said which languages there are.
+  final notice = ask ? '' : languageNotice(sources, chosen);
 
   PlayerLaunchGuard._lastPush = DateTime.now();
   router.push(

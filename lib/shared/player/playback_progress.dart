@@ -310,6 +310,9 @@ class PlaybackProgress {
     _resumeSeek.onPosition(engine.position, engine.seek);
   }
 
-  /// See [AudioLangPref.maybeApply] (shared with the TV player).
-  void maybeApplyAudioPref(PlayerEngine engine) => _audioPref.maybeApply(engine);
+  /// See [AudioLangPref.pick] (shared with the TV player).
+  void maybeApplyAudioPref(PlayerEngine engine) {
+    final t = _audioPref.pick(engine.audioTracks, engine.activeAudioTrack);
+    if (t != null) engine.selectAudioTrack(t);
+  }
 }

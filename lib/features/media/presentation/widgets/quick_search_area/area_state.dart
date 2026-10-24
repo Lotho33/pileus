@@ -50,9 +50,27 @@ class _QuickSearchAreaState extends State<QuickSearchArea> {
   // _scopeFocusNode.hasFocus can read false for a beat).
   bool _sawFocusInside = false;
 
+  // Recent searches, shown where the results go while nothing is typed
+  // (_RecentSearchesRow). Recorded like the other search screens: a query
+  // that settled on results, or one whose result (or "Vedi tutti") was
+  // opened.
+  final _recent = RecentSearchRecorder();
+  List<String> _recentQueries = const [];
+  final _recentFirstFocus = SafeFocusRef();
+  bool _queryEmpty = true;
+  StreamSubscription<DiscoveryState>? _resultsSub;
+
+  // How many recent searches the row offers — one line on a TV panel.
+  static const _recentShown = 6;
+
   @override
   void initState() {
     super.initState();
+    _resultsSub = _bloc.stream.listen((s) {
+      if (s is DiscoveryLoaded && s.searchQuery.isNotEmpty) {
+        _recent.settled(s.searchQuery, hasResults: s.items.isNotEmpty);
+      }
+    });
     _controller.addListener(_onQueryChanged);
     // widget.barFocusNode is home_screen.dart's external trigger — it calls
     // .requestFocus() on it to "open" search, but it's attached to an
@@ -95,7 +113,34 @@ class _QuickSearchAreaState extends State<QuickSearchArea> {
 
   void _setExpanded(bool v) {
     widget.controller._isOpen = v;
-    if (v != _expanded) setState(() => _expanded = v);
+    if (v != _expanded) {
+      setState(() {
+        _expanded = v;
+        // Re-read on every open: searches kept on other screens count too.
+        if (v) {
+          _recentQueries = RecentSearches.list().take(_recentShown).toList();
+        }
+      });
+    }
+  }
+
+  // Leaves the row before it unmounts (a pick fills the query, "Cancella"
+  // empties the list), so focus never sits on a disposed chip.
+  void _focusKeyboard() =>
+      _keyboardKey.currentState?.firstFocusNode.requestFocus();
+
+  void _pickRecent(String q) {
+    _focusKeyboard();
+    _recent.submit(q);
+    _controller.value = TextEditingValue(
+        text: q, selection: TextSelection.collapsed(offset: q.length));
+    _search(q);
+  }
+
+  void _clearRecent() {
+    _focusKeyboard();
+    RecentSearches.clear();
+    setState(() => _recentQueries = const []);
   }
 
   void _onBarFocusRequested() {
@@ -148,6 +193,8 @@ class _QuickSearchAreaState extends State<QuickSearchArea> {
   @override
   void dispose() {
     FocusManager.instance.removeListener(_onGlobalFocusChange);
+    _resultsSub?.cancel();
+    _recent.dispose();
     _detachController(widget.controller);
     _debounce?.cancel();
     _controller.removeListener(_onQueryChanged);
@@ -164,7 +211,10 @@ class _QuickSearchAreaState extends State<QuickSearchArea> {
   // keyboard alike — same debounce idiom as search_screen.dart's live search.
   void _onQueryChanged() {
     _debounce?.cancel();
+    _recent.typing();
     final text = _controller.text;
+    final empty = text.trim().isEmpty;
+    if (empty != _queryEmpty) setState(() => _queryEmpty = empty);
     // Below _kMinSearchLength, _search() below is just going to clear
     // everything — showing a loading spinner for a search that's never
     // actually going to fire is misleading, not helpful.
@@ -283,6 +333,7 @@ class _QuickSearchAreaState extends State<QuickSearchArea> {
     // Escape/Back later then lands on a home screen that still has it open,
     // not the clean home the user actually expects to return to.
     final query = _controller.text;
+    _recent.submit(query);
     _dismiss();
     context.push('/search/${widget.pluginId}', extra: {
       'pluginName': widget.pluginName,
@@ -375,11 +426,27 @@ class _QuickSearchAreaState extends State<QuickSearchArea> {
                         // already reaches filters (see _QuickSearchBarState).
                         onNavigateUp: () =>
                             _barKey.currentState?._closeFn.requestFocus(),
-                        onNavigateDown: () => _firstResultFocus.requestFocus(),
+                        onNavigateDown: () {
+                          if (!_firstResultFocus.requestFocus()) {
+                            _recentFirstFocus.requestFocus();
+                          }
+                        },
                       ),
                       SizedBox(height: AppScale.space(context, 19.4)),
                       BlocBuilder<DiscoveryBloc, DiscoveryState>(
                         builder: (context, state) {
+                          if (_queryEmpty &&
+                              !_pendingSearch &&
+                              _recentQueries.isNotEmpty) {
+                            _firstResultFocus.clear();
+                            return _RecentSearchesRow(
+                              queries: _recentQueries,
+                              firstFocus: _recentFirstFocus,
+                              onPick: _pickRecent,
+                              onClear: _clearRecent,
+                              onNavigateUp: _focusKeyboard,
+                            );
+                          }
                           if (_pendingSearch ||
                               state is! DiscoveryLoaded ||
                               state.items.isEmpty) {
@@ -525,6 +592,7 @@ class _QuickSearchAreaState extends State<QuickSearchArea> {
                                               // safety-net Focus below), which reads
                                               // as Back doing nothing — stuck with
                                               // the search bar open.
+                                              _recent.submit(_controller.text);
                                               _dismiss();
                                               openCatalogItem(context,
                                                   widget.pluginId, item);

@@ -30,6 +30,7 @@ import '../features/player/resume_seek.dart' show resolveStartPositionSec;
 import '../features/player/playback_episode_cache.dart';
 import '../features/player/presentation/widgets/player_audio_artwork.dart';
 import '../features/player/presentation/widgets/player_seek_bar.dart';
+import '../features/player/presentation/widgets/pointer_next_episode_banner.dart';
 import '../features/player/presentation/widgets/pointer_skip_button.dart';
 import '../features/player/profile_lease_conflict.dart';
 import '../features/player/source_continuity.dart';
@@ -1577,9 +1578,15 @@ class _MobilePlayerViewState extends State<_MobilePlayerView> {
                         right: 16,
                         bottom: 16,
                         child: SafeArea(
-                          child: _MobileNextEpisodeBanner(
-                            secondsRemaining: _nextEpisodeSecs!,
-                            onSkip: () {
+                          // Same card as desktop/web (and TV's): next title,
+                          // "Vai subito", close.
+                          child: PointerNextEpisodeBanner(
+                            secsRemaining: _nextEpisodeSecs!,
+                            nextTitle:
+                                _curEpisodeIndex + 1 < _curEpisodeTitles.length
+                                    ? _curEpisodeTitles[_curEpisodeIndex + 1]
+                                    : null,
+                            onPlay: () {
                               _autoAdvanced = true;
                               _goToNextEpisode();
                             },
@@ -2130,49 +2137,6 @@ class _TakeoverOverlay extends StatelessWidget {
               ),
             ],
           ),
-        ),
-      ),
-    );
-  }
-}
-
-class _MobileNextEpisodeBanner extends StatelessWidget {
-  final int secondsRemaining;
-  final VoidCallback onSkip;
-  final VoidCallback onDismiss;
-  const _MobileNextEpisodeBanner({
-    required this.secondsRemaining,
-    required this.onSkip,
-    required this.onDismiss,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Material(
-      color: const Color(0xF2141428),
-      borderRadius: BorderRadius.circular(10),
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(14, 10, 8, 10),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text('Prossimo episodio tra ${secondsRemaining}s',
-                style: const TextStyle(color: Colors.white, fontSize: 13)),
-            const SizedBox(width: 10),
-            FilledButton(
-              onPressed: onSkip,
-              style: FilledButton.styleFrom(
-                backgroundColor: AppTheme.primary,
-                padding: const EdgeInsets.symmetric(horizontal: 14),
-              ),
-              child: const Text('Salta'),
-            ),
-            IconButton(
-              tooltip: 'Chiudi',
-              icon: const Icon(Icons.close, color: Colors.white54, size: 18),
-              onPressed: onDismiss,
-            ),
-          ],
         ),
       ),
     );

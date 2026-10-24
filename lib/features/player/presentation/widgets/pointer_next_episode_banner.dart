@@ -3,7 +3,8 @@ import 'package:flutter/material.dart';
 /// Mouse/touch equivalent of the TV player's `_NextEpisodeBanner`
 /// (`presentation/playback_screen/next_episode_banner.dart`, private to that
 /// `part of` file) — same countdown-toward-auto-advance banner, for desktop
-/// and web where a click replaces D-pad focus navigation.
+/// and web where a click replaces D-pad focus navigation, and the phone,
+/// where a tap does.
 class PointerNextEpisodeBanner extends StatelessWidget {
   final int secsRemaining;
   final String? nextTitle;

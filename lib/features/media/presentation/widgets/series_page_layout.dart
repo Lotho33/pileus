@@ -21,6 +21,7 @@ import '../../../player/source_continuity.dart' show pickSourceByLabel;
 import '../../../player/source_preference.dart' show preferredFirst;
 import '../../../player/stream_warmer.dart';
 import '../../../../shared/utils/safe_focus.dart';
+import '../../../../shared/widgets/language_badge.dart';
 import '../../../../shared/widgets/pileus_spinner.dart';
 import '../../../../shared/widgets/tv_focusable.dart';
 import 'details_common.dart';

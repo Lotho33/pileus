@@ -19,6 +19,8 @@ class _SearchCarousel extends StatefulWidget {
   final double screenH;
   final void Function(FocusNode) onFirstCardFocus;
   final VoidCallback onNavigateUp;
+  // A result is being opened — the query counts as a recent search.
+  final VoidCallback onItemOpened;
 
   const _SearchCarousel({
     required this.pluginId,
@@ -28,6 +30,7 @@ class _SearchCarousel extends StatefulWidget {
     required this.screenH,
     required this.onFirstCardFocus,
     required this.onNavigateUp,
+    required this.onItemOpened,
   });
 
   @override
@@ -119,6 +122,7 @@ class _SearchCarouselState extends State<_SearchCarousel> {
               onItemTap: (id) {
                 final item = _findItem(id);
                 if (item != null) {
+                  widget.onItemOpened();
                   openCatalogItem(context, widget.pluginId, item);
                 }
               },

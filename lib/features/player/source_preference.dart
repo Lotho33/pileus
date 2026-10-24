@@ -153,6 +153,22 @@ String languageNotice(List<StreamSource> sources, StreamSource? chosen) {
   return 'Disponibile solo in ${chosen.label.trim().toLowerCase()}';
 }
 
+/// How a source label reads in a sentence — "Solo giapponese
+/// (sottotitolato)" on the episode language sheet. The words before a
+/// parenthesis are the language; "Sub" anywhere means subtitled.
+/// "Giapponese (Sub ITA)" → "giapponese (sottotitolato)", "Italiano
+/// (Doppiato)" → "italiano", "Inglese" → "inglese".
+String languageDescription(String label) {
+  final paren = label.indexOf('(');
+  var base =
+      (paren >= 0 ? label.substring(0, paren) : label).trim().toLowerCase();
+  if (label.toLowerCase().contains('sub')) {
+    if (base.isEmpty || base.contains('sub')) base = 'originale';
+    return '$base (sottotitolato)';
+  }
+  return base.isEmpty ? label.trim().toLowerCase() : base;
+}
+
 /// The language version last played per series, per profile — step 2 of
 /// the rule. Written when a player reaches its first frame. Device-local:
 /// on other devices Continue Watching (which stores the stream id) and the

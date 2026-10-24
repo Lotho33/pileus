@@ -119,4 +119,57 @@ void main() {
       expect(f.last.slowPct, 0);
     });
   });
+
+  group('seek and rebuffering', () {
+    const s = Duration(seconds: 1);
+
+    test('nothing before the first frame', () {
+      Metrics.playBegin();
+      Metrics.seekBegin(s * 60);
+      Metrics.playbackTick(s * 60, playing: true, buffering: false);
+      expect(_samples(Metrics.seek), isEmpty);
+    });
+
+    test('a seek counts once playback moves at its target', () {
+      Metrics.playBegin();
+      Metrics.playFirstFrame();
+      Metrics.seekBegin(s * 60);
+      // Stale tick from before the seek landed, then buffering: neither ends it.
+      Metrics.playbackTick(s * 10, playing: true, buffering: false);
+      Metrics.playbackTick(s * 10, playing: true, buffering: true);
+      expect(_samples(Metrics.seek), isEmpty);
+      Metrics.playbackTick(s * 61, playing: true, buffering: false);
+      expect(_samples(Metrics.seek), hasLength(1));
+      // The buffering after the seek was the seek's, not an interruption.
+      expect(_samples(Metrics.rebuffer), isEmpty);
+    });
+
+    test('a stall counts; a short blip or a pause does not', () async {
+      Metrics.playBegin();
+      Metrics.playFirstFrame();
+      Metrics.playbackTick(s * 5, playing: true, buffering: true);
+      Metrics.playbackTick(s * 5, playing: true, buffering: false);
+      expect(_samples(Metrics.rebuffer), isEmpty); // < 300 ms
+
+      Metrics.playbackTick(s * 6, playing: true, buffering: true);
+      Metrics.playbackTick(s * 6, playing: false, buffering: false); // paused
+      await Future<void>.delayed(const Duration(milliseconds: 350));
+      Metrics.playbackTick(s * 6, playing: true, buffering: false);
+      expect(_samples(Metrics.rebuffer), isEmpty);
+
+      Metrics.playbackTick(s * 7, playing: true, buffering: true);
+      await Future<void>.delayed(const Duration(milliseconds: 350));
+      Metrics.playbackTick(s * 7, playing: true, buffering: false);
+      expect(_samples(Metrics.rebuffer), hasLength(1));
+    });
+
+    test('a new Play stops watching', () {
+      Metrics.playBegin();
+      Metrics.playFirstFrame();
+      Metrics.playBegin();
+      Metrics.seekBegin(s * 60);
+      Metrics.playbackTick(s * 60, playing: true, buffering: false);
+      expect(_samples(Metrics.seek), isEmpty);
+    });
+  });
 }

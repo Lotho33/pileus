@@ -24,6 +24,7 @@ import '../features/player/episode_poster.dart';
 import '../features/player/resolve_and_play.dart';
 import '../features/player/source_continuity.dart' show defaultPlayStreamId;
 import '../features/player/stream_warmer.dart';
+import '../shared/widgets/language_badge.dart';
 import '../shared/widgets/language_chips.dart';
 import '../shared/responsive.dart';
 import '../shared/widgets/error_retry_view.dart';
@@ -191,12 +192,15 @@ class _Body extends StatelessWidget {
     );
   }
 
+  /// [chooseLanguage]: a tap on the episode itself — see resolveAndPlay.
   void _playEpisode(
-      BuildContext context, SeasonInfo season, List<EpisodeInfo> eps, int i) {
+      BuildContext context, SeasonInfo season, List<EpisodeInfo> eps, int i,
+      {bool chooseLanguage = false}) {
     resolveAndPlay(
       context,
       pluginId,
       eps[i].id,
+      chooseLanguage: chooseLanguage,
       extra: {
         'title': eps[i].title,
         'showTitle': item.title,
@@ -283,8 +287,9 @@ class _Body extends StatelessWidget {
                           _DesktopSeasons(
                             seasons: _seasons,
                             pluginId: pluginId,
-                            onPlay: (s, eps, i) =>
-                                _playEpisode(context, s, eps, i),
+                            onPlay: (s, eps, i) => _playEpisode(
+                                context, s, eps, i,
+                                chooseLanguage: true),
                             seriesId: item.id,
                             seriesTitle: item.title,
                             seriesPosterFallback:
@@ -1057,6 +1062,13 @@ class _EpisodeCardState extends State<_EpisodeCard> {
                             color: AppTheme.textHigh,
                             fontSize: 13.5,
                             fontWeight: FontWeight.w600)),
+                    // The episode's own language versions, when the plugin
+                    // says (JAP on an episode not dubbed yet, …).
+                    if (languageBadge(ep.extra['lang'] ?? '') != null)
+                      Padding(
+                        padding: const EdgeInsets.only(top: 4),
+                        child: LanguageBadgePill(lang: ep.extra['lang']!),
+                      ),
                     if (ep.plot.isNotEmpty) ...[
                       const SizedBox(height: 4),
                       Text(ep.plot,

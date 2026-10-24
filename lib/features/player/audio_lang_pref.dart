@@ -2,7 +2,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../core/di/injection.dart';
 import '../../core/grpc/auth_interceptor.dart';
-import 'engine/player_engine.dart';
+import 'engine/media_track.dart';
 
 /// Remembered audio-track choice for streams that carry several audio
 /// renditions in one HLS manifest — shared by every [PlayerEngine] screen
@@ -15,7 +15,7 @@ import 'engine/player_engine.dart';
 /// source_continuity.dart), which already follows the profile across
 /// devices through the Continue Watching stream id.
 ///
-/// One instance per opened stream: [maybeApply] acts once, the first time
+/// One instance per opened stream: [pick] acts once, the first time
 /// the engine reports more than one audio track.
 class AudioLangPref {
   static const _legacyKey = 'player.preferredAudioLang';
@@ -33,7 +33,7 @@ class AudioLangPref {
       // until this profile makes its own choice.
       prefs.getString(_legacyKey);
 
-  /// A new stream URL was opened — re-arm [maybeApply].
+  /// A new stream URL was opened — re-arm [pick].
   void reset() => _applied = false;
 
   /// The user explicitly picked [label] — remember it and stop auto-applying
@@ -44,27 +44,26 @@ class AudioLangPref {
   }
 
   /// Once tracks are known: if a remembered language exists and the
-  /// auto-picked track isn't it, switch. With nothing remembered yet, anchor
-  /// on whatever the engine picked for this first stream so later episodes
-  /// don't drift with each file's own track order.
-  void maybeApply(PlayerEngine engine) {
-    if (_applied) return;
-    final tracks = engine.audioTracks;
-    if (tracks.length < 2) return;
+  /// auto-picked track isn't it, the track to switch to. With nothing
+  /// remembered yet, anchor on whatever the player picked for this first
+  /// stream so later episodes don't drift with each file's own track order.
+  /// Null = leave it. Takes plain tracks, not an engine, so the browser
+  /// player (hls.js, no PlayerEngine) shares it too.
+  MediaTrack? pick(List<MediaTrack> tracks, MediaTrack? active) {
+    if (_applied) return null;
+    if (tracks.length < 2) return null;
     _applied = true;
     final prefs = getIt<SharedPreferences>();
     final want = _read(prefs);
     if (want == null || want.isEmpty) {
-      final active = engine.activeAudioTrack;
       if (active != null && active.label.isNotEmpty) {
         prefs.setString(_key, active.label);
       }
-      return;
+      return null;
     }
     final match = matchAudioTrack(tracks, want);
-    if (match != null && match.id != engine.activeAudioTrack?.id) {
-      engine.selectAudioTrack(match);
-    }
+    if (match != null && match.id != active?.id) return match;
+    return null;
   }
 }
 

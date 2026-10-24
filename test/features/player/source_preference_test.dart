@@ -157,4 +157,12 @@ void main() {
       expect(playerLanguageOptions(_live, audioTracks: 0), isEmpty);
     });
   });
+
+  test('languageDescription (the episode language sheet)', () {
+    expect(languageDescription('Giapponese (Sub ITA)'),
+        'giapponese (sottotitolato)');
+    expect(languageDescription('Italiano (Doppiato)'), 'italiano');
+    expect(languageDescription('Inglese'), 'inglese');
+    expect(languageDescription('Sub ITA'), 'originale (sottotitolato)');
+  });
 }

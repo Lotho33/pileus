@@ -21,10 +21,12 @@ import '../../../../shared/widgets/tv_focusable.dart';
 import '../../bloc/discovery_bloc.dart';
 import '../../data/media_repository.dart';
 import '../../bloc/discovery_event.dart';
+import '../../data/recent_searches.dart';
 import '../../bloc/discovery_state.dart';
 
 part 'quick_search_area/area_state.dart';
 part 'quick_search_area/search_bar.dart';
+part 'quick_search_area/recent_row.dart';
 part 'quick_search_area/see_all_button.dart';
 
 // ── quick search ─────────────────────────────────────────────────────────
