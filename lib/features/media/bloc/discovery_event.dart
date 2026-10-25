@@ -58,6 +58,22 @@ class LoadBrowseEvent extends DiscoveryEvent {
   List<Object?> get props => [pluginId, parentId, page];
 }
 
+/// Fetches a row already on screen again and swaps it in only if something
+/// it shows changed — no loading state, a failure keeps the row. For rows
+/// that change by themselves (live events starting, ending).
+class RefreshCatalogEvent extends DiscoveryEvent {
+  final String pluginId;
+  final String catalogId;
+  final int cacheTtlSeconds;
+  const RefreshCatalogEvent({
+    required this.pluginId,
+    required this.catalogId,
+    this.cacheTtlSeconds = 0,
+  });
+  @override
+  List<Object?> get props => [pluginId, catalogId, cacheTtlSeconds];
+}
+
 class LoadMoreCatalogEvent extends DiscoveryEvent {
   final String pluginId;
   final String catalogId;

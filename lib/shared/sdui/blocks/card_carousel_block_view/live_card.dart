@@ -14,6 +14,8 @@ class _LiveCardView extends StatefulWidget {
   final double height;
   final bool isActuallyLive;
   final String sportCat;
+  // Not on air yet: when it starts (badge in place of LIVE).
+  final DateTime? startsAt;
   final VoidCallback onTap;
   final VoidCallback? onFocused;
   final VoidCallback? onLeft;
@@ -36,6 +38,7 @@ class _LiveCardView extends StatefulWidget {
     this.focusNode,
     this.isActuallyLive = false,
     this.sportCat = '',
+    this.startsAt,
     this.onFocused,
     this.onLeft,
     this.onLeftRepeat,
@@ -258,7 +261,13 @@ class _LiveCardViewState extends State<_LiveCardView> {
                   ),
                 // LIVE badge — top right
                 if (widget.isActuallyLive)
-                  const Positioned(top: 12, right: 12, child: _LiveBadge()),
+                  const Positioned(top: 12, right: 12, child: _LiveBadge())
+                else if (widget.startsAt != null)
+                  Positioned(
+                      top: 12,
+                      right: 12,
+                      child:
+                          _StartBadge(label: liveWhenShort(widget.startsAt!))),
                 // Title
                 Positioned(
                   left: 16,
@@ -324,6 +333,36 @@ class _LiveBadge extends StatelessWidget {
                   fontSize: 15,
                   fontWeight: FontWeight.w700,
                   letterSpacing: 0.8)),
+        ],
+      ),
+    );
+  }
+}
+
+// When an event not on air yet starts — same place and size as _LiveBadge.
+class _StartBadge extends StatelessWidget {
+  final String label;
+  const _StartBadge({required this.label});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+      decoration: BoxDecoration(
+          color: Colors.black.withValues(alpha: 0.72),
+          borderRadius: BorderRadius.circular(6),
+          border: Border.all(color: Colors.white24)),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const Icon(Icons.schedule_rounded, color: Colors.white70, size: 14),
+          const SizedBox(width: 5),
+          Text(label,
+              style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 15,
+                  fontWeight: FontWeight.w700,
+                  letterSpacing: 0.3)),
         ],
       ),
     );

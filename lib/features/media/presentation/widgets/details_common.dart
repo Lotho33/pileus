@@ -108,10 +108,14 @@ class PopupPlayButton extends StatefulWidget {
   final VoidCallback? onUp;
   final VoidCallback? onLeft;
   final VoidCallback? onRight;
+  // The one Play picks by itself (the preferred language): purple even
+  // without focus, like "Riproduci" on the phone.
+  final bool primary;
   const PopupPlayButton({
     super.key,
     required this.label,
     required this.onTap,
+    this.primary = false,
     this.autofocus = false,
     this.focusNode,
     this.onUp,
@@ -141,11 +145,19 @@ class _PopupPlayButtonState extends State<PopupPlayButton> {
         decoration: BoxDecoration(
           color: focused
               ? AppTheme.primary
-              : AppTheme.textHigh.withValues(alpha: 0.12),
+              : widget.primary
+                  ? AppTheme.primary.withValues(alpha: 0.55)
+                  : AppTheme.textHigh.withValues(alpha: 0.12),
           borderRadius: BorderRadius.circular(8),
+          // Focus = white edge, so a focused button never looks like the
+          // resting primary one next to it.
           border: Border.all(
-            color: focused ? AppTheme.primary : Colors.white24,
-            width: 1.5,
+            color: focused
+                ? Colors.white
+                : widget.primary
+                    ? AppTheme.primary
+                    : Colors.white24,
+            width: focused ? 2 : 1.5,
           ),
           boxShadow: focused
               ? [
@@ -162,12 +174,16 @@ class _PopupPlayButtonState extends State<PopupPlayButton> {
           children: [
             Icon(Icons.play_arrow_rounded,
                 size: sh * (20.0 / 1080.0),
-                color: focused ? AppTheme.textHigh : AppTheme.textMid),
+                color: focused || widget.primary
+                    ? AppTheme.textHigh
+                    : AppTheme.textMid),
             SizedBox(width: sh * (8.0 / 1080.0)),
             Text(
               widget.label,
               style: TextStyle(
-                color: focused ? AppTheme.textHigh : AppTheme.textMid,
+                color: focused || widget.primary
+                    ? AppTheme.textHigh
+                    : AppTheme.textMid,
                 fontSize: sh * (15.0 / 1080.0),
                 fontWeight: FontWeight.w600,
               ),

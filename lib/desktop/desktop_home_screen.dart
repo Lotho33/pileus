@@ -14,6 +14,7 @@ import '../features/media/bloc/continue_watching_event.dart';
 import '../features/media/bloc/continue_watching_state.dart';
 import '../features/media/bloc/discovery_bloc.dart';
 import '../features/media/bloc/discovery_event.dart';
+import '../features/media/presentation/live_rows_refresher.dart';
 import '../features/media/bloc/discovery_state.dart';
 import '../features/media/data/continue_watching_item.dart';
 import '../features/media/data/media_repository.dart';
@@ -49,20 +50,33 @@ class _DesktopHomeScreenState extends State<DesktopHomeScreen> {
     return null;
   }
 
+  // Live rows re-fetched every minute while this page is on screen.
+  late final _liveRefresher = LiveRowsRefresher(
+    context: () => context,
+    refresh: (cat) => _blocs[cat.id]?.add(RefreshCatalogEvent(
+      pluginId: widget.plugin.pluginId,
+      catalogId: cat.id,
+      cacheTtlSeconds: cat.cacheTtlSeconds,
+    )),
+  );
+
   @override
   void initState() {
     super.initState();
     _syncBlocs();
+    _liveRefresher.watch(_catalogs);
   }
 
   @override
   void didUpdateWidget(DesktopHomeScreen old) {
     super.didUpdateWidget(old);
     _syncBlocs();
+    if (old.plugin != widget.plugin) _liveRefresher.watch(_catalogs);
   }
 
   @override
   void dispose() {
+    _liveRefresher.dispose();
     for (final b in _blocs.values) {
       b.close();
     }

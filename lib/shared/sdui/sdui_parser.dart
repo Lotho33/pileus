@@ -1,5 +1,6 @@
 import '../../core/grpc/generated/media.pb.dart' show CatalogDef, CatalogItem;
 import 'sdui_block.dart';
+import 'sport_theme.dart' show liveStartAt;
 
 /// Parses a [CatalogDef] + its loaded items into a [CardCarouselBlock].
 ///
@@ -84,5 +85,6 @@ SduiCardItem sduiCardItemFromCatalogItem(CatalogItem item) {
     subtitle: (item.extra['plot'] ?? '').split('\n').first,
     isLive: item.extra['is_live'] == '1',
     sportCat: item.extra['sport_cat'] ?? '',
+    startsAt: item.extra['is_live'] == '1' ? null : liveStartAt(item.extra),
   );
 }

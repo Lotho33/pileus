@@ -331,15 +331,33 @@ class _PluginPageBodyState extends State<_PluginPageBody> {
     _shellKey.currentState?.resetToFirstCatalog();
   }
 
+  // Live rows re-fetched every minute while this page is on screen.
+  late final _liveRefresher = LiveRowsRefresher(
+    context: () => context,
+    refresh: (cat) {
+      final i = widget.plugin.catalogs.indexWhere((c) => c.id == cat.id);
+      if (i < 0 || i >= _sectionBlocs.length) return;
+      _sectionBlocs[i].add(RefreshCatalogEvent(
+        pluginId: widget.plugin.pluginId,
+        catalogId: cat.id,
+        cacheTtlSeconds: cat.cacheTtlSeconds,
+      ));
+    },
+  );
+
   @override
   void initState() {
     super.initState();
     _initBlocs(widget.plugin);
+    _liveRefresher.watch(widget.plugin.catalogs);
   }
 
   @override
   void didUpdateWidget(_PluginPageBody old) {
     super.didUpdateWidget(old);
+    if (old.plugin != widget.plugin) {
+      _liveRefresher.watch(widget.plugin.catalogs);
+    }
     // PluginBloc's 30s background poll can hand back a fresh PluginInfo for
     // the *same* pluginId with a different set of catalogs (a plugin still
     // indexing progressively adds rows, or one disappears) — not just on an
@@ -463,6 +481,7 @@ class _PluginPageBodyState extends State<_PluginPageBody> {
 
   @override
   void dispose() {
+    _liveRefresher.dispose();
     for (final b in _sectionBlocs) {
       b.close();
     }

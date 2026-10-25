@@ -625,7 +625,9 @@ class _StandardHomeShellState extends State<_StandardHomeShell> {
     // Long live titles used to run edge-to-edge before wrapping; a narrower
     // centred column makes them break onto a second line much sooner.
     final liveTitleW = screenW * 0.66;
-    final titleFs = isLive ? screenH * 0.060 : screenH * 0.045;
+    // Live titles are long ("Rally … — SS11 - Seixoso 1"): at 0.060 two
+    // lines took the whole hero.
+    final titleFs = isLive ? screenH * 0.050 : screenH * 0.045;
     final metaChipFs =
         (screenH * 0.022).clamp(11.0, 48.0); // must match _MetaChip.build()
     final genreFs = screenH * 0.013;
@@ -638,7 +640,7 @@ class _StandardHomeShellState extends State<_StandardHomeShell> {
     // below it. Grow the reservation with textScale (no-op at 1.0, i.e. on a
     // plain Android TV); the plot below auto-fits into whatever's left.
     final zTitleH =
-        (isLive ? screenH * 0.18 : screenH * 0.14) * textScale.clamp(1.0, 1.4);
+        (isLive ? screenH * 0.15 : screenH * 0.14) * textScale.clamp(1.0, 1.4);
     // Chip zones only need a light textScale allowance to contain their single
     // line — over-provisioning here steals vertical space from the plot below.
     // The live status line (IN DIRETTA pill + start time) needs a bit more.
@@ -669,7 +671,11 @@ class _StandardHomeShellState extends State<_StandardHomeShell> {
     final nominalFs = isLive
         ? (screenH * 0.030).clamp(16.0, 34.0)
         : (screenH * 0.020).clamp(12.0, 22.0);
-    final minFs = isLive ? 14.0 : 11.0;
+    // A live's text (start time, competition) never smaller than the status
+    // line right above it (_LiveStatusLine, sh × 0.020): squeezed by the big
+    // centred title it shrank to a tiny caption under a bigger
+    // "Non in diretta". Fewer lines instead.
+    final minFs = isLive ? (screenH * 0.020).clamp(13.0, 34.0) : 11.0;
     final fitFs = availPlotH / (targetLines * lineFactor);
     final plotFs = fitFs.clamp(minFs, nominalFs).toDouble();
     final plotLineH = plotFs * lineFactor;
@@ -732,7 +738,13 @@ class _StandardHomeShellState extends State<_StandardHomeShell> {
             .take(4)
             .toList()
         : <String>[];
-    final plot = item.extra['plot'] ?? '';
+    // A live's plot without what the status line above already shows
+    // ("Inizio: …", a bare "IN DIRETTA").
+    final plot = isLive
+        ? livePlotWithoutStatus(item.extra['plot'] ?? '',
+            startShown: !isLiveNow(item.extra) &&
+                liveStartAt(item.extra) != null)
+        : item.extra['plot'] ?? '';
 
     final logoAlign = isLive ? Alignment.center : Alignment.centerLeft;
     final titleAlign = isLive ? Alignment.topCenter : Alignment.topLeft;

@@ -358,6 +358,8 @@ class _WatchButtonState extends State<_WatchButton> {
                     _sources[i].label.isNotEmpty ? _sources[i].label : 'Guarda',
                 focusNode: _sourceFn(i),
                 autofocus: i == 0,
+                // Preferred language first (preferredFirst).
+                primary: i == 0,
                 onTap: () => _play(context, _sources[i]),
                 onLeft: i > 0 ? () => _sourceFn(i - 1).requestFocus() : null,
                 onRight: i < _sources.length - 1

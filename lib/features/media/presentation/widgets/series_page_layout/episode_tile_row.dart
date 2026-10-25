@@ -273,13 +273,22 @@ class _EpisodeTileRowState extends State<_EpisodeTileRow> {
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                         ),
-                      if (item.duration > 0)
+                      // Duration, then the start of the plot on the same
+                      // line — the row is wide and was empty past the title.
+                      if (item.duration > 0 || item.plot.isNotEmpty)
                         Padding(
                           padding: const EdgeInsets.only(top: 2),
                           child: Text(
-                            '${item.duration} min',
+                            [
+                              if (item.duration > 0) '${item.duration} min',
+                              if (item.plot.isNotEmpty)
+                                item.plot.replaceAll('\n', ' ').trim(),
+                            ].join('  ·  '),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
                             style: TextStyle(
-                                color: Colors.white54,
+                                color:
+                                    focused ? Colors.white70 : Colors.white54,
                                 fontSize: epDurFs,
                                 height: 1.0),
                           ),

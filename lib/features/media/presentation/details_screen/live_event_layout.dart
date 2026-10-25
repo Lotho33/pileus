@@ -112,11 +112,13 @@ class _LiveEventLayoutState extends State<_LiveEventLayout> {
     final sh = MediaQuery.sizeOf(context).height;
     final item = widget.response.item;
     final isLive = isLiveNow(item.extra);
-    final startTime = liveStartTimeLabel(item.extra);
+    final startAt = isLiveNow(item.extra) ? null : liveStartAt(item.extra);
+    final startTime = startAt == null ? null : liveWhenLabel(startAt);
     final fanart = item.extra['fanart_url'] ?? '';
     final bgUrl = fanart.isNotEmpty ? fanart : item.posterUrl;
     final sportCat = item.extra['sport_cat'] ?? '';
-    final plot = item.extra['plot'] ?? '';
+    final plot = livePlotWithoutStatus(item.extra['plot'] ?? '',
+        startShown: startTime != null);
     final sportColor = sportAccentColor(sportCat);
 
     return Scaffold(
@@ -241,7 +243,7 @@ class _LiveEventLayoutState extends State<_LiveEventLayout> {
                                 size: sh * (15.0 / 1080.0),
                                 color: AppTheme.textHigh.withValues(alpha: 0.6)),
                             SizedBox(width: sh * (6.0 / 1080.0)),
-                            Text('Inizio $startTime',
+                            Text(startTime,
                                 style: TextStyle(
                                     color: AppTheme.textHigh
                                         .withValues(alpha: 0.6),

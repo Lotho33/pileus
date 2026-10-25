@@ -11,6 +11,8 @@ abstract final class AppTheme {
   static const Color border = Color(0xFF2A2A4A); // subtle borders
   static const Color primary = Color(0xFF7C6AF7); // purple accent
   static const Color secondary = Color(0xFF4FC3F7); // cyan accent
+  // Muted purple for tonal fills (selected chips, round icon buttons).
+  static const Color primaryContainer = Color(0xFF2F2A5E);
   // Soft off-white rather than pure #FFFFFF — TV guidance flags pure white
   // as harsh at typical living-room brightness in a dim room; this is close
   // enough to be imperceptible as a color shift but avoids that.
@@ -24,15 +26,29 @@ abstract final class AppTheme {
   // this apply everywhere with one line instead of touching every call
   // site.
   static const String bodyFont = 'DMSans';
+  // Symbols DM Sans doesn't have — the 🏆/⚽/🕒 some plugins put in their
+  // texts drew as an empty box where the system has no emoji font (TV
+  // web, some boxes). Monochrome, so they take the text's own color and
+  // read like the rest of the line. Subset: see pubspec.yaml.
+  static const List<String> fontFallback = ['NotoEmojiSymbols'];
 
   // ── ThemeData ─────────────────────────────────────────────────────────────────
   static ThemeData dark() => ThemeData(
         brightness: Brightness.dark,
         fontFamily: bodyFont,
+        fontFamilyFallback: fontFallback,
         scaffoldBackgroundColor: bg,
         colorScheme: const ColorScheme.dark(
           primary: primary,
           secondary: secondary,
+          // Material derives the "tonal" fills (IconButton.filledTonal,
+          // selected ChoiceChip/FilterChip) from these; left to default they
+          // came out the cyan above — a second accent next to the purple one
+          // on the phone's back/download buttons and season chips.
+          secondaryContainer: primaryContainer,
+          onSecondaryContainer: textHigh,
+          primaryContainer: primaryContainer,
+          onPrimaryContainer: textHigh,
           surface: surface,
           onSurface: textHigh,
         ),

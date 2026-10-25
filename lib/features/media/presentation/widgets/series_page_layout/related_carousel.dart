@@ -56,7 +56,7 @@ class _SeriesRelatedCarouselState extends State<_SeriesRelatedCarousel> {
   bool get _hasMultiple =>
       widget.related.isNotEmpty && widget.similar.isNotEmpty;
 
-  String get _activeLabel => _activeIdx == 0 ? 'CORRELATI' : 'SIMILI';
+  String get _activeLabel => _activeIdx == 0 ? 'Correlati' : 'Simili';
 
   void _rebuildCardFns() {
     for (final n in _cardFns) {
@@ -159,9 +159,10 @@ class _SeriesRelatedCarouselState extends State<_SeriesRelatedCarousel> {
                   _activeLabel,
                   style: TextStyle(
                     color: AppTheme.textHigh,
-                    fontSize: (sh * (32.5 / 1080.0)).clamp(23.0, 42.0),
+                    // Same as the home's row titles (sh × 0.030).
+                    fontSize: (sh * 0.030).clamp(23.0, 42.0),
                     fontWeight: FontWeight.w700,
-                    letterSpacing: 0.5,
+                    letterSpacing: 0.2,
                   ),
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
@@ -307,8 +308,7 @@ class AnimeMetaRow extends StatelessWidget {
       chips.add(_InfoChip(icon: Icons.schedule_rounded, text: runtime));
     }
     if (status.isNotEmpty) {
-      chips.add(
-          _InfoChip(icon: Icons.circle_outlined, text: _fmtStatus(status)));
+      chips.add(_InfoChip(icon: _statusIcon(status), text: _fmtStatus(status)));
     }
 
     if (chips.isEmpty) return const SizedBox.shrink();
@@ -324,6 +324,20 @@ class AnimeMetaRow extends StatelessWidget {
         _ => s,
       };
 }
+
+/// Icon for a series' status (TMDB and AniList values) — an empty circle
+/// read as a letter "O" next to the text.
+IconData _statusIcon(String s) => switch (s) {
+      'Returning Series' ||
+      'RELEASING' ||
+      'In Production' =>
+        Icons.autorenew_rounded,
+      'Ended' || 'FINISHED' => Icons.check_circle_outline_rounded,
+      'Canceled' || 'CANCELLED' => Icons.cancel_outlined,
+      'HIATUS' => Icons.pause_circle_outline_rounded,
+      'NOT_YET_RELEASED' => Icons.event_rounded,
+      _ => Icons.info_outline_rounded,
+    };
 
 // ── Series related carousel footer (thin wrapper that parses JSON) ───────────
 

@@ -9,7 +9,13 @@ import '../../core/utils/image_sizing.dart';
 import '../../features/auth/friendly_error.dart';
 import '../../features/media/data/media_repository.dart';
 import '../sdui/sport_theme.dart'
-    show sportIcon, sportAccentColor, isLiveNow, liveStartTimeLabel;
+    show
+        sportIcon,
+        sportAccentColor,
+        isLiveNow,
+        liveStartAt,
+        liveWhenLabel,
+        livePlotWithoutStatus;
 import 'pileus_spinner.dart';
 import 'tv_focusable.dart';
 import 'package:cached_network_image_platform_interface/cached_network_image_platform_interface.dart'
@@ -123,9 +129,11 @@ class _LiveEventPopupState extends State<_LiveEventPopup> {
   Widget build(BuildContext context) {
     final item = widget.item;
     final isLive = isLiveNow(item.extra);
-    final startTime = liveStartTimeLabel(item.extra);
+    final startAt = isLiveNow(item.extra) ? null : liveStartAt(item.extra);
+    final startTime = startAt == null ? null : liveWhenLabel(startAt);
     final sportCat = item.extra['sport_cat'] ?? '';
-    final plot = item.extra['plot'] ?? '';
+    final plot = livePlotWithoutStatus(item.extra['plot'] ?? '',
+        startShown: startTime != null);
     final poster = item.posterUrl;
     final homeBadge = item.extra['home_badge_url'] ?? '';
     final awayBadge = item.extra['away_badge_url'] ?? '';
@@ -405,7 +413,7 @@ class _LiveStartChip extends StatelessWidget {
           Icon(Icons.schedule_rounded,
               size: AppScale.space(context, 13), color: Colors.white54),
           const SizedBox(width: 4),
-          Text('Inizio $startTime',
+          Text(startTime,
               style: TextStyle(
                   color: Colors.white54,
                   fontSize: AppScale.space(context, 11),

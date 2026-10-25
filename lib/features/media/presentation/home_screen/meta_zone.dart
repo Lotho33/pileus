@@ -210,7 +210,10 @@ class _LiveStatusLine extends StatelessWidget {
     final sh = MediaQuery.sizeOf(context).height;
     final fs = (sh * 0.020).clamp(13.0, 34.0);
     final isLive = isLiveNow(item.extra);
-    final start = liveStartTimeLabel(item.extra);
+    // Not on air yet: when it starts, relative ("Tra 25 min", "Domani alle
+    // 15:00"). On air: nothing — the red pill says it.
+    final startAt = isLive ? null : liveStartAt(item.extra);
+    final start = startAt == null ? null : liveWhenLabel(startAt);
     final sportCat = (item.extra['sport_cat'] ?? '').trim();
 
     final parts = <Widget>[];
@@ -233,7 +236,7 @@ class _LiveStatusLine extends StatelessWidget {
           Icon(Icons.schedule_rounded,
               size: fs * 1.05, color: AppTheme.textMid),
           SizedBox(width: fs * 0.32),
-          Text('Inizio $start',
+          Text(start,
               style: TextStyle(
                   color: AppTheme.textMid,
                   fontSize: fs,

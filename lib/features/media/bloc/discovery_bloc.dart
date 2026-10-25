@@ -35,6 +35,7 @@ class DiscoveryBloc extends Bloc<DiscoveryEvent, DiscoveryState> {
       : super(const DiscoveryInitial()) {
     on<LoadCatalogEvent>(_onLoadCatalog);
     on<LoadMoreCatalogEvent>(_onLoadMore);
+    on<RefreshCatalogEvent>(_onRefreshCatalog);
     on<SearchRequestEvent>(_onSearch);
     on<LoadMoreSearchEvent>(_onLoadMoreSearch);
     on<LoadBrowseEvent>(_onLoadBrowse);
@@ -104,7 +105,8 @@ class DiscoveryBloc extends Bloc<DiscoveryEvent, DiscoveryState> {
   // the row meanwhile (a newer load, a "load more" in flight or done).
   // A failure keeps the cached row: that's the point of having it.
   Future<void> _revalidate(LoadCatalogEvent event, int generation,
-      List<CatalogItem> shown, Emitter<DiscoveryState> emit) async {
+      List<CatalogItem> shown, Emitter<DiscoveryState> emit,
+      {bool liveState = false}) async {
     try {
       final fresh = await _repo.getCatalog(
         event.pluginId,
@@ -126,6 +128,7 @@ class DiscoveryBloc extends Bloc<DiscoveryEvent, DiscoveryState> {
       List<String> shape(List<CatalogItem> items) => [
             for (final i in items)
               '${i.id}|${i.title}|${i.posterUrl}|${i.logoUrl}'
+                  '${liveState ? '|${i.extra['is_live']}|${i.extra['plot']}' : ''}'
           ];
       if (const ListEquality<String>()
           .equals(shape(fresh.catalog.items), shape(shown))) {
@@ -140,6 +143,24 @@ class DiscoveryBloc extends Bloc<DiscoveryEvent, DiscoveryState> {
       if (isUnauthenticated(e)) onSessionExpired?.call();
       if (isProfileLocked(e)) onProfileLocked?.call();
     }
+  }
+
+  Future<void> _onRefreshCatalog(
+      RefreshCatalogEvent event, Emitter<DiscoveryState> emit) async {
+    final current = state;
+    if (current is! DiscoveryLoaded || current.currentPage != 1) return;
+    await _revalidate(
+      LoadCatalogEvent(
+        pluginId: event.pluginId,
+        catalogId: event.catalogId,
+        cacheTtlSeconds: event.cacheTtlSeconds,
+      ),
+      _catalogGeneration,
+      current.items,
+      emit,
+      // A live event going on air changes only this flag.
+      liveState: true,
+    );
   }
 
   Future<void> _onLoadMore(

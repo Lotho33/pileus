@@ -29,7 +29,7 @@ class SubtitleStyleSection extends StatelessWidget {
     required this.onPaddingChanged,
   });
 
-  static const _colors = [
+  static const colors = [
     (Colors.white, 'Bianco'),
     (Color(0xFFFFEB3B), 'Giallo'),
     (Color(0xFF80FF80), 'Verde'),
@@ -68,8 +68,8 @@ class SubtitleStyleSection extends StatelessWidget {
           Text('Colore testo',
               style: TextStyle(color: Colors.white54, fontSize: captionFs)),
           SizedBox(height: AppScale.space(context, 8)),
-          _ColorSwatchRow(
-            colors: _colors,
+          SubtitleColorSwatches(
+            colors: colors,
             selectedColor: color,
             swatchSize: AppScale.space(context, 32),
             gap: AppScale.space(context, 10),
@@ -118,14 +118,15 @@ class SubtitleStyleSection extends StatelessWidget {
 // unhandled, since this row is embedded in two different surrounding
 // layouts (the standalone Preferenze screen and player_settings_panel.dart's
 // in-player overlay) that already own their own vertical chain.
-class _ColorSwatchRow extends StatefulWidget {
+class SubtitleColorSwatches extends StatefulWidget {
   final List<(Color, String)> colors;
   final Color selectedColor;
   final double swatchSize;
   final double gap;
   final ValueChanged<Color> onColorChanged;
 
-  const _ColorSwatchRow({
+  const SubtitleColorSwatches({
+    super.key,
     required this.colors,
     required this.selectedColor,
     required this.swatchSize,
@@ -134,15 +135,15 @@ class _ColorSwatchRow extends StatefulWidget {
   });
 
   @override
-  State<_ColorSwatchRow> createState() => _ColorSwatchRowState();
+  State<SubtitleColorSwatches> createState() => _SubtitleColorSwatchesState();
 }
 
-class _ColorSwatchRowState extends State<_ColorSwatchRow> {
+class _SubtitleColorSwatchesState extends State<SubtitleColorSwatches> {
   late List<FocusNode> _fns =
       List.generate(widget.colors.length, (_) => FocusNode());
 
   @override
-  void didUpdateWidget(_ColorSwatchRow old) {
+  void didUpdateWidget(SubtitleColorSwatches old) {
     super.didUpdateWidget(old);
     if (old.colors.length != widget.colors.length) {
       for (final n in _fns) {

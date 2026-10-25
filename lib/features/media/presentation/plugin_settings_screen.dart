@@ -6,11 +6,13 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../core/di/injection.dart';
+import '../../../core/perf_profile.dart' show tvUi;
 import '../../../core/grpc/clients/media_client.dart'
     show CatalogDef, PluginInfo;
 import '../../../core/theme/app_scale.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../shared/utils/back_dispatch.dart';
+import '../../../shared/utils/tap_guard.dart' show GuardedBackButton;
 import '../../../shared/widgets/ambient_glow_background.dart';
 import '../../../shared/widgets/pileus_spinner.dart';
 import '../../../shared/widgets/settings/settings_header.dart';
@@ -290,6 +292,7 @@ class _PluginSettingsBodyState extends State<_PluginSettingsBody> {
 
   @override
   Widget build(BuildContext context) {
+    if (!tvUi) return _pointerPage(context);
     return TvFocusable(
       canRequestFocus: false,
       onEsc: () => context.pop(),
@@ -308,6 +311,116 @@ class _PluginSettingsBodyState extends State<_PluginSettingsBody> {
             ],
           ),
         ),
+      ),
+    );
+  }
+
+  /// Phone, web and desktop: the same page in the look of the phone's other
+  /// settings pages (app bar, list tiles), driven by touch/mouse — drag by
+  /// the handle, tap the eye. The D-pad grab/move of the TV page has no way
+  /// in without arrow keys.
+  Widget _pointerPage(BuildContext context) {
+    Widget header(String t) => Padding(
+          padding: const EdgeInsets.fromLTRB(16, 20, 16, 6),
+          child: Text(t.toUpperCase(),
+              style: const TextStyle(
+                  color: AppTheme.primary,
+                  fontSize: 12,
+                  fontWeight: FontWeight.w700,
+                  letterSpacing: .8)),
+        );
+    Widget caption(String t) => Padding(
+          padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+          child: Text(t,
+              style: const TextStyle(
+                  color: AppTheme.textLow, fontSize: 13, height: 1.35)),
+        );
+    return Scaffold(
+      backgroundColor: AppTheme.bg,
+      appBar: AppBar(
+        leading: const GuardedBackButton(),
+        backgroundColor: AppTheme.bg,
+        title: Text(widget.pluginName),
+      ),
+      body: ListView(
+        padding: const EdgeInsets.only(bottom: 24),
+        children: [
+          if (_plugin != null &&
+              (_plugin!.needsConfig ||
+                  !_plugin!.reachable ||
+                  _plugin!.statusLabel.isNotEmpty))
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+              child: Align(
+                alignment: Alignment.centerLeft,
+                child: PluginStatusIndicator(plugin: _plugin!),
+              ),
+            ),
+          header('Visibilità'),
+          SwitchListTile(
+            title: const Text('Mostra nella home',
+                style: TextStyle(color: AppTheme.textHigh)),
+            value: _pluginVisible,
+            activeTrackColor: AppTheme.primary,
+            onChanged: _setPluginVisible,
+          ),
+          if (!_pluginVisible)
+            caption('Il plugin è nascosto: non comparirà nel menù né nella '
+                'home finché non lo riattivi qui.'),
+          if (_pluginVisible) ...[
+            header('Caroselli'),
+            caption('Trascina dalla maniglia per riordinare, tocca l\'occhio '
+                'per mostrare o nascondere.'),
+            if (_loading)
+              const Padding(
+                padding: EdgeInsets.all(24),
+                child: Center(child: CircularProgressIndicator()),
+              )
+            else if (_rows.isEmpty)
+              caption('Questo plugin non ha caroselli.')
+            else
+              ReorderableListView.builder(
+                shrinkWrap: true,
+                physics: const NeverScrollableScrollPhysics(),
+                buildDefaultDragHandles: false,
+                itemCount: _rows.length,
+                onReorderItem: (from, to) {
+                  setState(() => _rows.insert(to, _rows.removeAt(from)));
+                  _persist();
+                },
+                itemBuilder: (context, i) {
+                  final row = _rows[i];
+                  return ListTile(
+                    key: ValueKey(row.id),
+                    leading: ReorderableDragStartListener(
+                      index: i,
+                      child: const Icon(Icons.drag_indicator_rounded,
+                          color: AppTheme.textLow),
+                    ),
+                    title: Text(row.name,
+                        style: TextStyle(
+                          color: row.visible
+                              ? AppTheme.textHigh
+                              : AppTheme.textLow,
+                          decoration:
+                              row.visible ? null : TextDecoration.lineThrough,
+                        )),
+                    trailing: IconButton(
+                      tooltip: row.visible ? 'Nascondi' : 'Mostra',
+                      icon: Icon(
+                          row.visible
+                              ? Icons.visibility_outlined
+                              : Icons.visibility_off_outlined,
+                          color: row.visible
+                              ? AppTheme.textMid
+                              : AppTheme.textLow),
+                      onPressed: () => _toggleRowVisible(i),
+                    ),
+                  );
+                },
+              ),
+          ],
+        ],
       ),
     );
   }

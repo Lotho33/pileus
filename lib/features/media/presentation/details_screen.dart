@@ -13,7 +13,12 @@ import '../../../core/utils/image_sizing.dart';
 import '../../../core/utils/media_type.dart';
 import '../../auth/friendly_error.dart';
 import '../../../shared/sdui/sport_theme.dart'
-    show sportAccentColor, isLiveNow, liveStartTimeLabel;
+    show
+        sportAccentColor,
+        isLiveNow,
+        liveStartAt,
+        liveWhenLabel,
+        livePlotWithoutStatus;
 import '../../../shared/widgets/error_retry_view.dart';
 import '../../../shared/widgets/pileus_spinner.dart';
 import '../../../shared/widgets/skeleton.dart';

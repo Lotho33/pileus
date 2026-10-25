@@ -53,6 +53,7 @@ import '../bloc/continue_watching_event.dart';
 import '../bloc/continue_watching_state.dart';
 import '../bloc/discovery_bloc.dart';
 import '../bloc/discovery_event.dart';
+import 'live_rows_refresher.dart';
 import '../bloc/discovery_state.dart';
 import '../bloc/plugin_bloc.dart';
 import '../bloc/plugin_event.dart';

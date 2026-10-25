@@ -1,13 +1,14 @@
 import 'package:flutter/material.dart';
 
-import '../../../core/theme/app_scale.dart';
 import '../../../core/theme/app_theme.dart';
 import '../tv_focusable.dart';
+import 'settings_card.dart';
 
-/// A focusable label + Switch row, styled like the toggle already used in
-/// player_settings_panel.dart's subtitle-background switch.
+/// A focusable label + Switch row, in the shared [SettingsCard] look.
 class SettingsToggleRow extends StatelessWidget {
   final String label;
+  // Inside the card, under the label.
+  final String? caption;
   final bool value;
   final ValueChanged<bool> onChanged;
   final FocusNode? focusNode;
@@ -17,6 +18,7 @@ class SettingsToggleRow extends StatelessWidget {
   const SettingsToggleRow({
     super.key,
     required this.label,
+    this.caption,
     required this.value,
     required this.onChanged,
     this.focusNode,
@@ -35,57 +37,21 @@ class SettingsToggleRow extends StatelessWidget {
       // On/off for screen readers (merged into the row by TvFocusable).
       builder: (context, focused) => Semantics(
         toggled: value,
-        child: AnimatedScale(
-          scale: focused ? AppScale.focusScaleRow : 1.0,
-          duration: AppScale.focusDuration,
-          curve: AppScale.focusCurve,
-          child: AnimatedContainer(
-            duration: AppScale.focusDuration,
-            curve: AppScale.focusCurve,
-            margin: EdgeInsets.symmetric(
-                horizontal: AppScale.space(context, 16),
-                vertical: AppScale.space(context, 4)),
-            padding: EdgeInsets.symmetric(
-                horizontal: AppScale.space(context, 24),
-                vertical: AppScale.space(context, 20)),
-            decoration: BoxDecoration(
-              color: focused
-                  ? AppTheme.primary.withValues(alpha: 0.18)
-                  : AppTheme.surface2,
-              borderRadius: BorderRadius.circular(14),
-              border: Border.all(
-                color: focused ? AppTheme.primary : Colors.transparent,
-                width: 2,
-              ),
-              boxShadow:
-                  focused ? AppScale.focusGlow(AppTheme.primary) : const [],
-            ),
-            child: Row(
-              children: [
-                Expanded(
-                  child: Text(
-                    label,
-                    style: TextStyle(
-                      color: focused ? Colors.white : AppTheme.textMid,
-                      fontSize: AppScale.label(context),
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                ),
-                Switch(
-                  value: value,
-                  onChanged: onChanged,
-                  thumbColor: WidgetStateProperty.resolveWith((states) =>
-                      states.contains(WidgetState.selected)
-                          ? Colors.white
-                          : AppTheme.textLow),
-                  trackColor: WidgetStateProperty.resolveWith((states) =>
-                      states.contains(WidgetState.selected)
-                          ? AppTheme.primary
-                          : Colors.white12),
-                ),
-              ],
-            ),
+        child: SettingsCard(
+          focused: focused,
+          label: label,
+          caption: caption,
+          trailing: Switch(
+            value: value,
+            onChanged: onChanged,
+            thumbColor: WidgetStateProperty.resolveWith((states) =>
+                states.contains(WidgetState.selected)
+                    ? Colors.white
+                    : AppTheme.textLow),
+            trackColor: WidgetStateProperty.resolveWith((states) =>
+                states.contains(WidgetState.selected)
+                    ? AppTheme.primary
+                    : Colors.white12),
           ),
         ),
       ),

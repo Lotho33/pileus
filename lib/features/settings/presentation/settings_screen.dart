@@ -116,7 +116,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   SettingsNavRow(
                     icon: Icons.tune_rounded,
                     label: 'Preferenze',
-                    subtitle: 'Sottotitoli',
+                    subtitle: 'Sottotitoli, lingua, riserva, hardware modesto',
                     focusNode: _prefsFn,
                     onFocusUp: () => _serverFn.requestFocus(),
                     onFocusDown: () => _pluginsFn.requestFocus(),

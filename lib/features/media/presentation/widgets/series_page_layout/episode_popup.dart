@@ -548,6 +548,8 @@ class _EpisodePopupState extends State<_EpisodePopup> {
                                                       ? _sources[i].label
                                                       : 'Guarda',
                                               autofocus: i == 0,
+                                              // Preferred language first.
+                                              primary: i == 0,
                                               focusNode: _playFn(i),
                                               onUp: i == 0
                                                   ? () =>

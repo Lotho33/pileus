@@ -96,10 +96,13 @@ class _SectionHeader extends StatelessWidget {
                   FadeTransition(opacity: animation, child: child),
               child: Text(title,
                   key: ValueKey(title),
+                  // Same title style as every content section (details'
+                  // "Correlati", the phone's rows): bold, sentence case.
                   style: TextStyle(
                     color: AppTheme.textHigh,
                     fontSize: fontSize,
-                    letterSpacing: 0.8,
+                    fontWeight: FontWeight.w700,
+                    letterSpacing: 0.2,
                   ),
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis),

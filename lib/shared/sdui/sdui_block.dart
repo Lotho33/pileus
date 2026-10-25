@@ -46,6 +46,7 @@ class SduiCardItem {
   final String subtitle; // live-variant only
   final bool isLive; // live-variant "LIVE" badge
   final String sportCat; // live-variant accent color/emoji key
+  final DateTime? startsAt; // live-variant, not on air yet: when it starts
 
   const SduiCardItem({
     required this.id,
@@ -57,6 +58,7 @@ class SduiCardItem {
     this.subtitle = '',
     this.isLive = false,
     this.sportCat = '',
+    this.startsAt,
   });
 }
 

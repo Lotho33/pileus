@@ -192,6 +192,7 @@ class _LiveRowViewState extends State<_LiveRowView> {
                 width: _cardW,
                 height: _cardH,
                 isActuallyLive: items[i].isLive,
+                startsAt: items[i].startsAt,
                 sportCat: items[i].sportCat,
                 onTap: () => widget.interaction.onItemTap?.call(items[i].id),
                 onFocused: () {

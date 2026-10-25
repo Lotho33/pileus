@@ -8,7 +8,8 @@ import '../core/theme/app_theme.dart';
 import '../core/utils/image_sizing.dart';
 import '../features/media/data/media_repository.dart';
 import '../features/player/resolve_and_play.dart' show PlayerLaunchGuard;
-import '../shared/sdui/sport_theme.dart' show isLiveNow, liveStartTimeLabel;
+import '../shared/sdui/sport_theme.dart'
+    show isLiveNow, liveStartAt, liveWhenLabel, livePlotWithoutStatus;
 import 'package:cached_network_image_platform_interface/cached_network_image_platform_interface.dart'
     show ImageRenderMethodForWeb;
 import '../shared/utils/tap_guard.dart';
@@ -103,10 +104,13 @@ class _LiveSheetState extends State<_LiveSheet> {
   Widget build(BuildContext context) {
     final it = widget.item;
     final isLive = isLiveNow(it.extra);
-    final startTime = liveStartTimeLabel(it.extra);
+    final startAt = isLive ? null : liveStartAt(it.extra);
+    final startTime = startAt == null ? null : liveWhenLabel(startAt);
     final sportCat = it.extra['sport_cat'] ?? '';
     final competition = it.extra['competition'] ?? '';
-    final plot = it.extra['plot'] ?? '';
+    // Without what the line above already says ("IN DIRETTA", "Inizio: …").
+    final plot = livePlotWithoutStatus(it.extra['plot'] ?? '',
+        startShown: startTime != null);
     final poster = it.posterUrl;
 
     return SafeArea(
@@ -171,7 +175,7 @@ class _LiveSheetState extends State<_LiveSheet> {
                             const Icon(Icons.schedule_rounded,
                                 size: 13, color: AppTheme.textMid),
                             const SizedBox(width: 4),
-                            Text('Inizio $startTime',
+                            Text(startTime,
                                 style: const TextStyle(
                                     color: AppTheme.textMid,
                                     fontSize: 11,
@@ -188,9 +192,10 @@ class _LiveSheetState extends State<_LiveSheet> {
                               fontWeight: FontWeight.w700)),
                       if (competition.isNotEmpty || sportCat.isNotEmpty)
                         Text(
-                          [competition, sportCat.replaceAll('-', ' ')]
-                              .where((s) => s.isNotEmpty)
-                              .join(' · '),
+                          [
+                            competition,
+                            _capitalize(sportCat.replaceAll('-', ' '))
+                          ].where((s) => s.isNotEmpty).join(' · '),
                           style: const TextStyle(
                               color: AppTheme.textMid, fontSize: 12),
                         ),
@@ -279,3 +284,7 @@ class _LiveSheetState extends State<_LiveSheet> {
     );
   }
 }
+
+/// "motor sports" → "Motor sports".
+String _capitalize(String s) =>
+    s.isEmpty ? s : s[0].toUpperCase() + s.substring(1);

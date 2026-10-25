@@ -18,6 +18,7 @@ import '../features/media/bloc/continue_watching_event.dart';
 import '../features/media/bloc/continue_watching_state.dart';
 import '../features/media/bloc/discovery_bloc.dart';
 import '../features/media/bloc/discovery_event.dart';
+import '../features/media/presentation/live_rows_refresher.dart';
 import '../features/media/bloc/discovery_state.dart';
 import '../features/media/bloc/plugin_bloc.dart';
 import '../features/media/bloc/plugin_event.dart';
@@ -351,15 +352,27 @@ class _PluginContentState extends State<_PluginContent> {
     return null;
   }
 
+  // Live rows re-fetched every minute while this page is on screen.
+  late final _liveRefresher = LiveRowsRefresher(
+    context: () => context,
+    refresh: (cat) => _blocs[cat.id]?.add(RefreshCatalogEvent(
+      pluginId: widget.plugin.pluginId,
+      catalogId: cat.id,
+      cacheTtlSeconds: cat.cacheTtlSeconds,
+    )),
+  );
+
   @override
   void initState() {
     super.initState();
     _syncBlocs();
+    _liveRefresher.watch(_catalogs);
   }
 
   @override
   void didUpdateWidget(_PluginContent old) {
     super.didUpdateWidget(old);
+    if (old.plugin != widget.plugin) _liveRefresher.watch(_catalogs);
     // Same plugin id (the parent keys us by it) but its catalog set can
     // still change — a plugin that becomes ready gains catalogs, or the
     // admin edits them. Reconcile: close blocs for gone catalogs, spawn
@@ -369,6 +382,7 @@ class _PluginContentState extends State<_PluginContent> {
 
   @override
   void dispose() {
+    _liveRefresher.dispose();
     for (final b in _blocs.values) {
       b.close();
     }

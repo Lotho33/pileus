@@ -118,3 +118,9 @@ flutter:
           weight: 600
         - asset: assets/fonts/DMSans/DMSans-Bold.ttf
           weight: 700
+    # Fallback for symbols DM Sans lacks (sport/clock/status emoji some
+    # plugins put in their texts): monochrome Noto Emoji, regular weight,
+    # cut down to those ranges (~200 KB). See AppTheme.dark().
+    - family: NotoEmojiSymbols
+      fonts:
+        - asset: assets/fonts/NotoEmoji/NotoEmoji-Symbols.ttf

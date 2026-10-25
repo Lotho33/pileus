@@ -8,6 +8,7 @@ import '../features/media/bloc/plugin_bloc.dart';
 import '../features/media/bloc/plugin_event.dart';
 import '../features/media/bloc/plugin_state.dart';
 import '../features/media/data/media_repository.dart';
+import '../features/media/presentation/widgets/plugin_nav.dart' show PluginIcon;
 import '../shared/utils/tap_guard.dart';
 
 /// Plugin ordering / visibility. Renders from **local state**, seeded once
@@ -164,6 +165,10 @@ class _MobilePluginsScreenState extends State<MobilePluginsScreen> {
                             final p = _visible[i];
                             return ListTile(
                               key: ValueKey(p.pluginId),
+                              leading: PluginIcon(
+                                  pluginId: p.pluginId,
+                                  size: 22,
+                                  color: AppTheme.textHigh),
                               title: Text(
                                   p.name.isNotEmpty ? p.name : p.pluginId,
                                   style: const TextStyle(
@@ -178,8 +183,9 @@ class _MobilePluginsScreenState extends State<MobilePluginsScreen> {
                                 mainAxisSize: MainAxisSize.min,
                                 children: [
                                   IconButton(
-                                    icon: const Icon(
-                                        Icons.visibility_off_outlined,
+                                    // The state, like the carousel rows
+                                    // inside: open eye = shown.
+                                    icon: const Icon(Icons.visibility_outlined,
                                         color: AppTheme.textMid),
                                     tooltip: 'Nascondi dalla home',
                                     onPressed: () => _hide(p),
@@ -200,12 +206,16 @@ class _MobilePluginsScreenState extends State<MobilePluginsScreen> {
                         _header('Nascosti'),
                         for (final p in _hidden)
                           ListTile(
+                            leading: PluginIcon(
+                                pluginId: p.pluginId,
+                                size: 22,
+                                color: AppTheme.textLow),
                             title: Text(p.name.isNotEmpty ? p.name : p.pluginId,
                                 style:
                                     const TextStyle(color: AppTheme.textMid)),
                             trailing: IconButton(
-                              icon: const Icon(Icons.visibility_outlined,
-                                  color: AppTheme.textMid),
+                              icon: const Icon(Icons.visibility_off_outlined,
+                                  color: AppTheme.textLow),
                               tooltip: 'Mostra sulla home',
                               onPressed: () => _unhide(p),
                             ),

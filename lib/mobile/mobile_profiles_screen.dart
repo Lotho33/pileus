@@ -123,8 +123,7 @@ class _MobileProfilesScreenState extends State<MobileProfilesScreen> {
             // PIN-protected and locked, with no way to back out and
             // connect to a different Mycelium instead.
             TextButton(
-              onPressed: () =>
-                  getIt<AuthBloc>().add(const ChangeServerEvent()),
+              onPressed: () => getIt<AuthBloc>().add(const ChangeServerEvent()),
               child: const Text('Cambia server'),
             ),
           ],
@@ -142,24 +141,24 @@ class _MobileProfilesScreenState extends State<MobileProfilesScreen> {
   }
 
   Widget _grid() => GridView.extent(
-            // Max tile width, not a fixed column count: 3 per row on a
-            // phone as before, more on a tablet / landscape instead of
-            // three giant tiles (with targetSdk 36 the OS no longer honours
-            // the portrait lock on large screens).
-            maxCrossAxisExtent: 150,
-            childAspectRatio: 0.82,
-            padding: const EdgeInsets.all(20),
-            mainAxisSpacing: 20,
-            crossAxisSpacing: 20,
-            children: [
-              for (final p in _profiles)
-                _ProfileTile(
-                  profile: p,
-                  onTap: () => _select(p),
-                ),
-              _AddTile(onTap: _create),
-            ],
-          );
+        // Max tile width, not a fixed column count: 3 per row on a
+        // phone as before, more on a tablet / landscape instead of
+        // three giant tiles (with targetSdk 36 the OS no longer honours
+        // the portrait lock on large screens).
+        maxCrossAxisExtent: 150,
+        childAspectRatio: 0.82,
+        padding: const EdgeInsets.all(20),
+        mainAxisSpacing: 20,
+        crossAxisSpacing: 20,
+        children: [
+          for (final p in _profiles)
+            _ProfileTile(
+              profile: p,
+              onTap: () => _select(p),
+            ),
+          _AddTile(onTap: _create),
+        ],
+      );
 }
 
 class _ProfileTile extends StatelessWidget {
@@ -178,14 +177,20 @@ class _ProfileTile extends StatelessWidget {
           Expanded(
             child: AspectRatio(
               aspectRatio: 1,
+              // Fills the square like the "Aggiungi" tile next to it: a
+              // fixed 96px avatar sat in the corner of a bigger tile, with
+              // the lock badge floating at the tile's own corner.
               child: Stack(
+                fit: StackFit.expand,
                 children: [
                   ClipRRect(
                     borderRadius: BorderRadius.circular(16),
                     child: isDefaultAvatarUrl(profile.avatarUrl)
-                        ? DefaultAvatarView(
-                            index: defaultAvatarIndex(profile.avatarUrl),
-                            size: 96,
+                        ? LayoutBuilder(
+                            builder: (_, c) => DefaultAvatarView(
+                              index: defaultAvatarIndex(profile.avatarUrl),
+                              size: c.maxWidth,
+                            ),
                           )
                         : profile.avatarUrl.isNotEmpty
                             ? CachedNetworkImage(
@@ -197,8 +202,8 @@ class _ProfileTile extends StatelessWidget {
                                 imageUrl: profile.avatarUrl,
                                 memCacheWidth: 256,
                                 fit: BoxFit.cover,
-                                errorWidget: (_, __, ___) => const ColoredBox(
-                                    color: AppTheme.surface2),
+                                errorWidget: (_, __, ___) =>
+                                    const ColoredBox(color: AppTheme.surface2),
                               )
                             : const ColoredBox(color: AppTheme.surface2),
                   ),

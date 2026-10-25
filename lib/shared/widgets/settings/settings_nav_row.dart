@@ -9,6 +9,9 @@ import '../tv_focusable.dart';
 /// (profile_selection_screen.dart, _PluginNavItem in home_screen.dart).
 class SettingsNavRow extends StatelessWidget {
   final IconData icon;
+  // Draws the icon instead of [icon] (e.g. a plugin's own), same size and
+  // color.
+  final Widget Function(double size, Color color)? iconBuilder;
   final String label;
   final String? subtitle;
   final VoidCallback? onTap;
@@ -22,6 +25,7 @@ class SettingsNavRow extends StatelessWidget {
   const SettingsNavRow({
     super.key,
     required this.icon,
+    this.iconBuilder,
     required this.label,
     this.subtitle,
     this.onTap,
@@ -106,11 +110,14 @@ class SettingsNavRow extends StatelessWidget {
                             : Colors.white.withValues(alpha: 0.07),
                     borderRadius: BorderRadius.circular(10),
                   ),
-                  child: Icon(icon,
-                      size: AppScale.iconL(context),
-                      color: enabled
-                          ? (active ? Colors.white : AppTheme.textMid)
-                          : AppTheme.textLow),
+                  child: Builder(builder: (context) {
+                    final size = AppScale.iconL(context);
+                    final color = enabled
+                        ? (active ? Colors.white : AppTheme.textMid)
+                        : AppTheme.textLow;
+                    return iconBuilder?.call(size, color) ??
+                        Icon(icon, size: size, color: color);
+                  }),
                 ),
                 SizedBox(width: AppScale.space(context, 16)),
                 Expanded(

@@ -648,13 +648,6 @@ class _SeriesPageLayoutState extends State<_SeriesPageLayout> {
                                         ),
                                         SizedBox(height: 8 * s),
                                       ],
-                                      if (widget.seasons.length > 1)
-                                        Text(
-                                          'Stagione ${widget.seasons[_selectedIdx].number} di ${widget.seasons.length}',
-                                          style: TextStyle(
-                                              color: AppTheme.textLow,
-                                              fontSize: 15 * s),
-                                        ),
                                       if (widget.isAnime) ...[
                                         SizedBox(height: 6 * s),
                                         AnimeMetaRow(
@@ -677,7 +670,8 @@ class _SeriesPageLayoutState extends State<_SeriesPageLayout> {
                                                     text: sd.network),
                                               if (sd.status.isNotEmpty)
                                                 _InfoChip(
-                                                    icon: Icons.circle_outlined,
+                                                    icon:
+                                                        _statusIcon(sd.status),
                                                     text:
                                                         _fmtStatus(sd.status)),
                                             ]),

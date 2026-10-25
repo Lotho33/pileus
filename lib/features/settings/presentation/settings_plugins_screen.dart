@@ -10,6 +10,7 @@ import '../../media/bloc/plugin_bloc.dart';
 import '../../media/bloc/plugin_event.dart';
 import '../../media/bloc/plugin_state.dart';
 import '../../media/data/media_repository.dart';
+import '../../media/presentation/widgets/plugin_nav.dart' show PluginIcon;
 import '../../../shared/widgets/ambient_glow_background.dart';
 import '../../../shared/widgets/error_retry_view.dart';
 import '../../../shared/widgets/pileus_spinner.dart';
@@ -213,6 +214,13 @@ class _SettingsPluginsBodyState extends State<_SettingsPluginsBody> {
                         for (var i = 0; i < state.plugins.length; i++)
                           SettingsNavRow(
                             icon: Icons.extension_rounded,
+                            iconBuilder: (size, color) => SizedBox.square(
+                              dimension: size,
+                              child: PluginIcon(
+                                  pluginId: state.plugins[i].pluginId,
+                                  size: size,
+                                  color: color),
+                            ),
                             label: state.plugins[i].name.isNotEmpty
                                 ? state.plugins[i].name
                                 : state.plugins[i].pluginId,

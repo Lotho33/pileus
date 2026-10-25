@@ -12,6 +12,7 @@ import '../../../core/theme/app_theme.dart';
 import '../../player/android_video_settings.dart';
 import '../../../shared/widgets/ambient_glow_background.dart';
 import '../../../shared/widgets/metrics_dialog.dart';
+import '../../../shared/widgets/settings/settings_card.dart';
 import '../../../shared/widgets/settings/settings_header.dart';
 import '../../../shared/widgets/settings/settings_nav_row.dart';
 import '../../../shared/widgets/settings/settings_section_header.dart';
@@ -96,29 +97,39 @@ class _PreferencesBodyState extends State<_PreferencesBody> {
           vertical: AppScale.space(context, 12)),
       children: [
         const SettingsSectionHeader('Sottotitoli'),
-        SubtitleStyleSection(
-          fontSize: data.subtitleFontSize,
-          color: data.subtitleColor,
-          bgEnabled: data.subtitleBgEnabled,
-          bottomPadding: data.subtitleBottomPadding,
-          onFontSizeChanged: cubit.updateSubtitleFontSize,
-          onColorChanged: cubit.updateSubtitleColor,
-          onBgToggled: cubit.updateSubtitleBgEnabled,
-          onPaddingChanged: cubit.updateSubtitleBottomPadding,
+        SettingsStepperRow(
+          label: 'Dimensione',
+          value: '${data.subtitleFontSize.round()}',
+          fraction: (data.subtitleFontSize - 16) / (64 - 16),
+          onLeft: () => cubit.updateSubtitleFontSize(
+              (data.subtitleFontSize - 2).clamp(16, 64).toDouble()),
+          onRight: () => cubit.updateSubtitleFontSize(
+              (data.subtitleFontSize + 2).clamp(16, 64).toDouble()),
+        ),
+        _SubtitleColorRow(
+            color: data.subtitleColor, onChanged: cubit.updateSubtitleColor),
+        SettingsToggleRow(
+          label: 'Sfondo dietro il testo',
+          value: data.subtitleBgEnabled,
+          onChanged: cubit.updateSubtitleBgEnabled,
+        ),
+        SettingsStepperRow(
+          label: 'Distanza dal fondo',
+          value: '${data.subtitleBottomPadding.round()}',
+          fraction: data.subtitleBottomPadding / 300,
+          onLeft: () => cubit.updateSubtitleBottomPadding(
+              (data.subtitleBottomPadding - 10).clamp(0, 300).toDouble()),
+          onRight: () => cubit.updateSubtitleBottomPadding(
+              (data.subtitleBottomPadding + 10).clamp(0, 300).toDouble()),
         ),
         SizedBox(height: AppScale.space(context, 12)),
         const SettingsSectionHeader('Player'),
         const _PreferredLanguagePrefRow(),
-        SizedBox(height: AppScale.space(context, 4)),
         const _ReservePrefRow(live: false),
-        SizedBox(height: AppScale.space(context, 4)),
         const _ReservePrefRow(live: true),
-        SizedBox(height: AppScale.space(context, 4)),
         const _LowPowerPrefRow(),
         if (!kIsWeb && Platform.isAndroid) ...[
-          SizedBox(height: AppScale.space(context, 4)),
           const _MaxVideoHeightPrefRow(),
-          SizedBox(height: AppScale.space(context, 4)),
           const _AndroidVideoPrefRow(
             label: 'Decodifica video software',
             caption: 'Usa il decoder software al posto di quello del box '
@@ -128,7 +139,6 @@ class _PreferencesBodyState extends State<_PreferencesBody> {
                 'riproduzione.',
             softwareDecoder: true,
           ),
-          SizedBox(height: AppScale.space(context, 4)),
           const _AndroidVideoPrefRow(
             label: 'Rendering video compatibile',
             caption: 'Disegna il video con il metodo delle versioni '
@@ -185,73 +195,14 @@ class _OverscanPrefRowState extends State<_OverscanPrefRow> {
 
   @override
   Widget build(BuildContext context) {
-    final captionFs =
-        (AppScale.sh(context) * (13.0 / 1080.0)).clamp(10.0, 20.0);
-    final frac = _pct / SettingsRepository.overscanPercentMax;
-    return Padding(
-      padding: EdgeInsets.symmetric(
-          horizontal: AppScale.space(context, 20),
-          vertical: AppScale.space(context, 6)),
-      child: TvFocusable(
-        onLeft: () => _nudge(-1),
-        onRight: () => _nudge(1),
-        onFocusChange: (f) {
-          if (f && context.mounted && Scrollable.maybeOf(context) != null) {
-            Scrollable.ensureVisible(context,
-                alignment: 0.5, duration: const Duration(milliseconds: 200));
-          }
-        },
-        builder: (context, focused) => Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Text('Margine schermo (overscan)',
-                    style: TextStyle(
-                        color: focused ? Colors.white : Colors.white54,
-                        fontSize: captionFs)),
-                const Spacer(),
-                Text('${_pct.toStringAsFixed(1)}%',
-                    style: TextStyle(
-                        color: focused ? Colors.white : Colors.white54,
-                        fontSize: captionFs)),
-              ],
-            ),
-            SizedBox(height: AppScale.space(context, 8)),
-            LayoutBuilder(
-              builder: (context, cc) => Stack(
-                children: [
-                  Container(
-                    height: 4,
-                    decoration: BoxDecoration(
-                      color: Colors.white24,
-                      borderRadius: BorderRadius.circular(2),
-                    ),
-                  ),
-                  AnimatedContainer(
-                    duration: const Duration(milliseconds: 100),
-                    height: 4,
-                    width: cc.maxWidth * frac,
-                    decoration: BoxDecoration(
-                      color: Colors.white,
-                      borderRadius: BorderRadius.circular(2),
-                      boxShadow:
-                          focused ? AppScale.focusGlow(Colors.white) : null,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            SizedBox(height: AppScale.space(context, 6)),
-            Text(
-              'Alza il valore se la TV taglia i bordi dell\'immagine, '
-              'abbassalo a 0 se non li taglia. Effetto immediato.',
-              style:
-                  TextStyle(color: Colors.white38, fontSize: captionFs * 0.9),
-            ),
-          ],
-        ),
-      ),
+    return SettingsStepperRow(
+      label: 'Margine schermo (overscan)',
+      value: '${_pct.toStringAsFixed(1)}%',
+      fraction: _pct / SettingsRepository.overscanPercentMax,
+      onLeft: () => _nudge(-1),
+      onRight: () => _nudge(1),
+      caption: 'Alza il valore se la TV taglia i bordi dell\'immagine, '
+          'abbassalo a 0 se non li taglia. Effetto immediato.',
     );
   }
 }
@@ -271,30 +222,16 @@ class _DiagnosticsPrefRowState extends State<_DiagnosticsPrefRow> {
 
   @override
   Widget build(BuildContext context) {
-    final captionFs =
-        (AppScale.sh(context) * (13.0 / 1080.0)).clamp(10.0, 20.0);
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        SettingsToggleRow(
-          label: 'Diagnostica (log su adb)',
-          value: _on,
-          onChanged: (v) {
-            setState(() => _on = v);
-            _repo.setDiagnostics(v);
-          },
-        ),
-        Padding(
-          padding: EdgeInsets.fromLTRB(AppScale.space(context, 24),
-              AppScale.space(context, 4), AppScale.space(context, 24), 0),
-          child: Text(
-            'Scrive i log di performance del player in "adb logcat" '
-            '(pileus/perf, pileus/jank). Solo per debug su un box specifico. '
-            'Richiede il riavvio dell\'app.',
-            style: TextStyle(color: Colors.white38, fontSize: captionFs * 0.9),
-          ),
-        ),
-      ],
+    return SettingsToggleRow(
+      label: 'Diagnostica (log su adb)',
+      caption: 'Scrive i log di performance del player in "adb logcat" '
+          '(pileus/perf, pileus/jank). Solo per debug su un box specifico. '
+          'Richiede il riavvio dell\'app.',
+      value: _on,
+      onChanged: (v) {
+        setState(() => _on = v);
+        _repo.setDiagnostics(v);
+      },
     );
   }
 }
@@ -332,49 +269,15 @@ class _MaxVideoHeightPrefRowState extends State<_MaxVideoHeightPrefRow> {
 
   @override
   Widget build(BuildContext context) {
-    final captionFs =
-        (AppScale.sh(context) * (13.0 / 1080.0)).clamp(10.0, 20.0);
-    return Padding(
-      padding: EdgeInsets.symmetric(
-          horizontal: AppScale.space(context, 20),
-          vertical: AppScale.space(context, 6)),
-      child: TvFocusable(
-        onLeft: () => _step(-1),
-        onRight: () => _step(1),
-        onActivate: () => _step(1, wrap: true),
-        onFocusChange: (f) {
-          if (f && context.mounted && Scrollable.maybeOf(context) != null) {
-            Scrollable.ensureVisible(context,
-                alignment: 0.5, duration: const Duration(milliseconds: 200));
-          }
-        },
-        builder: (context, focused) {
-          final color = focused ? Colors.white : Colors.white54;
-          return Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                children: [
-                  Text('Qualità video massima',
-                      style: TextStyle(color: color, fontSize: captionFs)),
-                  const Spacer(),
-                  Text('‹  ${_label(_value)}  ›',
-                      style: TextStyle(color: color, fontSize: captionFs)),
-                ],
-              ),
-              SizedBox(height: AppScale.space(context, 4)),
-              Text(
-                'Limita la qualità scelta in automatico. Utile con una '
-                'connessione lenta o un box poco potente; una qualità scelta '
-                'a mano nel player resta possibile. Vale dalla prossima '
-                'riproduzione.',
-                style:
-                    TextStyle(color: Colors.white38, fontSize: captionFs * 0.9),
-              ),
-            ],
-          );
-        },
-      ),
+    return SettingsStepperRow(
+      label: 'Qualità video massima',
+      value: _label(_value),
+      onLeft: () => _step(-1),
+      onRight: () => _step(1),
+      onActivate: () => _step(1, wrap: true),
+      caption: 'Limita la qualità scelta in automatico. Utile con una '
+          'connessione lenta o un box poco potente; una qualità scelta a mano '
+          'nel player resta possibile. Vale dalla prossima riproduzione.',
     );
   }
 }
@@ -418,22 +321,11 @@ class _AndroidVideoPrefRowState extends State<_AndroidVideoPrefRow> {
 
   @override
   Widget build(BuildContext context) {
-    final captionFs =
-        (AppScale.sh(context) * (13.0 / 1080.0)).clamp(10.0, 20.0);
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        SettingsToggleRow(label: widget.label, value: _on, onChanged: _set),
-        Padding(
-          padding: EdgeInsets.fromLTRB(AppScale.space(context, 24),
-              AppScale.space(context, 4), AppScale.space(context, 24), 0),
-          child: Text(
-            widget.caption,
-            style: TextStyle(color: Colors.white38, fontSize: captionFs * 0.9),
-          ),
-        ),
-      ],
-    );
+    return SettingsToggleRow(
+        label: widget.label,
+        caption: widget.caption,
+        value: _on,
+        onChanged: _set);
   }
 }
 
@@ -459,30 +351,16 @@ class _PreferredLanguagePrefRowState extends State<_PreferredLanguagePrefRow> {
 
   @override
   Widget build(BuildContext context) {
-    final captionFs =
-        (AppScale.sh(context) * (13.0 / 1080.0)).clamp(10.0, 20.0);
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        SettingsToggleRow(
-          label: 'Preferisci la versione originale sottotitolata',
-          value: _original,
-          onChanged: (v) {
-            setState(() => _original = v);
-            _repo.setPreferredLanguage(v
-                ? PreferredLanguage.original.id
-                : PreferredLanguage.italian.id);
-          },
-        ),
-        Padding(
-          padding: EdgeInsets.fromLTRB(AppScale.space(context, 24),
-              AppScale.space(context, 4), AppScale.space(context, 24), 0),
-          child: Text(
-            'Spenta: italiano. Al Play parte questa versione quando c\'è; si può sempre scegliere l\'altra dalla scheda del titolo.',
-            style: TextStyle(color: Colors.white38, fontSize: captionFs * 0.9),
-          ),
-        ),
-      ],
+    return SettingsToggleRow(
+      label: 'Preferisci la versione originale sottotitolata',
+      caption: 'Spenta: italiano. Al Play parte questa versione quando c\'è; '
+          'si può sempre scegliere l\'altra dalla scheda del titolo.',
+      value: _original,
+      onChanged: (v) {
+        setState(() => _original = v);
+        _repo.setPreferredLanguage(
+            v ? PreferredLanguage.original.id : PreferredLanguage.italian.id);
+      },
     );
   }
 }
@@ -500,33 +378,19 @@ class _LowPowerPrefRowState extends State<_LowPowerPrefRow> {
 
   @override
   Widget build(BuildContext context) {
-    final captionFs =
-        (AppScale.sh(context) * (13.0 / 1080.0)).clamp(10.0, 20.0);
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        SettingsToggleRow(
-          label: 'Modalità hardware modesto',
-          value: _on,
-          onChanged: (v) {
-            setState(() => _on = v);
-            _repo.setLowPowerMode(v);
-            // UI-side effects (no blur shaders, no route-scale) take effect
-            // on the next screen build. A full effect still wants a restart
-            // (image-cache ceiling is set once in main()).
-            lowPowerUi = v;
-          },
-        ),
-        Padding(
-          padding: EdgeInsets.fromLTRB(AppScale.space(context, 24),
-              AppScale.space(context, 4), AppScale.space(context, 24), 0),
-          child: Text(
-            'Riduce blur ed effetti dell\'interfaccia su box lenti a scapito '
-            'di un filo di resa visiva.',
-            style: TextStyle(color: Colors.white38, fontSize: captionFs * 0.9),
-          ),
-        ),
-      ],
+    return SettingsToggleRow(
+      label: 'Modalità hardware modesto',
+      caption: 'Riduce blur ed effetti dell\'interfaccia su box lenti a '
+          'scapito di un filo di resa visiva.',
+      value: _on,
+      onChanged: (v) {
+        setState(() => _on = v);
+        _repo.setLowPowerMode(v);
+        // UI-side effects (no blur shaders, no route-scale) take effect
+        // on the next screen build. A full effect still wants a restart
+        // (image-cache ceiling is set once in main()).
+        lowPowerUi = v;
+      },
     );
   }
 }
@@ -566,80 +430,54 @@ class _ReservePrefRowState extends State<_ReservePrefRow> {
 
   @override
   Widget build(BuildContext context) {
-    final captionFs =
-        (AppScale.sh(context) * (13.0 / 1080.0)).clamp(10.0, 20.0);
-    final frac = (_sec - _min) / (_max - _min);
-    return Padding(
-      padding: EdgeInsets.symmetric(
-          horizontal: AppScale.space(context, 20),
-          vertical: AppScale.space(context, 6)),
-      child: TvFocusable(
-        onLeft: () => _nudge(-1),
-        onRight: () => _nudge(1),
-        onFocusChange: (f) {
-          if (f && context.mounted && Scrollable.maybeOf(context) != null) {
-            Scrollable.ensureVisible(context,
-                alignment: 0.5, duration: const Duration(milliseconds: 200));
-          }
-        },
-        builder: (context, focused) => Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Text(
-                    widget.live
-                        ? 'Riserva di riproduzione (live)'
-                        : 'Riserva di riproduzione',
-                    style: TextStyle(
-                        color: focused ? Colors.white : Colors.white54,
-                        fontSize: captionFs)),
-                const Spacer(),
-                Text('$_sec s',
-                    style: TextStyle(
-                        color: focused ? Colors.white : Colors.white54,
-                        fontSize: captionFs)),
-              ],
-            ),
-            SizedBox(height: AppScale.space(context, 8)),
-            LayoutBuilder(
-              builder: (context, cc) => Stack(
-                children: [
-                  Container(
-                    height: 4,
-                    decoration: BoxDecoration(
-                      color: Colors.white24,
-                      borderRadius: BorderRadius.circular(2),
-                    ),
-                  ),
-                  AnimatedContainer(
-                    duration: const Duration(milliseconds: 100),
-                    height: 4,
-                    width: cc.maxWidth * frac,
-                    decoration: BoxDecoration(
-                      color: Colors.white,
-                      borderRadius: BorderRadius.circular(2),
-                      boxShadow:
-                          focused ? AppScale.focusGlow(Colors.white) : null,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            SizedBox(height: AppScale.space(context, 6)),
-            Text(
-              widget.live
-                  ? 'Secondi tenuti pronti in anticipo. Più riserva = meno '
-                      'interruzioni, ma più ritardo rispetto alla diretta e '
-                      'un po\' di memoria in più. Vale dalla prossima '
-                      'riproduzione.'
-                  : 'Secondi di video tenuti pronti in anticipo. Più '
-                      'riserva = meno interruzioni, al costo di un po\' di '
-                      'memoria. Vale dalla prossima riproduzione.',
-              style:
-                  TextStyle(color: Colors.white38, fontSize: captionFs * 0.9),
-            ),
-          ],
+    return SettingsStepperRow(
+      label: widget.live
+          ? 'Riserva di riproduzione (live)'
+          : 'Riserva di riproduzione',
+      value: '$_sec s',
+      fraction: (_sec - _min) / (_max - _min),
+      onLeft: () => _nudge(-1),
+      onRight: () => _nudge(1),
+      caption: widget.live
+          ? 'Secondi tenuti pronti in anticipo. Più riserva = meno '
+              'interruzioni, ma più ritardo rispetto alla diretta e un po\' '
+              'di memoria in più. Vale dalla prossima riproduzione.'
+          : 'Secondi di video tenuti pronti in anticipo. Più riserva = meno '
+              'interruzioni, al costo di un po\' di memoria. Vale dalla '
+              'prossima riproduzione.',
+    );
+  }
+}
+
+/// "Colore": the swatches on the right of the card; the card lights up
+/// while one of them has focus.
+class _SubtitleColorRow extends StatefulWidget {
+  final Color color;
+  final ValueChanged<Color> onChanged;
+  const _SubtitleColorRow({required this.color, required this.onChanged});
+
+  @override
+  State<_SubtitleColorRow> createState() => _SubtitleColorRowState();
+}
+
+class _SubtitleColorRowState extends State<_SubtitleColorRow> {
+  bool _focused = false;
+
+  @override
+  Widget build(BuildContext context) {
+    return Focus(
+      canRequestFocus: false,
+      skipTraversal: true,
+      onFocusChange: (f) => setState(() => _focused = f),
+      child: SettingsCard(
+        focused: _focused,
+        label: 'Colore',
+        trailing: SubtitleColorSwatches(
+          colors: SubtitleStyleSection.colors,
+          selectedColor: widget.color,
+          swatchSize: AppScale.space(context, 32),
+          gap: AppScale.space(context, 10),
+          onColorChanged: widget.onChanged,
         ),
       ),
     );
