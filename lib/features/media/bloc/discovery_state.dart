@@ -21,6 +21,9 @@ class DiscoveryLoaded extends DiscoveryState {
   final bool hasMore;
   final bool fromCache;
   final bool isLoadingMore;
+  // The last next-page request failed: nothing loads it again by itself
+  // (that would loop), the row offers "Riprova" instead.
+  final bool loadMoreFailed;
   final String pluginId;
   final String catalogId;
   final int currentPage;
@@ -33,6 +36,7 @@ class DiscoveryLoaded extends DiscoveryState {
     this.hasMore = false,
     this.fromCache = false,
     this.isLoadingMore = false,
+    this.loadMoreFailed = false,
     this.pluginId = '',
     this.catalogId = '',
     this.currentPage = 1,
@@ -46,6 +50,7 @@ class DiscoveryLoaded extends DiscoveryState {
     bool? hasMore,
     bool? fromCache,
     bool? isLoadingMore,
+    bool? loadMoreFailed,
     String? pluginId,
     String? catalogId,
     int? currentPage,
@@ -58,6 +63,7 @@ class DiscoveryLoaded extends DiscoveryState {
       hasMore: hasMore ?? this.hasMore,
       fromCache: fromCache ?? this.fromCache,
       isLoadingMore: isLoadingMore ?? this.isLoadingMore,
+      loadMoreFailed: loadMoreFailed ?? this.loadMoreFailed,
       pluginId: pluginId ?? this.pluginId,
       catalogId: catalogId ?? this.catalogId,
       currentPage: currentPage ?? this.currentPage,
@@ -73,6 +79,7 @@ class DiscoveryLoaded extends DiscoveryState {
         hasMore,
         fromCache,
         isLoadingMore,
+        loadMoreFailed,
         pluginId,
         catalogId,
         currentPage,

@@ -239,6 +239,7 @@ Future<void> configureDependencies() async {
       onSessionExpired: () =>
           getIt<AuthBloc>().add(const SessionExpiredEvent()),
       onProfileLocked: _dispatchProfileLocked,
+      onForgetDevice: (id) => getIt<AuthBloc>().add(ForgetDeviceEvent(id)),
     ),
   );
 }

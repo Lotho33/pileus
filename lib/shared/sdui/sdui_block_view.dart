@@ -3,7 +3,8 @@ import 'package:flutter/widgets.dart';
 import 'blocks/card_carousel_block_view.dart';
 import 'sdui_block.dart';
 
-export 'blocks/card_carousel_block_view.dart' show CardCarouselInteraction;
+export 'blocks/card_carousel_block_view.dart'
+    show CardCarouselInteraction, CarouselLoadMore;
 
 /// Single interpreter for the [SduiBlock] tree: an exhaustive switch, not a
 /// string-keyed widget map. The widget vocabulary is fixed at compile time
@@ -20,8 +21,14 @@ class SduiBlockView extends StatelessWidget {
   /// so they don't need their own interaction bag today.
   final CardCarouselInteraction? carouselInteraction;
 
+  /// Paging for a [CardCarouselBlock] at the top of [block] (a home row).
+  final CarouselLoadMore? carouselLoadMore;
+
   const SduiBlockView(
-      {super.key, required this.block, this.carouselInteraction});
+      {super.key,
+      required this.block,
+      this.carouselInteraction,
+      this.carouselLoadMore});
 
   @override
   Widget build(BuildContext context) {
@@ -30,6 +37,7 @@ class SduiBlockView extends StatelessWidget {
       CardCarouselBlock() => CardCarouselBlockView(
           block: b,
           interaction: carouselInteraction ?? const CardCarouselInteraction(),
+          loadMore: carouselLoadMore,
         ),
       ColumnBlock(children: final children) => Column(
           mainAxisSize: MainAxisSize.min,

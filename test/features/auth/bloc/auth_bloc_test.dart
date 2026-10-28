@@ -29,6 +29,9 @@ class _EmptyMediaRepository extends MediaRepository {
   Future<List<ContinueWatchingItem>> getContinueWatching(
           {int limit = 20, String? parentId, String? pluginId}) async =>
       const [];
+
+  @override
+  void releasePlayback() {}
 }
 
 /// Scripted [AuthRepository] — overrides only what AuthBloc's handlers under
@@ -61,6 +64,11 @@ class _ScriptedAuthRepository extends AuthRepository {
 
   @override
   Future<List<LocalProfile>> syncProfilesFromServer() async => profiles;
+
+  final List<String> forgotten = [];
+
+  @override
+  Future<void> forgetDevice(String profileId) async => forgotten.add(profileId);
 
   @override
   Future<void> refreshToken() async {
@@ -192,6 +200,54 @@ void main() {
       // isUnauthenticated on purpose).
       expect(interceptor.jwt, 'jwt');
       expect(interceptor.profileId, 'p1');
+    });
+  });
+
+  group('AuthBloc.ForgetDeviceEvent', () {
+    test(
+        'forgetting the active profile goes to the picker with NO PIN dialog, '
+        'and a late PROFILE_LOCKED from an in-flight poll does not reopen it',
+        () async {
+      interceptor.setCredentials('jwt', 'p1');
+      final mediaRepo = _EmptyMediaRepository(prefs, interceptor);
+      getIt.registerSingleton<MediaRepository>(mediaRepo);
+      final profiles = [_profile('p1', pinProtected: true, unlocked: false)];
+      final repo = _ScriptedAuthRepository(
+          null, profiles, prefs, buildClient(), interceptor);
+      final bloc = AuthBloc(repo);
+      addTearDown(bloc.close);
+
+      final states = <AuthState>[];
+      final sub = bloc.stream.listen(states.add);
+      addTearDown(sub.cancel);
+
+      bloc.add(const ForgetDeviceEvent('p1'));
+      await bloc.stream.firstWhere((s) => s is ProfileSelectionRequired);
+      bloc.add(const ProfileLockedEvent('p1'));
+      await Future<void>.delayed(const Duration(milliseconds: 50));
+
+      expect(repo.forgotten, ['p1']);
+      final pickers = states.whereType<ProfileSelectionRequired>().toList();
+      expect(pickers, hasLength(1));
+      expect(pickers.single.openPinForProfileId, isNull);
+    });
+
+    test('forgetting a non-active profile does not leave the current one',
+        () async {
+      interceptor.setCredentials('jwt', 'p2');
+      final repo = _ScriptedAuthRepository(null,
+          [_profile('p1'), _profile('p2')], prefs, buildClient(), interceptor);
+      final bloc = AuthBloc(repo);
+      addTearDown(bloc.close);
+      final states = <AuthState>[];
+      final sub = bloc.stream.listen(states.add);
+      addTearDown(sub.cancel);
+
+      bloc.add(const ForgetDeviceEvent('p1'));
+      await Future<void>.delayed(const Duration(milliseconds: 50));
+
+      expect(repo.forgotten, ['p1']);
+      expect(states, isEmpty);
     });
   });
 

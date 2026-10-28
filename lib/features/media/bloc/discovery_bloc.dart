@@ -173,7 +173,7 @@ class DiscoveryBloc extends Bloc<DiscoveryEvent, DiscoveryState> {
       return;
     }
 
-    emit(current.copyWith(isLoadingMore: true));
+    emit(current.copyWith(isLoadingMore: true, loadMoreFailed: false));
     try {
       var result = await _repo.getCatalog(
         event.pluginId,
@@ -193,11 +193,18 @@ class DiscoveryBloc extends Bloc<DiscoveryEvent, DiscoveryState> {
         } catch (_) {}
       }
       if (myGeneration != _catalogGeneration) return;
+      // Pages can shift under a live catalog: an item already shown must
+      // not come back as a second card.
+      final existingIds = {for (final i in current.items) i.id};
       emit(current.copyWith(
-        items: [...current.items, ...result.catalog.items],
+        items: [
+          ...current.items,
+          ...result.catalog.items.where((i) => !existingIds.contains(i.id)),
+        ],
         hasMore: result.catalog.hasMore,
         currentPage: current.currentPage + 1,
         isLoadingMore: false,
+        loadMoreFailed: false,
       ));
     } catch (e) {
       if (myGeneration != _catalogGeneration) return;
@@ -209,7 +216,7 @@ class DiscoveryBloc extends Bloc<DiscoveryEvent, DiscoveryState> {
         onProfileLocked?.call();
         return;
       }
-      emit(current.copyWith(isLoadingMore: false));
+      emit(current.copyWith(isLoadingMore: false, loadMoreFailed: true));
     }
   }
 
@@ -265,7 +272,7 @@ class DiscoveryBloc extends Bloc<DiscoveryEvent, DiscoveryState> {
       return;
     }
 
-    emit(current.copyWith(isLoadingMore: true));
+    emit(current.copyWith(isLoadingMore: true, loadMoreFailed: false));
     try {
       final nextPage = current.searchPage + 1;
       final response = await _repo.search(
@@ -283,6 +290,7 @@ class DiscoveryBloc extends Bloc<DiscoveryEvent, DiscoveryState> {
         hasMore: response.hasMore,
         searchPage: nextPage,
         isLoadingMore: false,
+        loadMoreFailed: false,
       ));
     } catch (e) {
       if (myGeneration != _searchGeneration) return;
@@ -294,7 +302,7 @@ class DiscoveryBloc extends Bloc<DiscoveryEvent, DiscoveryState> {
         onProfileLocked?.call();
         return;
       }
-      emit(current.copyWith(isLoadingMore: false));
+      emit(current.copyWith(isLoadingMore: false, loadMoreFailed: true));
     }
   }
 

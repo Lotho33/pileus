@@ -395,6 +395,19 @@ class AuthRepository {
     }
   }
 
+  /// Profile settings' "Dimentica questo dispositivo": drops this device's
+  /// persistent trust (and its session) on [profileId] and, if it was the
+  /// remembered default, un-sets that too — a default this device can no
+  /// longer enter without the PIN would only bounce every cold start to the
+  /// picker with the PIN dialog already open (see AuthBloc._onAppStarted's
+  /// lockedDefault), which is exactly what "forget" is meant to stop.
+  Future<void> forgetDevice(String profileId) async {
+    await lockProfile(profileId, forgetDevice: true);
+    if (DeviceSession.readFrom(_prefs)?.lastActiveProfileId == profileId) {
+      await clearLastActiveProfile();
+    }
+  }
+
   /// Sets ([newPin] non-empty on a profile with none yet), changes
   /// ([currentPin] + [newPin] both non-empty) or removes ([newPin] empty)
   /// a profile's PIN. [currentPin] is required by the server whenever the

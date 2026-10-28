@@ -105,15 +105,24 @@ class CardCarouselInteraction {
   });
 }
 
-/// Opt-in trailing "load more" slot rendered as a real card at the end of a
-/// [CardCarouselBlockView] — it scrolls, focuses and windows exactly like a
-/// poster card (D-pad Right off the last real card lands on it), instead of
-/// a separate control the host hangs beside the row. When a load it triggers
-/// appends items, focus returns to the first card.
+/// Opt-in paging for a [CardCarouselBlockView]: [onLoad] is called as soon
+/// as focus gets within [loadAhead] cards of the end, so the next page is
+/// usually in before the user reaches it — no "load more" card to press.
+/// Until then the row ends in a placeholder card (it scrolls, focuses and
+/// windows like a poster card); focus parked on it moves onto the first
+/// new card when the page lands. After a failed request ([failed]) nothing
+/// loads by itself and that card reads "Riprova".
 class CarouselLoadMore {
   final bool isLoading;
-  final VoidCallback onActivate;
-  const CarouselLoadMore({required this.isLoading, required this.onActivate});
+  final bool failed;
+  final VoidCallback onLoad;
+  final int loadAhead;
+  const CarouselLoadMore({
+    required this.isLoading,
+    required this.onLoad,
+    this.failed = false,
+    this.loadAhead = 5,
+  });
 }
 
 class CardCarouselBlockView extends StatelessWidget {

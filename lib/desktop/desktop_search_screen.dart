@@ -11,6 +11,7 @@ import '../features/auth/bloc/auth_event.dart';
 import '../features/media/bloc/discovery_bloc.dart';
 import '../features/media/bloc/discovery_event.dart';
 import '../features/media/bloc/discovery_state.dart';
+import '../features/media/paging.dart';
 import '../features/media/bloc/plugin_bloc.dart';
 import '../features/media/bloc/plugin_state.dart';
 import '../features/media/data/media_repository.dart';
@@ -112,7 +113,7 @@ class _DesktopSearchScreenState extends State<DesktopSearchScreen> {
   void _onScroll() {
     if (!_scrollCtrl.hasClients) return;
     final s = _bloc.state;
-    if (s is! DiscoveryLoaded || !s.hasMore || s.isLoadingMore) return;
+    if (s is! DiscoveryLoaded || !canAutoLoadMore(s)) return;
     if (_scrollCtrl.position.pixels >=
         _scrollCtrl.position.maxScrollExtent - 600) {
       _bloc.add(const LoadMoreSearchEvent());
@@ -308,6 +309,13 @@ class _DesktopSearchScreenState extends State<DesktopSearchScreen> {
                   child: BlocBuilder<DiscoveryBloc, DiscoveryState>(
                     bloc: _bloc,
                     builder: (context, s) {
+                      // A page too short to scroll never fires _onScroll: check
+                      // once it's laid out.
+                      if (s is DiscoveryLoaded && canAutoLoadMore(s)) {
+                        WidgetsBinding.instance.addPostFrameCallback((_) {
+                          if (mounted) _onScroll();
+                        });
+                      }
                       if (_submitted.isEmpty) {
                         return RecentSearchesList(
                           pluginId: _pluginId ?? '',
@@ -381,8 +389,8 @@ class _DesktopSearchScreenState extends State<DesktopSearchScreen> {
                             if (s.hasMore)
                               SliverToBoxAdapter(
                                 child: _LoadMoreFooter(
-                                  isLoading: s.isLoadingMore,
-                                  onPressed: () =>
+                                  failed: s.loadMoreFailed,
+                                  onRetry: () =>
                                       _bloc.add(const LoadMoreSearchEvent()),
                                 ),
                               ),
@@ -527,24 +535,26 @@ class _PluginDropdown extends StatelessWidget {
 /// mobile_search_screen.dart's identical widget for why this exists
 /// alongside the scroll-triggered auto-load.
 class _LoadMoreFooter extends StatelessWidget {
-  final bool isLoading;
-  final VoidCallback onPressed;
-  const _LoadMoreFooter({required this.isLoading, required this.onPressed});
+  // The next page loads by itself as the grid nears its end (_onScroll):
+  // this is a spinner while it comes, "Riprova" after it failed.
+  final bool failed;
+  final VoidCallback onRetry;
+  const _LoadMoreFooter({required this.failed, required this.onRetry});
 
   @override
   Widget build(BuildContext context) {
     return Padding(
       padding: const EdgeInsets.only(bottom: 40, top: 4),
       child: Center(
-        child: isLoading
+        child: !failed
             ? const SizedBox(
                 width: 22,
                 height: 22,
                 child: CircularProgressIndicator(strokeWidth: 2.5),
               )
             : TextButton(
-                onPressed: onPressed,
-                child: const Text('Carica altri'),
+                onPressed: onRetry,
+                child: const Text('Riprova'),
               ),
       ),
     );

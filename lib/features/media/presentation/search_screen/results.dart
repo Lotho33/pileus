@@ -5,17 +5,16 @@
 part of '../search_screen.dart';
 
 // ── Search carousel — fixed-slot horizontal carousel (6 cards) ────────────────
-// Wraps the shared CardCarouselBlockView (SDUI module). Load-more is an
-// explicit D-pad-reachable arrow past the last card (see _LoadMoreArrow),
-// not an automatic trigger from scrolling/focusing near the end — the
-// latter fired invisibly, with no way to tell whether more content was
-// actually being fetched.
+// Wraps the shared CardCarouselBlockView (SDUI module). The next page loads
+// by itself as focus nears the end (CarouselLoadMore); the placeholder card
+// at the end shows it's coming, and turns into "Riprova" if it failed.
 
 class _SearchCarousel extends StatefulWidget {
   final String pluginId;
   final List<CatalogItem> items;
   final bool hasMore;
   final bool isLoadingMore;
+  final bool loadMoreFailed;
   final double screenH;
   final void Function(FocusNode) onFirstCardFocus;
   final VoidCallback onNavigateUp;
@@ -27,6 +26,7 @@ class _SearchCarousel extends StatefulWidget {
     required this.items,
     required this.hasMore,
     required this.isLoadingMore,
+    required this.loadMoreFailed,
     required this.screenH,
     required this.onFirstCardFocus,
     required this.onNavigateUp,
@@ -105,13 +105,12 @@ class _SearchCarouselState extends State<_SearchCarousel> {
             key: ValueKey('search_${widget.pluginId}'),
             block: block,
             visibleCardsOverride: 7,
-            // Load-more is a real trailing card in the row now — it scrolls
-            // and focuses like any other, and on append the carousel snaps
-            // focus back to the first card (see CarouselLoadMore).
             loadMore: widget.hasMore
                 ? CarouselLoadMore(
                     isLoading: widget.isLoadingMore,
-                    onActivate: _loadMore,
+                    failed: widget.loadMoreFailed,
+                    onLoad: _loadMore,
+                    loadAhead: kLoadAheadItems,
                   )
                 : null,
             interaction: CardCarouselInteraction(

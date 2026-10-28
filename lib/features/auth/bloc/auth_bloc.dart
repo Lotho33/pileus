@@ -48,6 +48,12 @@ EventTransformer<E> _droppable<E>() {
 class AuthBloc extends Bloc<AuthEvent, AuthState> {
   AuthRepository _repo;
 
+  // True while a handler is deliberately leaving the active profile (switch
+  // profile / forget device / logout): it has already locked it server-side,
+  // so PROFILE_LOCKED from requests still in flight is expected, not a
+  // reason to reopen the PIN dialog — see _onProfileLocked.
+  bool _leavingProfile = false;
+
   // ignore: avoid_setters_without_getters
   set repository(AuthRepository r) => _repo = r;
 
@@ -59,6 +65,7 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
     on<LogoutEvent>(_onLogout);
     on<ChangeServerEvent>(_onChangeServer);
     on<SwitchProfileEvent>(_onSwitchProfile);
+    on<ForgetDeviceEvent>(_onForgetDevice);
     on<CreateProfileEvent>(_onCreateProfile, transformer: _droppable());
     on<SessionExpiredEvent>(_onSessionExpired);
     on<ProfileLockedEvent>(_onProfileLocked);
@@ -437,10 +444,15 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
 
   Future<void> _onLogout(LogoutEvent event, Emitter<AuthState> emit) async {
     _stopRefreshTimer();
-    await _lockActiveProfile();
-    await _repo.logout();
-    await _resetHomePrefetchBlocs();
-    emit(const DevicePairingRequired());
+    _leavingProfile = true;
+    try {
+      await _lockActiveProfile();
+      await _repo.logout();
+      await _resetHomePrefetchBlocs();
+      emit(const DevicePairingRequired());
+    } finally {
+      _leavingProfile = false;
+    }
   }
 
   Future<void> _onChangeServer(
@@ -488,9 +500,39 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
     // The device jwt in AuthInterceptor stays put — it's device-level, not
     // profile-level (see _onSelectProfile, which reuses session.deviceJwt
     // for every profile). Only the profile picker needs to come back up.
-    await _lockActiveProfile();
-    final profiles = await _repo.getLocalProfiles();
-    emit(ProfileSelectionRequired(profiles));
+    _leavingProfile = true;
+    try {
+      await _lockActiveProfile();
+      final profiles = await _repo.getLocalProfiles();
+      emit(ProfileSelectionRequired(profiles));
+    } finally {
+      _leavingProfile = false;
+    }
+  }
+
+  Future<void> _onForgetDevice(
+      ForgetDeviceEvent event, Emitter<AuthState> emit) async {
+    // forget_device ends this device's session on the profile server-side
+    // too, so staying on /home isn't an option: the very next poll
+    // (plugins/continue-watching every 30s) would come back PROFILE_LOCKED
+    // and bounce to the picker *with the PIN dialog open* — which read as
+    // "forget logged me out and then asked me to log back in". Leave on
+    // purpose instead, with no dialog; _leavingProfile keeps an in-flight
+    // PROFILE_LOCKED from racing ahead of this emit (see _onProfileLocked).
+    final interceptor = getIt<AuthInterceptor>();
+    final isActive = interceptor.profileId == event.profileId;
+    _leavingProfile = isActive;
+    try {
+      if (isActive) getIt<MediaRepository>().releasePlayback();
+      await _repo.forgetDevice(event.profileId);
+      if (!isActive) return; // not the profile in use: nothing to leave
+      interceptor.clearProfileSessionToken();
+      await _resetHomePrefetchBlocs();
+      final profiles = await _repo.getLocalProfiles();
+      emit(ProfileSelectionRequired(profiles));
+    } finally {
+      _leavingProfile = false;
+    }
   }
 
   Future<void> _onCreateProfile(
@@ -535,6 +577,17 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
   // device locked out, there is nothing left here to unwind.
   Future<void> _onProfileLocked(
       ProfileLockedEvent event, Emitter<AuthState> emit) async {
+    // Stale signals from requests still in flight when the profile was left
+    // on purpose (switch profile / forget device lock it server-side first,
+    // so a 30s poll landing in between comes back PROFILE_LOCKED): the user
+    // is already on — or on the way to — the picker, and reopening the PIN
+    // dialog there for the profile they just left is wrong. Same for an
+    // event about a profile that is no longer the active one.
+    if (_leavingProfile ||
+        state is ProfileSelectionRequired ||
+        event.profileId != (getIt<AuthInterceptor>().profileId ?? '')) {
+      return;
+    }
     getIt<AuthInterceptor>().clearProfileSessionToken();
     final profiles = await _repo.getLocalProfiles();
     emit(ProfileSelectionRequired(profiles,

@@ -47,6 +47,10 @@ const kCwDropThreshold = 0.95;
 /// countdown/banner appears (and, once it hits zero, auto-advances).
 const kNextEpisodeBannerWindowSec = 30;
 
+/// Once the ending (an `ed` skip marker) starts, how many seconds of it play
+/// before moving on to the next episode — see next_episode_countdown.dart.
+const kOutroCountdownSec = 20;
+
 /// Once a plain playback error fires, how long to hold it before actually
 /// surfacing the blocking "Riprova" overlay. Many are transient (one failed
 /// segment/manifest fetch that then retries successfully) — something that

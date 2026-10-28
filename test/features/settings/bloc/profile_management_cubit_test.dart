@@ -128,4 +128,20 @@ void main() {
       expect(session?.lastActiveProfileId, isNull);
     });
   });
+
+  group('AuthRepository.forgetDevice', () {
+    test('un-sets the default when it is the forgotten profile', () async {
+      await _seedProfiles(prefs, ['p1', 'p2']);
+      await _seedSession(prefs, lastActiveProfileId: 'p1');
+      await _buildRepo(prefs).forgetDevice('p1');
+      expect(DeviceSession.readFrom(prefs)!.lastActiveProfileId, isNull);
+    });
+
+    test('leaves another profile\'s default alone', () async {
+      await _seedProfiles(prefs, ['p1', 'p2']);
+      await _seedSession(prefs, lastActiveProfileId: 'p2');
+      await _buildRepo(prefs).forgetDevice('p1');
+      expect(DeviceSession.readFrom(prefs)!.lastActiveProfileId, 'p2');
+    });
+  });
 }

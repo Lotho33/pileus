@@ -28,6 +28,7 @@ import '../features/player/live_stall_watchdog.dart';
 import '../features/player/live_sync.dart';
 import '../features/player/models/playback_args.dart';
 import '../features/player/models/skip_interval.dart';
+import '../features/player/next_episode_countdown.dart';
 import '../features/player/player_tuning.dart';
 import '../features/player/presentation/widgets/pointer_next_episode_banner.dart';
 import '../features/player/presentation/widgets/pointer_skip_button.dart';
@@ -852,16 +853,15 @@ class _ViewState extends State<_View> {
     );
 
     if (!_nav.hasNext) return;
-    final remaining = durSeconds - posSeconds;
-    if (remaining > 0 &&
-        remaining <= kNextEpisodeBannerWindowSec &&
-        !_nextEpisodeDismissed) {
-      final r = remaining.round();
-      if (_nextEpisodeSecs != r) setState(() => _nextEpisodeSecs = r);
-    } else if (_nextEpisodeSecs != null) {
-      setState(() => _nextEpisodeSecs = null);
+    final tick = nextEpisodeTick(
+        position: pos,
+        duration: dur,
+        skips: _skipIntervals,
+        dismissed: _nextEpisodeDismissed);
+    if (_nextEpisodeSecs != tick.bannerSecs) {
+      setState(() => _nextEpisodeSecs = tick.bannerSecs);
     }
-    if (remaining <= 0 && !_autoAdvanced && !_resolvingEpisode) {
+    if (tick.advance && !_autoAdvanced && !_resolvingEpisode) {
       _autoAdvanced = true;
       _goToNextEpisode();
     }
@@ -1682,7 +1682,10 @@ class _ViewState extends State<_View> {
                 );
               },
             ),
-            if (_activeSkip != null && !_skipDismissed)
+            if (_activeSkip != null &&
+                !_skipDismissed &&
+                // The countdown banner already offers "Vai subito".
+                !(_activeSkip!.type == SkipType.ed && _nextEpisodeSecs != null))
               Positioned(
                 right: 28,
                 bottom: 28,
@@ -1725,6 +1728,7 @@ class _ViewState extends State<_View> {
                   onDismiss: () => setState(() {
                     _nextEpisodeSecs = null;
                     _nextEpisodeDismissed = true;
+                    _skipDismissed = true;
                   }),
                 ),
               ),

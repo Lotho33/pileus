@@ -18,6 +18,7 @@ import 'package:pileus/features/media/bloc/plugin_bloc.dart';
 import 'package:pileus/features/media/bloc/plugin_event.dart';
 import 'package:pileus/features/media/bloc/plugin_state.dart';
 import 'package:pileus/features/media/data/media_repository.dart';
+import 'package:pileus/features/media/paging.dart';
 import 'package:pileus/features/settings/data/settings_repository.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -320,6 +321,61 @@ void main() {
       await settle();
       expect((bloc.state as DiscoveryLoaded).items.single.id, 'old');
       await bloc.close();
+    });
+  });
+
+  group('catalog paging (no "Carica altri")', () {
+    test('next page appended without repeats; a failure is flagged', () async {
+      await start();
+      client.catalog = CatalogResponse(hasMore: true, items: [
+        CatalogItem(id: 'a1', title: 'A1'),
+        CatalogItem(id: 'a2', title: 'A2'),
+      ]);
+      final bloc = DiscoveryBloc(repo);
+      bloc.add(const LoadCatalogEvent(pluginId: 'a', catalogId: 'top'));
+      await settle();
+
+      client.catalog = CatalogResponse(hasMore: true, items: [
+        CatalogItem(id: 'a2', title: 'A2'),
+        CatalogItem(id: 'a3', title: 'A3'),
+      ]);
+      bloc.add(const LoadMoreCatalogEvent(pluginId: 'a', catalogId: 'top'));
+      await settle();
+      var s = bloc.state as DiscoveryLoaded;
+      expect([for (final i in s.items) i.id], ['a1', 'a2', 'a3']);
+      expect(s.loadMoreFailed, isFalse);
+      expect(canAutoLoadMore(s), isTrue);
+
+      client.catalog = const GrpcError.unavailable();
+      bloc.add(const LoadMoreCatalogEvent(pluginId: 'a', catalogId: 'top'));
+      await settle();
+      s = bloc.state as DiscoveryLoaded;
+      expect(s.loadMoreFailed, isTrue);
+      expect(s.items, hasLength(3));
+      expect(canAutoLoadMore(s), isFalse, reason: 'no retry loop');
+      expect(showsMoreSlot(s), isTrue, reason: '"Riprova" stays');
+
+      client.catalog = CatalogResponse(hasMore: false, items: [
+        CatalogItem(id: 'a4', title: 'A4'),
+      ]);
+      bloc.add(const LoadMoreCatalogEvent(pluginId: 'a', catalogId: 'top'));
+      await settle();
+      s = bloc.state as DiscoveryLoaded;
+      expect(s.loadMoreFailed, isFalse);
+      expect(s.items, hasLength(4));
+      expect(showsMoreSlot(s), isFalse);
+      await bloc.close();
+    });
+
+    test('home rows stop at the cap; near the end means 5 cards', () {
+      final full = DiscoveryLoaded(
+          [for (var i = 0; i < kHomeRowMaxItems; i++) CatalogItem(id: '$i')],
+          hasMore: true);
+      expect(canAutoLoadMore(full), isTrue);
+      expect(canAutoLoadMore(full, cap: kHomeRowMaxItems), isFalse);
+      expect(showsMoreSlot(full, cap: kHomeRowMaxItems), isFalse);
+      expect(nearEnd(14, 20), isFalse);
+      expect(nearEnd(15, 20), isTrue);
     });
   });
 

@@ -9,10 +9,14 @@ class ProfileManagementCubit extends Cubit<ProfileMgmtState> {
   final AuthRepository _repo;
   final void Function()? onSessionExpired;
   final void Function()? onProfileLocked;
+  // Wired to AuthBloc's ForgetDeviceEvent (see injection.dart): forgetting
+  // the active profile has to leave it, which is AuthBloc's job, not this
+  // screen's.
+  final void Function(String profileId)? onForgetDevice;
   String? _profileId;
 
   ProfileManagementCubit(this._repo,
-      {this.onSessionExpired, this.onProfileLocked})
+      {this.onSessionExpired, this.onProfileLocked, this.onForgetDevice})
       : super(const ProfileMgmtInitial());
 
   Future<void> load(String profileId) async {
@@ -139,12 +143,18 @@ class ProfileManagementCubit extends Cubit<ProfileMgmtState> {
 
   /// Drops this device's persistent trust for the profile — profile
   /// settings' "Dimentica questo dispositivo" (shown only when
-  /// `profile.deviceTrusted`). Best-effort server-side, see
-  /// AuthRepository.lockProfile's doc; the local cache is updated either way.
+  /// `profile.deviceTrusted`) — and un-sets it as the default. With
+  /// [onForgetDevice] wired (always, in the app) AuthBloc does it and goes
+  /// back to the picker; without it (tests) the repo is called directly.
   Future<void> forgetDevice() async {
     final id = _profileId;
     if (id == null) return;
-    await _guard(() => _repo.lockProfile(id, forgetDevice: true));
+    final delegate = onForgetDevice;
+    if (delegate != null) {
+      delegate(id);
+      return;
+    }
+    await _guard(() => _repo.forgetDevice(id));
   }
 
   /// Deletes the profile. Returns false (with the real error surfaced via

@@ -16,6 +16,8 @@ import '../features/media/bloc/discovery_bloc.dart';
 import '../features/media/bloc/discovery_event.dart';
 import '../features/media/presentation/live_rows_refresher.dart';
 import '../features/media/bloc/discovery_state.dart';
+import '../features/media/paging.dart';
+import '../shared/widgets/more_items_tile.dart';
 import '../features/media/data/continue_watching_item.dart';
 import '../features/media/data/media_repository.dart';
 import '../features/player/episode_poster.dart' show episodeBadge;
@@ -271,6 +273,11 @@ class _CatalogRowView extends StatelessWidget {
         var items = s.items;
         if (skipFirst && items.isNotEmpty) items = items.sublist(1);
         if (items.isEmpty) return const SizedBox.shrink();
+        // Further pages load by themselves as the row is scrolled (the list
+        // builds cards just before they show), up to kHomeRowMaxItems.
+        final more = showsMoreSlot(s, cap: kHomeRowMaxItems);
+        void loadMore() => bloc
+            .add(LoadMoreCatalogEvent(pluginId: pluginId, catalogId: def.id));
         return Padding(
           padding: const EdgeInsets.only(top: 22),
           child: MediaRow(
@@ -279,15 +286,29 @@ class _CatalogRowView extends StatelessWidget {
             pageStep: cardW + 14,
             gutter: bp.gutter,
             titleSize: bp.rowTitleSize,
-            itemCount: items.length,
-            itemBuilder: (_, i) => DesktopCard(
-              pluginId: pluginId,
-              item: items[i],
-              width: cardW,
-              landscape: landscape,
-              titleSize: bp.cardTitleSize,
-              captionHeight: capH,
-            ),
+            itemCount: items.length + (more ? 1 : 0),
+            itemBuilder: (_, i) {
+              if (nearEnd(i, items.length) &&
+                  canAutoLoadMore(s, cap: kHomeRowMaxItems)) {
+                loadMore();
+              }
+              if (i >= items.length) {
+                return MoreItemsTile(
+                  width: cardW,
+                  landscape: landscape,
+                  failed: s.loadMoreFailed,
+                  onRetry: loadMore,
+                );
+              }
+              return DesktopCard(
+                pluginId: pluginId,
+                item: items[i],
+                width: cardW,
+                landscape: landscape,
+                titleSize: bp.cardTitleSize,
+                captionHeight: capH,
+              );
+            },
           ),
         );
       },

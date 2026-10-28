@@ -142,6 +142,8 @@ class _PlaybackViewState extends State<_PlaybackView> {
   List<SkipInterval> _skipIntervals = [];
   SkipInterval? _activeSkip;
   bool _skipDismissed = false;
+  // The user closed the next-episode banner for this episode.
+  bool _nextEpisodeDismissed = false;
 
   // ── Episode navigation (mutabile durante la sessione) ─────────────────────
   late int _currentEpisodeIndex;
@@ -1262,7 +1264,7 @@ class _PlaybackViewState extends State<_PlaybackView> {
       }
     }
 
-    // Next episode countdown: active during the last kNextEpisodeBannerWindowSec
+    // Next episode countdown: the ending and the last seconds (nextEpisodeTick)
     if (!widget.args.isLive && _videoStarted) {
       final dur = _engine.duration;
       final hasNext = _hasNextEpisode;
@@ -1282,10 +1284,14 @@ class _PlaybackViewState extends State<_PlaybackView> {
                 : null,
       );
       if (hasNext && dur.inSeconds > kMinDurationForEndOfEpisodeLogicSec) {
-        final remaining = dur.inSeconds - pos.inSeconds;
-        if (remaining > 0 && remaining <= kNextEpisodeBannerWindowSec) {
+        final tick = nextEpisodeTick(
+            position: pos,
+            duration: dur,
+            skips: _skipIntervals,
+            dismissed: _nextEpisodeDismissed);
+        if (tick.bannerSecs != null) {
           final wasShown = _uiCubit.state.nextEpisodeSecs != null;
-          _uiCubit.setNextEpisodeSecs(remaining);
+          _uiCubit.setNextEpisodeSecs(tick.bannerSecs);
           if (!wasShown) {
             WidgetsBinding.instance.addPostFrameCallback((_) {
               if (mounted) _nextEpisodeKey.currentState?.requestInitialFocus();
@@ -1294,7 +1300,7 @@ class _PlaybackViewState extends State<_PlaybackView> {
         } else {
           _uiCubit.setNextEpisodeSecs(null);
         }
-        if (remaining <= 0 && !_autoAdvanced) {
+        if (tick.advance && !_autoAdvanced) {
           _autoAdvanced = true;
           _goToEpisode(_currentEpisodeIndex + 1);
         }
@@ -1501,6 +1507,7 @@ class _PlaybackViewState extends State<_PlaybackView> {
       _activeSkip = null;
       _skipDismissed = false;
       _autoAdvanced = false;
+      _nextEpisodeDismissed = false;
       _playbackError = null;
     });
     perf('screen: engine.open()  host=${Uri.tryParse(url)?.host ?? '?'}'
@@ -1635,6 +1642,7 @@ class _PlaybackViewState extends State<_PlaybackView> {
         _playbackReady = false;
         _resolvingEpisode = false;
         _autoAdvanced = false;
+        _nextEpisodeDismissed = false;
         _progressCleared = false;
         _elsewhereReported = false;
       });
@@ -1706,6 +1714,7 @@ class _PlaybackViewState extends State<_PlaybackView> {
         _playbackReady = false;
         _resolvingEpisode = false;
         _autoAdvanced = false;
+        _nextEpisodeDismissed = false;
         _progressCleared = false;
         _elsewhereReported = false;
       });
@@ -2203,7 +2212,12 @@ class _PlaybackViewState extends State<_PlaybackView> {
                   ),
 
                   // ── Skip button ───────────────────────────────────────
-                  if (_activeSkip != null && !_skipDismissed && _videoStarted)
+                  if (_activeSkip != null &&
+                      !_skipDismissed &&
+                      _videoStarted &&
+                      // The countdown banner already offers "Vai subito".
+                      !(_activeSkip!.type == SkipType.ed &&
+                          _uiCubit.state.nextEpisodeSecs != null))
                     Builder(builder: (_) {
                       // On the ending/outro, if there's a next episode, this
                       // becomes "jump to next episode" instead of "skip to
@@ -2273,7 +2287,13 @@ class _PlaybackViewState extends State<_PlaybackView> {
                             _uiCubit.setNextEpisodeSecs(null);
                             _goToEpisode(_currentEpisodeIndex + 1);
                           },
-                          onDismiss: () => _uiCubit.setNextEpisodeSecs(null),
+                          onDismiss: () {
+                            _uiCubit.setNextEpisodeSecs(null);
+                            setState(() {
+                              _nextEpisodeDismissed = true;
+                              _skipDismissed = true;
+                            });
+                          },
                         ),
                       );
                     },

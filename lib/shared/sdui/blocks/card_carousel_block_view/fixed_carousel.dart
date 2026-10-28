@@ -211,6 +211,15 @@ class _FixedCarouselViewState extends State<_FixedCarouselView> {
     if (i < widget.block.items.length) {
       widget.interaction.onItemFocused?.call(widget.block.items[i].id);
     }
+    // Close to the end: ask for the next page now (the host ignores a
+    // request while one is in flight). Not after a failure — "Riprova".
+    final more = widget.loadMore;
+    if (more != null &&
+        !more.isLoading &&
+        !more.failed &&
+        i >= widget.block.items.length - more.loadAhead) {
+      more.onLoad();
+    }
   }
 
   // From a fresh Left press: step to the previous card, or open the side nav
@@ -291,7 +300,8 @@ class _FixedCarouselViewState extends State<_FixedCarouselView> {
                   width: _cardW,
                   height: _cardH,
                   isLoading: widget.loadMore!.isLoading,
-                  onActivate: widget.loadMore!.onActivate,
+                  failed: widget.loadMore!.failed,
+                  onActivate: widget.loadMore!.onLoad,
                   onFocused: () => _onCardFocused(i),
                   onLeft: () => _navigateLeft(i),
                   onRight: () => _navigateRight(i),

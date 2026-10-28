@@ -52,6 +52,17 @@ class SwitchProfileEvent extends AuthEvent {
   const SwitchProfileEvent();
 }
 
+// Profile settings' "Dimentica questo dispositivo" on [profileId]: drops
+// this device's trust + session server-side, un-sets it as the default and
+// goes back to the picker — WITHOUT the PIN dialog open (see
+// AuthBloc._onForgetDevice).
+class ForgetDeviceEvent extends AuthEvent {
+  final String profileId;
+  const ForgetDeviceEvent(this.profileId);
+  @override
+  List<Object?> get props => [profileId];
+}
+
 class CreateProfileEvent extends AuthEvent {
   final String name;
   const CreateProfileEvent({required this.name});

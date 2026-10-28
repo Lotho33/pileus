@@ -20,6 +20,8 @@ import '../features/media/bloc/discovery_bloc.dart';
 import '../features/media/bloc/discovery_event.dart';
 import '../features/media/presentation/live_rows_refresher.dart';
 import '../features/media/bloc/discovery_state.dart';
+import '../features/media/paging.dart';
+import '../shared/widgets/more_items_tile.dart';
 import '../features/media/bloc/plugin_bloc.dart';
 import '../features/media/bloc/plugin_event.dart';
 import '../features/media/bloc/plugin_state.dart';
@@ -552,17 +554,36 @@ class _CatalogRow extends StatelessWidget {
           // in this catalog (else it shows both as hero and as a lone card).
           if (skipFirst && items.isNotEmpty) items = items.sublist(1);
           if (items.isEmpty) return const SizedBox.shrink();
+          // Further pages load by themselves as the row is scrolled (the
+          // list builds cards just before they show), up to kHomeRowMaxItems.
+          final more = showsMoreSlot(s, cap: kHomeRowMaxItems);
           body = ListView.separated(
             scrollDirection: Axis.horizontal,
             padding: const EdgeInsets.symmetric(horizontal: 16),
-            itemCount: items.length,
+            itemCount: items.length + (more ? 1 : 0),
             separatorBuilder: (_, __) => const SizedBox(width: 12),
-            itemBuilder: (_, i) => MobilePosterCard(
-              pluginId: pluginId,
-              item: items[i],
-              width: cardW,
-              landscape: landscape,
-            ),
+            itemBuilder: (_, i) {
+              if (nearEnd(i, items.length) &&
+                  canAutoLoadMore(s, cap: kHomeRowMaxItems)) {
+                bloc.add(LoadMoreCatalogEvent(
+                    pluginId: pluginId, catalogId: def.id));
+              }
+              if (i >= items.length) {
+                return MoreItemsTile(
+                  width: cardW,
+                  landscape: landscape,
+                  failed: s.loadMoreFailed,
+                  onRetry: () => bloc.add(LoadMoreCatalogEvent(
+                      pluginId: pluginId, catalogId: def.id)),
+                );
+              }
+              return MobilePosterCard(
+                pluginId: pluginId,
+                item: items[i],
+                width: cardW,
+                landscape: landscape,
+              );
+            },
           );
         } else if (s is DiscoveryError) {
           return const SizedBox.shrink();

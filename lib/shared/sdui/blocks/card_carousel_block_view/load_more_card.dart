@@ -4,15 +4,17 @@
 // CardCarouselBlockView); private identifiers are shared across all parts.
 part of '../card_carousel_block_view.dart';
 
-// ── trailing "load more" card ──────────────────────────────────────────────
+// ── trailing "more is coming" card ─────────────────────────────────────────
 // Same footprint as a poster card so it sits in the row as its last slot and
-// scrolls/focuses with everything else. Icon + label rather than art; a
-// spinner while a page is in flight.
+// scrolls/focuses with everything else. Nothing to press normally: the next
+// page is already on its way (see CarouselLoadMore), so it's a placeholder
+// with a spinner — "Riprova" only after that request failed.
 class _LoadMoreCardView extends StatefulWidget {
   final FocusNode focusNode;
   final double width;
   final double height;
   final bool isLoading;
+  final bool failed;
   final VoidCallback onActivate;
   final VoidCallback onFocused;
   final VoidCallback onLeft;
@@ -37,6 +39,7 @@ class _LoadMoreCardView extends StatefulWidget {
     required this.width,
     required this.height,
     required this.isLoading,
+    required this.failed,
     required this.onActivate,
     required this.onFocused,
     required this.onLeft,
@@ -158,7 +161,9 @@ class _LoadMoreCardViewState extends State<_LoadMoreCardView> {
           height: widget.height,
           alignment: Alignment.center,
           decoration: BoxDecoration(
-            color: AppTheme.surface2,
+            color: widget.failed
+                ? AppTheme.surface2
+                : AppTheme.surface2.withValues(alpha: 0.5),
             borderRadius: BorderRadius.circular(8),
             border: Border.all(
               color: focused ? AppTheme.primary : Colors.white12,
@@ -167,27 +172,28 @@ class _LoadMoreCardViewState extends State<_LoadMoreCardView> {
             boxShadow:
                 focused ? AppScale.focusGlow(AppTheme.primary, blur: 16) : null,
           ),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              widget.isLoading
-                  ? PileusSpinner(size: glyph, color: Colors.white70)
-                  : Icon(Icons.refresh_rounded,
-                      size: glyph,
-                      color:
-                          Colors.white.withValues(alpha: focused ? 1.0 : 0.6)),
-              SizedBox(height: widget.width * 0.08),
-              Text(
-                widget.isLoading ? 'Carico…' : 'Carica altri',
-                textAlign: TextAlign.center,
-                style: TextStyle(
-                  color: Colors.white.withValues(alpha: focused ? 1.0 : 0.65),
-                  fontSize: labelFs,
-                  fontWeight: FontWeight.w600,
+          child: !widget.failed
+              ? PileusSpinner(size: glyph * 0.7, color: Colors.white38)
+              : Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(Icons.refresh_rounded,
+                        size: glyph,
+                        color: Colors.white
+                            .withValues(alpha: focused ? 1.0 : 0.6)),
+                    SizedBox(height: widget.width * 0.08),
+                    Text(
+                      'Riprova',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        color: Colors.white
+                            .withValues(alpha: focused ? 1.0 : 0.65),
+                        fontSize: labelFs,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ],
                 ),
-              ),
-            ],
-          ),
         ),
       ),
     );

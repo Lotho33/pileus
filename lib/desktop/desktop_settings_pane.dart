@@ -693,8 +693,9 @@ Future<void> _confirmForgetDevice(
     builder: (ctx) => AlertDialog(
       backgroundColor: AppTheme.surface,
       title: const Text('Dimenticare questo dispositivo?'),
-      content: const Text('La prossima volta dovrai inserire di nuovo il '
-          'PIN per usare questo profilo su questo dispositivo.'),
+      content: const Text('Uscirai dal profilo, che non sarà più quello '
+          'predefinito: per rientrare su questo dispositivo servirà di '
+          'nuovo il PIN.'),
       actions: [
         TextButton(
             onPressed: () => Navigator.pop(ctx, false),

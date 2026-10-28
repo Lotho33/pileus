@@ -319,7 +319,11 @@ class SettingsRepository {
       _prefs.getDouble(_scoped(_kSubtitleFontSize)) ??
       _prefs.getDouble(_kSubtitleFontSize) ??
       32.0;
+  // Whole pixels: the phone/desktop sliders are continuous and handed over
+  // values like 24.666…, which went into the synced blob as such (and showed
+  // up verbatim on the Vega app).
   Future<void> setSubtitleFontSize(double v) async {
+    v = v.roundToDouble();
     await _prefs.setDouble(_scoped(_kSubtitleFontSize), v);
     await _updateBlob((b) => b.copyWith(subtitleFontSize: v));
   }
@@ -349,6 +353,7 @@ class SettingsRepository {
       _prefs.getDouble(_kSubtitleBottomPadding) ??
       80.0;
   Future<void> setSubtitleBottomPadding(double v) async {
+    v = v.roundToDouble();
     await _prefs.setDouble(_scoped(_kSubtitleBottomPadding), v);
     await _updateBlob((b) => b.copyWith(subtitleBottomPadding: v));
   }

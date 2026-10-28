@@ -150,6 +150,7 @@ class _SearchViewState extends State<_SearchView> {
         items: state.items.cast<CatalogItem>(),
         hasMore: state.hasMore,
         isLoadingMore: state.isLoadingMore,
+        loadMoreFailed: state.loadMoreFailed,
         screenH: h,
         onFirstCardFocus: (fn) => _firstResultFocus.set(fn),
         onItemOpened: () => _recent.submit(widget.pluginId, _controller.text),

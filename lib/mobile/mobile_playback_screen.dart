@@ -26,6 +26,7 @@ import '../features/player/models/playback_args.dart';
 import '../features/player/models/skip_interval.dart';
 import '../core/utils/metrics.dart';
 import '../core/utils/perf_log.dart';
+import '../features/player/next_episode_countdown.dart';
 import '../features/player/player_tuning.dart';
 import '../features/player/resume_seek.dart' show resolveStartPositionSec;
 import '../features/player/playback_episode_cache.dart';
@@ -1001,17 +1002,15 @@ class _MobilePlayerViewState extends State<_MobilePlayerView> {
     );
 
     if (!_hasNextEpisode) return;
-    final remaining = dur.inSeconds - pos.inSeconds;
-    if (remaining > 0 &&
-        remaining <= kNextEpisodeBannerWindowSec &&
-        !_nextEpisodeDismissed) {
-      if (_nextEpisodeSecs != remaining) {
-        setState(() => _nextEpisodeSecs = remaining);
-      }
-    } else if (_nextEpisodeSecs != null) {
-      setState(() => _nextEpisodeSecs = null);
+    final tick = nextEpisodeTick(
+        position: pos,
+        duration: dur,
+        skips: _skipIntervals,
+        dismissed: _nextEpisodeDismissed);
+    if (_nextEpisodeSecs != tick.bannerSecs) {
+      setState(() => _nextEpisodeSecs = tick.bannerSecs);
     }
-    if (remaining <= 0 && !_autoAdvanced && !_resolvingEpisode) {
+    if (tick.advance && !_autoAdvanced && !_resolvingEpisode) {
       _autoAdvanced = true;
       _goToNextEpisode();
     }
@@ -1500,7 +1499,11 @@ class _MobilePlayerViewState extends State<_MobilePlayerView> {
                           ),
                         ),
                       ),
-                    if (_activeSkip != null && !_skipDismissed)
+                    if (_activeSkip != null &&
+                        !_skipDismissed &&
+                        // The countdown banner already offers "Vai subito".
+                        !(_activeSkip!.type == SkipType.ed &&
+                            _nextEpisodeSecs != null))
                       Positioned(
                         right: 16,
                         bottom: 84,
@@ -1555,6 +1558,7 @@ class _MobilePlayerViewState extends State<_MobilePlayerView> {
                             onDismiss: () => setState(() {
                               _nextEpisodeDismissed = true;
                               _nextEpisodeSecs = null;
+                              _skipDismissed = true;
                             }),
                           ),
                         ),
