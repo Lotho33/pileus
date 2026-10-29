@@ -11,13 +11,17 @@
          model that doesn't report the leanback feature ever needs to be
          supported, flip this one attribute to "false" — the LEANBACK_LAUNCHER
          category (src/tv/AndroidManifest.xml) is what actually places the app on the TV home
-         screen. faketouch / wifi / gamepad are declared optional so no TV
-         box is excluded for lacking them. -->
+         screen. faketouch / wifi are declared optional so no TV box is
+         excluded for lacking them.
+
+         No android.hardware.gamepad entry at all, not even required="false":
+         Play's TV store reads its mere presence as "Occorre un gamepad" and
+         filters out TVs that don't report the feature (seen on a Xiaomi Mi
+         TV, Android 9). The remote's D-pad needs no declaration. -->
     <uses-feature android:name="android.hardware.touchscreen" android:required="false"/>
     <uses-feature android:name="android.software.leanback" android:required="true"/>
     <uses-feature android:name="android.hardware.faketouch" android:required="false"/>
     <uses-feature android:name="android.hardware.wifi" android:required="false"/>
-    <uses-feature android:name="android.hardware.gamepad" android:required="false"/>
 
     <!-- The debug/profile manifests (src/debug, src/profile) each grant this
          separately for Flutter's own dev tooling (hot reload, DevTools),
