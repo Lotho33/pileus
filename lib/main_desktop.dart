@@ -1,4 +1,4 @@
-import 'package:flutter/foundation.dart' show kDebugMode;
+import 'package:flutter/foundation.dart' show kDebugMode, kProfileMode;
 import 'package:flutter/material.dart';
 import 'package:window_manager/window_manager.dart';
 
@@ -57,7 +57,7 @@ Future<void> runDesktopApp() async {
   AppLifecycleReactor.instance.attach();
 
   final settings = getIt<SettingsRepository>();
-  kPerfDiagnostics = kDebugMode || settings.getDiagnostics();
+  kPerfDiagnostics = kDebugMode || kProfileMode || settings.getDiagnostics();
   installJankLogger();
 
   isAndroidTv = false;

@@ -54,6 +54,8 @@ android {
         // affected. On a Play AAB the language split already handles this;
         // this trims the Amazon per-ABI / universal APK.
         resourceConfigurations += listOf("en", "it")
+        // Launcher label, overridden by the profile build type below.
+        manifestPlaceholders["appLabel"] = "Pileus"
         // ABI restriction is done via `flutter build ... --target-platform
         // android-arm,android-arm64` (see the CI workflow / RELEASE.md), NOT
         // via `ndk { abiFilters }` here: an abiFilters block in defaultConfig
@@ -101,6 +103,15 @@ android {
     }
 
     buildTypes {
+        // `flutter run --profile` installs side by side with the store app
+        // instead of replacing it: a different signature on the same id
+        // would force an uninstall (and a re-pairing) on every device used
+        // for profiling. The type itself is created by the Flutter plugin.
+        getByName("profile") {
+            applicationIdSuffix = ".profile"
+            versionNameSuffix = "-profile"
+            manifestPlaceholders["appLabel"] = "Pileus Profile"
+        }
         release {
             if (hasReleaseSigning) {
                 signingConfig = signingConfigs.getByName("release")

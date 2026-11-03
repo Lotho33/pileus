@@ -357,10 +357,7 @@ class _HomeViewState extends State<_HomeView> {
                 _fadingOutPluginIdx = _paintedPluginIdx;
                 _paintedPluginIdx = safeIdx;
                 _fadeOutTimer?.cancel();
-                _fadeOutTimer = Timer(
-                    lowPowerUi
-                        ? const Duration(milliseconds: 16)
-                        : const Duration(milliseconds: 260), () {
+                _fadeOutTimer = Timer(const Duration(milliseconds: 16), () {
                   if (!mounted) return;
                   setState(() => _fadingOutPluginIdx = null);
                   // The plugin we just left is Offstage now — un-pin its
@@ -402,9 +399,12 @@ class _HomeViewState extends State<_HomeView> {
                             // off screen.
                             child: AnimatedOpacity(
                               opacity: i == safeIdx ? 1.0 : 0.0,
-                              duration: lowPowerUi
-                                  ? Duration.zero
-                                  : const Duration(milliseconds: 200),
+                              // Instant on every box: a crossfade composites
+                              // two whole plugin pages (hero, gradients,
+                              // carousel) as separate layers, and the
+                              // profiler on the Tanix showed 17-29 render
+                              // passes and 40-80 ms frames for it.
+                              duration: Duration.zero,
                               curve: Curves.easeInOut,
                               child: TickerMode(
                                 enabled: i == safeIdx,

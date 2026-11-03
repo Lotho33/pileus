@@ -28,6 +28,8 @@ import '../shared/widgets/language_badge.dart';
 import '../shared/widgets/language_chips.dart';
 import '../shared/responsive.dart';
 import '../shared/widgets/error_retry_view.dart';
+import 'widgets/meta_line.dart';
+import 'widgets/bleed_backdrop.dart';
 import 'package:cached_network_image_platform_interface/cached_network_image_platform_interface.dart'
     show ImageRenderMethodForWeb;
 
@@ -402,7 +404,7 @@ class _Header extends StatelessWidget {
             _Title(item.title, big: big),
           if (meta.isNotEmpty) ...[
             SizedBox(height: big ? 14 : 10),
-            Text(meta,
+            MetaLine(meta,
                 style: TextStyle(
                     color: AppTheme.textMid,
                     fontSize: big ? 15 : 13,
@@ -508,48 +510,59 @@ class _Header extends StatelessWidget {
       );
     }
 
+    final artH = bleedArtHeight(height, MediaQuery.sizeOf(context).width);
+
     return SizedBox(
       height: height,
       width: double.infinity,
       child: Stack(
         fit: StackFit.expand,
+        clipBehavior: Clip.none,
         children: [
-          CachedNetworkImage(
-            // Web-only, no-op on every other platform — see image_sizing.dart's
-            // "ImageRenderMethodForWeb.HttpGet" section for why every
-            // CachedNetworkImage call site in the app sets this.
-            imageRenderMethodForWeb: ImageRenderMethodForWeb.HttpGet,
-            imageUrl:
-                backdropSrc(fanart, backdropCacheWidth(context), proxy: true),
-            memCacheWidth: backdropCacheWidth(context),
-            fit: BoxFit.cover,
-            alignment: const Alignment(0, -0.25),
-            errorWidget: (_, __, ___) =>
-                const ColoredBox(color: AppTheme.surface),
-          ),
-          const DecoratedBox(
-            decoration: BoxDecoration(
-              gradient: LinearGradient(
-                begin: Alignment.centerLeft,
-                end: Alignment.centerRight,
-                stops: [0.0, 0.6, 1.0],
-                colors: [
-                  Color(0xF00D0D1A),
-                  Color(0x800D0D1A),
-                  Color(0x000D0D1A),
-                ],
+          Positioned(
+            top: 0,
+            left: 0,
+            right: 0,
+            height: artH,
+            child: Stack(fit: StackFit.expand, children: [
+              CachedNetworkImage(
+                // Web-only, no-op on every other platform — see image_sizing.dart's
+                // "ImageRenderMethodForWeb.HttpGet" section for why every
+                // CachedNetworkImage call site in the app sets this.
+                imageRenderMethodForWeb: ImageRenderMethodForWeb.HttpGet,
+                imageUrl: backdropSrc(fanart, backdropCacheWidth(context),
+                    proxy: true),
+                memCacheWidth: backdropCacheWidth(context),
+                fit: BoxFit.cover,
+                alignment: const Alignment(0, -0.25),
+                errorWidget: (_, __, ___) =>
+                    const ColoredBox(color: AppTheme.surface),
               ),
-            ),
-          ),
-          const DecoratedBox(
-            decoration: BoxDecoration(
-              gradient: LinearGradient(
-                begin: Alignment.bottomCenter,
-                end: Alignment.topCenter,
-                stops: [0.0, 0.5],
-                colors: [AppTheme.bg, Colors.transparent],
+              const DecoratedBox(
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: Alignment.centerLeft,
+                    end: Alignment.centerRight,
+                    stops: [0.0, 0.6, 1.0],
+                    colors: [
+                      Color(0xF00D0D1A),
+                      Color(0x800D0D1A),
+                      Color(0x000D0D1A),
+                    ],
+                  ),
+                ),
               ),
-            ),
+              const DecoratedBox(
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: Alignment.bottomCenter,
+                    end: Alignment.topCenter,
+                    stops: [0.0, 0.5],
+                    colors: [AppTheme.bg, Colors.transparent],
+                  ),
+                ),
+              ),
+            ]),
           ),
           Positioned(top: 16, left: 16, child: _backBtn(context)),
           Align(

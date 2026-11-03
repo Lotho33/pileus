@@ -221,6 +221,19 @@ class _StandardHomeShellState extends State<_StandardHomeShell> {
   // CW hero — fetched from getDetails when a CW item is focused
   CatalogItem? _cwDisplayItem;
   final Map<String, CatalogItem> _cwHeroCache = {};
+  // One placeholder per card, so re-reporting the same focused card is a
+  // no-op (see _onCwItemFocused) while its details fetch is pending or has
+  // failed.
+  final Map<String, CatalogItem> _cwPlaceholders = {};
+  // This plugin's CW entries, rebuilt only when the bloc hands over a new
+  // list. A fresh list on every build made the strip's didUpdateWidget see
+  // "new items" each time and re-report the focused card, whose new
+  // placeholder setState'd this shell again: the home rebuilt and redrew
+  // on every frame, forever, whenever a CW card had no cached details
+  // (measured on the Tanix: ~45 fps of full rebuilds while idle).
+  List<ContinueWatchingItem>? _cwSource;
+  String _cwSourcePlugin = '';
+  List<ContinueWatchingItem> _cwItems = const [];
   // Key of the CW card that currently has focus. _fetchCwHero checks this
   // before applying its (async) result so a slow fetch for a card the user
   // has already moved off of doesn't overwrite the hero for the card they're
@@ -272,7 +285,8 @@ class _StandardHomeShellState extends State<_StandardHomeShell> {
     // details if we have them, otherwise a placeholder built from the CW
     // item's own metadata. Never leave the hero showing the previously
     // focused card while a fetch is in flight.
-    final next = _cwHeroCache[key] ?? _cwPlaceholderItem(item);
+    final next = _cwHeroCache[key] ??
+        (_cwPlaceholders[key] ??= _cwPlaceholderItem(item));
     if (!identical(_cwDisplayItem, next)) {
       setState(() => _cwDisplayItem = next);
     }
@@ -1064,13 +1078,20 @@ class _StandardHomeShellState extends State<_StandardHomeShell> {
     if (widget.plugin.catalogs.isEmpty) return const SizedBox.shrink();
 
     final cwState = context.watch<ContinueWatchingBloc>().state;
-    final cwItems = _isLivePlugin
-        ? <ContinueWatchingItem>[]
-        : cwState is ContinueWatchingLoaded
-            ? cwState.items
-                .where((i) => i.providerID == widget.plugin.pluginId)
-                .toList()
-            : <ContinueWatchingItem>[];
+    final source = _isLivePlugin || cwState is! ContinueWatchingLoaded
+        ? null
+        : cwState.items;
+    if (!identical(source, _cwSource) ||
+        _cwSourcePlugin != widget.plugin.pluginId) {
+      _cwSource = source;
+      _cwSourcePlugin = widget.plugin.pluginId;
+      _cwItems = source == null
+          ? const []
+          : source
+              .where((i) => i.providerID == widget.plugin.pluginId)
+              .toList();
+    }
+    final cwItems = _cwItems;
     final hasCW = cwItems.isNotEmpty;
 
     // The first time CW's load actually resolves for this plugin, jump
@@ -1264,36 +1285,28 @@ class _StandardHomeShellState extends State<_StandardHomeShell> {
                           forceAnonymous: _heroBackgroundDisabled,
                         ),
                       ),
-                      // Left vignette — hidden for live plugins
-                      if (!_isLivePlugin)
-                        const Positioned.fill(
-                          child: DecoratedBox(
-                            decoration: BoxDecoration(
-                              gradient: LinearGradient(
-                                begin: Alignment.centerLeft,
-                                end: Alignment.centerRight,
-                                stops: [0.0, 0.6],
-                                colors: [Color(0xAA000000), Colors.transparent],
-                              ),
-                            ),
-                          ),
-                        ),
-                      // Left meta panel gradient — hidden for live plugins
+                      // Left vignette + meta panel shade, hidden for live
+                      // plugins. One gradient over the left 60%: it used to
+                      // be two (a full-width one transparent past 60%, and
+                      // one over 55%), and on a low-power GPU every
+                      // full-screen fill counts. Stops = the two composited
+                      // (0xAA→0 over 60% under 0xCC→0x80→0 over 55%).
                       if (!_isLivePlugin)
                         Positioned(
                           left: 0,
                           top: 0,
                           bottom: 0,
-                          width: screenW * 0.55,
+                          width: screenW * 0.6,
                           child: const DecoratedBox(
                             decoration: BoxDecoration(
                               gradient: LinearGradient(
                                 begin: Alignment.centerLeft,
                                 end: Alignment.centerRight,
-                                stops: [0.0, 0.55, 1.0],
+                                stops: [0.0, 0.504, 0.917, 1.0],
                                 colors: [
-                                  Color(0xCC000000),
-                                  Color(0x80000000),
+                                  Color(0xEE000000),
+                                  Color(0xAA000000),
+                                  Color(0x0E000000),
                                   Colors.transparent
                                 ],
                               ),

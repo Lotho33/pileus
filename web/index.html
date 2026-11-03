@@ -18,6 +18,9 @@
   <link rel="icon" type="image/png" href="favicon.png"/>
 
   <title>Pileus</title>
+  <!-- flutter_bootstrap.js requests main.dart.js only once it runs; the
+       preload starts the biggest download with the HTML. -->
+  <link rel="preload" href="main.dart.js" as="script">
   <link rel="manifest" href="manifest.json">
 
   <style>
@@ -201,8 +204,12 @@
   </script>
   <!-- Bundled locally (not a CDN) so the PWA works offline and no external
        host has to be whitelisted in a deployment CSP. Chrome/Firefox need it
-       to play HLS; Safari plays HLS natively and this stays dormant. -->
-  <script src="hls.min.js"></script>
+       to play HLS; Safari plays HLS natively and this stays dormant.
+       defer: as a plain <script> its 400 KB held up the parser before
+       flutter_bootstrap.js was even requested. Nothing reads window.Hls
+       before a video opens (web_playback_screen.dart checks it per source,
+       media_kit at open), long after DOMContentLoaded. -->
+  <script src="hls.min.js" defer></script>
   <script src="flutter_bootstrap.js" async></script>
 </body>
 </html>

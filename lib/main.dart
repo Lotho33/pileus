@@ -120,7 +120,7 @@ void main() async {
   final settings = getIt<SettingsRepository>();
   // Field diagnostics: silent in release unless the hidden toggle is on
   // (debug builds always trace). Set before the first perf()/jank sample.
-  kPerfDiagnostics = kDebugMode || settings.getDiagnostics();
+  kPerfDiagnostics = kDebugMode || kProfileMode || settings.getDiagnostics();
   // Slow-frame sampler → `adb logcat` (grep `pileus/jank`); rate-limited,
   // no-ops when kPerfDiagnostics is false.
   installJankLogger();

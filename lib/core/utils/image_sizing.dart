@@ -59,8 +59,11 @@ import '../perf_profile.dart';
 //     stops a re-created hero from re-issuing the network call, but the
 //     CachedNetworkImage decode still happens fresh either way; doesn't
 //     touch the texture-upload race itself.
-// Unconfirmed as of this writing — has not yet been re-tested by the user
-// against the specific repro (switch plugin / open details / scroll back).
+// Not the whole story (found 03/11 with remote DevTools on a phone): wherever
+// WebCodecs' ImageDecoder is missing (plain http from a LAN address,
+// non-Chromium browsers) the engine decodes HttpGet bytes through an `<img>`
+// too, and re-decoding a frame from it after its first use gave the same
+// "no image" blank. See lib/web/web_image_binding.dart.
 // No effect on non-web platforms: every native ImageLoader ignores this
 // field entirely (see cached_network_image_platform_interface's ImageLoader
 // contract), so passing it everywhere unconditionally is a no-op on
@@ -78,7 +81,9 @@ int cacheWidthFor(BuildContext context, double logicalWidth) =>
 /// and seen from a sofa, the difference doesn't show — while the decode is
 /// 2.25× smaller in memory, and TMDB serves its own w1280 file (a smaller
 /// download too, see backdropSrc). Every TV gets this, not just "hardware
-/// modesto".
+/// modesto". TMDB backdrops are w1280 on every interface: the next size up
+/// is "original", often 3840 px and over 1 MB (a 64 ms texture upload per
+/// image in the web profile), for no visible gain under the gradients.
 int backdropCacheWidth(BuildContext context) =>
     (MediaQuery.sizeOf(context).width * MediaQuery.devicePixelRatioOf(context))
         .clamp(64.0, tvUi ? 1280.0 : 1920.0)
@@ -92,15 +97,32 @@ final _tmdbRe =
 const _tmdbPosterLadder = [154, 185, 342, 500, 780];
 const _tmdbBackdropLadder = [300, 780, 1280];
 
-String _rewriteTmdb(String url, List<int> ladder, int targetPx,
-    {bool allowOriginal = false}) {
+String _rewriteTmdb(String url, List<int> ladder, int targetPx) {
   final m = _tmdbRe.firstMatch(url);
   if (m == null) return url;
   for (final s in ladder) {
     if (s >= targetPx) return '${m.group(1)}w$s${m.group(3)}';
   }
-  final seg = allowOriginal ? 'original' : 'w${ladder.last}';
-  return '${m.group(1)}$seg${m.group(3)}';
+  return '${m.group(1)}w${ladder.last}${m.group(3)}';
+}
+
+// Jellyfin/Emby image endpoints (/Items/<id>/Images/<type>) resize on the
+// server when asked: without maxWidth they return the stored original, a
+// 300-700 KB poster decoded at 1000+ px for a card drawn ~250 px wide. The
+// width is rounded up to a short ladder so the `/img` cache (keyed by the
+// upstream URL) holds a few entries per image, not one per device width.
+final _jellyfinImageRe = RegExp(
+    r'/Items/[0-9a-fA-F-]{32,36}/Images/(Primary|Backdrop|Thumb|Banner|Art)\b',
+    caseSensitive: false);
+const _jellyfinPosterLadder = [240, 360, 480, 720, 960];
+const _jellyfinBackdropLadder = [780, 1280, 1920];
+
+String _rewriteJellyfin(String url, List<int> ladder, int targetPx) {
+  if (!_jellyfinImageRe.hasMatch(url)) return url;
+  final lower = url.toLowerCase();
+  if (lower.contains('maxwidth=') || lower.contains('fillwidth=')) return url;
+  final w = ladder.firstWhere((s) => s >= targetPx, orElse: () => ladder.last);
+  return '$url${url.contains('?') ? '&' : '?'}maxWidth=$w';
 }
 
 // mycelium's `/img` proxy: fetch upstream once, transcode to WebP at the
@@ -132,6 +154,7 @@ String posterSrc(String upstream, int targetPx, {bool proxy = false}) {
   if (lower.contains('image.tmdb.org/t/p/')) {
     return _rewriteTmdb(upstream, _tmdbPosterLadder, targetPx);
   }
+  upstream = _rewriteJellyfin(upstream, _jellyfinPosterLadder, targetPx);
   if (!proxy && !_forceProxyOnWeb) return upstream;
   return _imgProxy(upstream) ?? upstream;
 }
@@ -151,9 +174,9 @@ String backdropSrc(String upstream, int targetPx, {bool proxy = false}) {
   final lower = upstream.toLowerCase();
   if (lower.startsWith('data:') || lower.contains('.svg')) return upstream;
   if (lower.contains('image.tmdb.org/t/p/')) {
-    return _rewriteTmdb(upstream, _tmdbBackdropLadder, targetPx,
-        allowOriginal: true);
+    return _rewriteTmdb(upstream, _tmdbBackdropLadder, targetPx);
   }
+  upstream = _rewriteJellyfin(upstream, _jellyfinBackdropLadder, targetPx);
   if (!proxy && !_forceProxyOnWeb) return upstream;
   return _imgProxy(upstream) ?? upstream;
 }

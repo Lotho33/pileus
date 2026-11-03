@@ -45,6 +45,10 @@ class _HomeHeroBackgroundState extends State<HomeHeroBackground> {
   String _urlA = '';
   String _urlB = '';
   bool _showA = true;
+  // A is painted under B only while they crossfade. Once B is opaque, A is
+  // invisible but still cost a full-screen image + gradient on every frame:
+  // Impeller has no raster cache, so the RepaintBoundary doesn't save it.
+  bool _fading = false;
 
   String _urlFor(CatalogItem? it) {
     if (widget.forceAnonymous) return '';
@@ -73,6 +77,7 @@ class _HomeHeroBackgroundState extends State<HomeHeroBackground> {
     final curUrl = _showA ? _urlA : _urlB;
     if (newUrl == curUrl) return;
     setState(() {
+      _fading = !lowPowerUi;
       if (_showA) {
         _urlB = newUrl;
         _showA = false;
@@ -115,15 +120,24 @@ class _HomeHeroBackgroundState extends State<HomeHeroBackground> {
         // Full-bleed only: the long fade blends a full-screen image into the
         // dark carousel area below it. The confined box has clean clipped
         // (rounded) edges and doesn't need it.
+        // Drawn over the bottom 60% only (the same ramp as stops 0.4→1.0
+        // over the whole height): the transparent top part was still a
+        // full-width fill for the GPU.
         if (!widget.confined)
           const Positioned.fill(
-            child: DecoratedBox(
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  begin: Alignment.topCenter,
-                  end: Alignment.bottomCenter,
-                  stops: [0.40, 1.0],
-                  colors: [Colors.transparent, Colors.black],
+            child: Align(
+              alignment: Alignment.bottomCenter,
+              child: FractionallySizedBox(
+                heightFactor: 0.6,
+                widthFactor: 1,
+                child: DecoratedBox(
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      begin: Alignment.topCenter,
+                      end: Alignment.bottomCenter,
+                      colors: [Colors.transparent, Colors.black],
+                    ),
+                  ),
                 ),
               ),
             ),
@@ -146,14 +160,19 @@ class _HomeHeroBackgroundState extends State<HomeHeroBackground> {
     return Stack(
       fit: StackFit.expand,
       children: [
-        // Each layer in its own RepaintBoundary: during the crossfade the
-        // compositor reuses the cached raster of the settled layer instead
-        // of re-decoding/re-scaling both full-screen images every frame — a
-        // real cost on a low-power GPU.
-        RepaintBoundary(child: _layer(_urlA)),
+        // Each layer in its own RepaintBoundary: during the crossfade only
+        // the fading layer is re-recorded. The GPU still draws both, so the
+        // covered one goes offstage once the fade is over (_fading).
+        Offstage(
+          offstage: !_showA && !_fading,
+          child: RepaintBoundary(child: _layer(_urlA)),
+        ),
         RepaintBoundary(
           child: AnimatedOpacity(
             opacity: _showA ? 0.0 : 1.0,
+            onEnd: () {
+              if (_fading && mounted) setState(() => _fading = false);
+            },
             // This crossfade runs on *every* D-pad move through a carousel
             // (each focus change picks a new hero image), so it's kept
             // short — two full-screen layers blending for 400ms per

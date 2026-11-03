@@ -72,7 +72,7 @@
          dart:io sockets (gRPC / discovery) bypass the policy, so this only
          started mattering once playback moved to ExoPlayer. -->
     <application
-        android:label="Pileus"
+        android:label="${appLabel}"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher"
         android:banner="@drawable/banner"

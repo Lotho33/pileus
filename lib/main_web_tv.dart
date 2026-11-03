@@ -1,4 +1,4 @@
-import 'package:flutter/foundation.dart' show kDebugMode;
+import 'package:flutter/foundation.dart' show kDebugMode, kProfileMode;
 import 'package:flutter/material.dart';
 
 import 'core/app_lifecycle.dart';
@@ -8,6 +8,7 @@ import 'core/utils/metrics.dart';
 import 'core/utils/perf_log.dart';
 import 'features/settings/data/settings_repository.dart';
 import 'main.dart' show PileusApp;
+import 'web/web_image_binding.dart';
 
 /// Entry point for the **TV web / packaged smart-TV** build (Samsung Tizen
 /// `.wgt`, LG webOS `.ipk` — see docs/TIZEN_WEBOS.md).
@@ -40,7 +41,7 @@ void main() => runWebTvApp();
 
 Future<void> runWebTvApp() async {
   Metrics.markAppStart();
-  WidgetsFlutterBinding.ensureInitialized();
+  PileusWebBinding.ensureInitialized();
 
   PaintingBinding.instance.imageCache.maximumSizeBytes = 64 << 20;
   PaintingBinding.instance.imageCache.maximumSize = 200;
@@ -55,7 +56,7 @@ Future<void> runWebTvApp() async {
   AppLifecycleReactor.instance.attach();
 
   final settings = getIt<SettingsRepository>();
-  kPerfDiagnostics = kDebugMode || settings.getDiagnostics();
+  kPerfDiagnostics = kDebugMode || kProfileMode || settings.getDiagnostics();
   installJankLogger();
 
   // A real TV, always — unlike main.dart's Android build, there is no

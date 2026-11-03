@@ -3,8 +3,10 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:go_router/go_router.dart';
 import 'package:http/http.dart' as http;
+import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../../../core/grpc/clients/media_client.dart' show PluginInfo;
+import '../../../../core/di/injection.dart';
 import '../../../../core/grpc/host_resolver.dart' show myceliumHttpBase;
 import '../../../../core/theme/app_scale.dart';
 import '../../../../core/theme/app_theme.dart';
@@ -29,9 +31,58 @@ const double _kIconAspect = 1516.099470 / 1229.844208;
 /// hard-coding here: this widget knows nothing about which plugins exist.
 String pluginLabel(PluginInfo p) => p.name.isNotEmpty ? p.name : p.pluginId;
 
-// Session-lifetime cache of fetched icon SVG bodies. "" = fetched, none
-// available (fall back to a glyph); a missing key = not fetched yet.
+// Icon SVG bodies by plugin id. "" = the server has none (fall back to a
+// glyph); a missing key = not known yet. Seeded from disk, so the side menu
+// paints the real icons on the first frame after a launch instead of the
+// generic glyph while they download.
 final Map<String, String> _pluginSvgCache = {};
+
+// Persisted across launches in SharedPreferences, like the home layout
+// cache (MediaRepository's 'layoutcache:' rows): one key per plugin.
+const _pluginIconPrefsPrefix = 'pluginicon:';
+
+// One background revalidation per plugin per session, shared by every
+// PluginIcon showing it: each awaits the same request.
+final Map<String, Future<String?>> _pluginSvgFetches = {};
+
+String? _diskPluginSvg(String pluginId) {
+  try {
+    return getIt<SharedPreferences>()
+        .getString('$_pluginIconPrefsPrefix$pluginId');
+  } catch (_) {
+    return null; // prefs not registered (tests)
+  }
+}
+
+void _storePluginSvg(String pluginId, String body) {
+  try {
+    final prefs = getIt<SharedPreferences>();
+    final key = '$_pluginIconPrefsPrefix$pluginId';
+    if (body.isEmpty) {
+      prefs.remove(key);
+    } else if (prefs.getString(key) != body) {
+      prefs.setString(key, body);
+    }
+  } catch (_) {}
+}
+
+// Fetches the icon from the server: its body, "" when the server answers
+// that the plugin has none, null when the request failed (keep what we have).
+Future<String?> _fetchPluginSvg(String pluginId) async {
+  final base = myceliumHttpBase();
+  if (base == null) return null;
+  try {
+    final res = await http
+        .get(Uri.parse('$base/plugin-icon/$pluginId'))
+        .timeout(const Duration(seconds: 4));
+    final ct = res.headers['content-type'] ?? '';
+    if (res.statusCode == 200 && ct.contains('svg')) return res.body;
+    if (res.statusCode == 404) return '';
+  } catch (_) {
+    // network/timeout: the cached icon stays
+  }
+  return null;
+}
 
 /// The plugin's branding icon for the side menu: the server-served SVG
 /// (`GET /plugin-icon/{id}`), tinted to [color]; falls back to a Material glyph
@@ -73,34 +124,39 @@ class PluginIconState extends State<PluginIcon> {
     }
   }
 
+  // Synchronous first: memory, then disk — no glyph flash on a launch when the
+  // icon was seen before. Then one background check per session picks up an
+  // icon the plugin changed (or a plugin that dropped its icon).
   void _resolve() {
-    final cached = _pluginSvgCache[widget.pluginId];
-    if (cached != null) {
-      _svg = cached;
-    } else {
-      _fetch();
+    final id = widget.pluginId;
+    var known = _pluginSvgCache[id];
+    if (known == null) {
+      known = _diskPluginSvg(id);
+      if (known != null) _pluginSvgCache[id] = known;
     }
+    _svg = known;
+    _revalidate(id);
   }
 
-  Future<void> _fetch() async {
-    final base = myceliumHttpBase();
-    if (base == null) {
-      _pluginSvgCache[widget.pluginId] = '';
-      if (mounted) setState(() => _svg = '');
+  Future<void> _revalidate(String id) async {
+    final body =
+        await _pluginSvgFetches.putIfAbsent(id, () => _fetchPluginSvg(id));
+    if (body == null) {
+      // Request failed: keep the cached icon; with none, settle on the glyph
+      // for now (a later launch retries).
+      if (_pluginSvgCache[id] == null) _pluginSvgCache[id] = '';
+      if (mounted && widget.pluginId == id && _svg == null) {
+        setState(() => _svg = '');
+      }
       return;
     }
-    var body = '';
-    try {
-      final res = await http
-          .get(Uri.parse('$base/plugin-icon/${widget.pluginId}'))
-          .timeout(const Duration(seconds: 4));
-      final ct = res.headers['content-type'] ?? '';
-      if (res.statusCode == 200 && ct.contains('svg')) body = res.body;
-    } catch (_) {
-      // network/timeout — fall through to the glyph fallback
+    if (_pluginSvgCache[id] != body) {
+      _pluginSvgCache[id] = body;
+      _storePluginSvg(id, body);
     }
-    _pluginSvgCache[widget.pluginId] = body;
-    if (mounted) setState(() => _svg = body);
+    if (mounted && widget.pluginId == id && _svg != body) {
+      setState(() => _svg = body);
+    }
   }
 
   @override

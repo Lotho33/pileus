@@ -10,6 +10,8 @@ import '../../features/player/episode_poster.dart';
 import '../../features/player/resolve_and_play.dart';
 import '../../shared/responsive.dart';
 import '../../shared/widgets/open_catalog_item.dart';
+import 'meta_line.dart';
+import 'bleed_backdrop.dart';
 import 'package:cached_network_image_platform_interface/cached_network_image_platform_interface.dart'
     show ImageRenderMethodForWeb;
 
@@ -173,53 +175,66 @@ class _DesktopHeroState extends State<DesktopHero>
       ..._genres.take(3),
     ].join('   ·   ');
 
+    final artH =
+        bleedArtHeight(widget.height, MediaQuery.sizeOf(context).width);
+
     return SizedBox(
       height: widget.height,
       width: double.infinity,
       child: Stack(
         fit: StackFit.expand,
+        clipBehavior: Clip.none,
         children: [
-          if (_backdrop.isNotEmpty)
-            CachedNetworkImage(
-              // Web-only, no-op on every other platform — see image_sizing.dart's
-              // "ImageRenderMethodForWeb.HttpGet" section for why every
-              // CachedNetworkImage call site in the app sets this.
-              imageRenderMethodForWeb: ImageRenderMethodForWeb.HttpGet,
-              imageUrl: backdropSrc(_backdrop, imgW),
-              memCacheWidth: imgW,
-              fit: BoxFit.cover,
-              alignment: const Alignment(0.2, -0.2),
-              placeholder: (_, __) => const ColoredBox(color: AppTheme.surface),
-              errorWidget: (_, __, ___) =>
-                  const ColoredBox(color: AppTheme.surface),
-            )
-          else
-            const ColoredBox(color: AppTheme.surface),
-          // Left + bottom scrim so the copy sits on solid ground and the art
-          // melts into the page below.
-          const DecoratedBox(
-            decoration: BoxDecoration(
-              gradient: LinearGradient(
-                begin: Alignment.centerLeft,
-                end: Alignment.centerRight,
-                stops: [0.0, 0.55, 1.0],
-                colors: [
-                  Color(0xF20D0D1A),
-                  Color(0x660D0D1A),
-                  Color(0x000D0D1A),
-                ],
+          Positioned(
+            top: 0,
+            left: 0,
+            right: 0,
+            height: artH,
+            child: Stack(fit: StackFit.expand, children: [
+              if (_backdrop.isNotEmpty)
+                CachedNetworkImage(
+                  // Web-only, no-op on every other platform — see image_sizing.dart's
+                  // "ImageRenderMethodForWeb.HttpGet" section for why every
+                  // CachedNetworkImage call site in the app sets this.
+                  imageRenderMethodForWeb: ImageRenderMethodForWeb.HttpGet,
+                  imageUrl: backdropSrc(_backdrop, imgW),
+                  memCacheWidth: imgW,
+                  fit: BoxFit.cover,
+                  alignment: const Alignment(0.2, -0.2),
+                  placeholder: (_, __) =>
+                      const ColoredBox(color: AppTheme.surface),
+                  errorWidget: (_, __, ___) =>
+                      const ColoredBox(color: AppTheme.surface),
+                )
+              else
+                const ColoredBox(color: AppTheme.surface),
+              // Left + bottom scrim so the copy sits on solid ground and the art
+              // melts into the page below.
+              const DecoratedBox(
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: Alignment.centerLeft,
+                    end: Alignment.centerRight,
+                    stops: [0.0, 0.55, 1.0],
+                    colors: [
+                      Color(0xF20D0D1A),
+                      Color(0x660D0D1A),
+                      Color(0x000D0D1A),
+                    ],
+                  ),
+                ),
               ),
-            ),
-          ),
-          const DecoratedBox(
-            decoration: BoxDecoration(
-              gradient: LinearGradient(
-                begin: Alignment.bottomCenter,
-                end: Alignment.topCenter,
-                stops: [0.0, 0.45],
-                colors: [AppTheme.bg, Colors.transparent],
+              const DecoratedBox(
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: Alignment.bottomCenter,
+                    end: Alignment.topCenter,
+                    stops: [0.0, 0.45],
+                    colors: [AppTheme.bg, Colors.transparent],
+                  ),
+                ),
               ),
-            ),
+            ]),
           ),
           Align(
             alignment: Alignment.bottomLeft,
@@ -253,7 +268,7 @@ class _DesktopHeroState extends State<DesktopHero>
                       _TitleText(it.title, size: widget.bp.heroTitleSize),
                     if (meta.isNotEmpty) ...[
                       SizedBox(height: big ? 18 : 14),
-                      Text(
+                      MetaLine(
                         meta,
                         style: TextStyle(
                           color: AppTheme.textMid,

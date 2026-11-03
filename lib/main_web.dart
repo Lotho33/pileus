@@ -1,4 +1,4 @@
-import 'package:flutter/foundation.dart' show kDebugMode;
+import 'package:flutter/foundation.dart' show kDebugMode, kProfileMode;
 import 'package:flutter/material.dart';
 
 import 'core/app_lifecycle.dart';
@@ -8,6 +8,7 @@ import 'core/utils/metrics.dart';
 import 'core/utils/perf_log.dart';
 import 'features/settings/data/settings_repository.dart';
 import 'web/web_app.dart';
+import 'web/web_image_binding.dart';
 
 /// Entry point for the **web / PWA** build.
 ///
@@ -23,7 +24,7 @@ void main() => runWebApp();
 
 Future<void> runWebApp() async {
   Metrics.markAppStart();
-  WidgetsFlutterBinding.ensureInitialized();
+  PileusWebBinding.ensureInitialized();
 
   PaintingBinding.instance.imageCache.maximumSizeBytes = 120 << 20;
   PaintingBinding.instance.imageCache.maximumSize = 500;
@@ -38,7 +39,7 @@ Future<void> runWebApp() async {
   AppLifecycleReactor.instance.attach();
 
   final settings = getIt<SettingsRepository>();
-  kPerfDiagnostics = kDebugMode || settings.getDiagnostics();
+  kPerfDiagnostics = kDebugMode || kProfileMode || settings.getDiagnostics();
   installJankLogger();
 
   isAndroidTv = false;

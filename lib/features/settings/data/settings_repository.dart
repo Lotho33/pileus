@@ -46,7 +46,10 @@ class SettingsRepository {
   static const _kLowPowerMode = 'settings.lowPowerMode';
   static const _kDiagnostics = 'settings.diagnostics';
   static const _kSoftwareVideoDecoder = 'settings.softwareVideoDecoder';
-  static const _kCompatVideoSurface = 'settings.compatVideoSurface';
+  // v2: the default flipped to on (see getCompatVideoSurface); a renamed key
+  // so an "off" saved under the old default doesn't keep the box on the
+  // software decoder.
+  static const _kCompatVideoSurface = 'settings.compatVideoSurface2';
   static const _kMaxVideoHeight = 'settings.maxVideoHeight';
   static const _kOverscanPercent = 'settings.overscanPercent';
   static const _kProfilePrefsBlob = 'settings.profilePrefsBlob';
@@ -140,8 +143,14 @@ class SettingsRepository {
       _prefs.getBool(_kSoftwareVideoDecoder) ?? false;
   Future<void> setSoftwareVideoDecoder(bool v) =>
       _prefs.setBool(_kSoftwareVideoDecoder, v);
+  // On by default: the TV flavor runs Impeller on OpenGLES, where a
+  // SurfaceTexture is the native path. The SurfaceProducer's ImageReader
+  // asks the decoder for more output buffers than Amlogic's OMX decoders
+  // allow ("newBufferCount 21 > 14" on the Tanix W2): their start failed
+  // and ExoPlayer fell back to Google's software decoder, which drops most
+  // frames at 1080p. Only read by the TV UI (tvSwitches).
   bool getCompatVideoSurface() =>
-      _prefs.getBool(_kCompatVideoSurface) ?? false;
+      _prefs.getBool(_kCompatVideoSurface) ?? true;
   Future<void> setCompatVideoSurface(bool v) =>
       _prefs.setBool(_kCompatVideoSurface, v);
 
@@ -172,10 +181,10 @@ class SettingsRepository {
   // as a safe-area margin on every side, applied globally on Android in
   // main.dart. Device-level. `overscan` is a live ValueNotifier so the
   // Preferenze slider reflows the whole app as you adjust it, instead of
-  // needing a restart. Default 2% — mild help for the common mild-overscan
-  // TV without a distracting border on a pixel-perfect one; raise it for a
-  // TV that crops harder, set 0 for one that doesn't crop at all.
-  static const double overscanPercentDefault = 2.0;
+  // needing a restart. Default 0%: modern TVs/boxes show the full frame,
+  // and a default inset reads as a border around the whole app; raise it
+  // only on a TV that actually crops. A value the user already saved wins.
+  static const double overscanPercentDefault = 0.0;
   static const double overscanPercentMax = 8.0;
 
   double getOverscanPercent() =>

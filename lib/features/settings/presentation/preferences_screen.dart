@@ -11,10 +11,8 @@ import '../../../core/theme/app_scale.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../player/android_video_settings.dart';
 import '../../../shared/widgets/ambient_glow_background.dart';
-import '../../../shared/widgets/metrics_dialog.dart';
 import '../../../shared/widgets/settings/settings_card.dart';
 import '../../../shared/widgets/settings/settings_header.dart';
-import '../../../shared/widgets/settings/settings_nav_row.dart';
 import '../../../shared/widgets/settings/settings_section_header.dart';
 import '../../../shared/widgets/settings/settings_toggle_row.dart';
 import '../../../shared/widgets/settings/subtitle_style_section.dart';
@@ -141,9 +139,9 @@ class _PreferencesBodyState extends State<_PreferencesBody> {
           ),
           const _AndroidVideoPrefRow(
             label: 'Rendering video compatibile',
-            caption: 'Disegna il video con il metodo delle versioni '
-                'precedenti. Da provare se il video resta nero, si blocca '
-                'o va a scatti mentre l\'audio continua. Vale dalla '
+            caption: 'Consigliato. Spento, su molti box (Amlogic) il '
+                'decoder del box non parte e il video passa al decoder '
+                'software, che oltre il 720p va a scatti. Vale dalla '
                 'prossima riproduzione.',
             softwareDecoder: false,
           ),
@@ -156,12 +154,6 @@ class _PreferencesBodyState extends State<_PreferencesBody> {
         SizedBox(height: AppScale.space(context, 12)),
         const SettingsSectionHeader('Avanzate'),
         const _DiagnosticsPrefRow(),
-        SettingsNavRow(
-          icon: Icons.timer_outlined,
-          label: 'Tempi di risposta',
-          subtitle: 'Avvio, apertura titoli, Play → primo frame',
-          onTap: () => showMetricsDialog(context),
-        ),
         const SizedBox(height: 16),
       ],
     );

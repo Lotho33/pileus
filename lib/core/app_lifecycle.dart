@@ -96,6 +96,12 @@ class AppLifecycleReactor with WidgetsBindingObserver {
       case AppLifecycleState.hidden:
         _backgroundedAt ??= DateTime.now();
         _pausePoll();
+        // Decoded images that aren't on screen are dead weight in the
+        // background, and the OS kills the biggest apps first (the phone
+        // profile build was killed in background at ~800 MB, the image
+        // cache alone being 110 MB of GPU textures). They come back from
+        // the disk cache when needed.
+        PaintingBinding.instance.imageCache.clear();
       case AppLifecycleState.resumed:
         final since = _backgroundedAt;
         _backgroundedAt = null;

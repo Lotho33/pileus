@@ -30,6 +30,16 @@
 # an unchanged target anyway, re-run it: Actions > release > Run workflow,
 # tag + force=tv,mobile,webos (or all).
 #
+# Vega OS (pileus-vega, a separate repo): when it has commits since its last
+# tag, this script releases it first — tests, version bump (patch, or
+# PILEUS_VEGA_VERSION), a release .vpkg with a fresh build number, commit +
+# tag + push, and the .vpkg on pileus-vega's GitHub Release. Run it where
+# the Vega CLI and gh are (the fedora-toolbox-44 toolbox). Amazon's App
+# Submission API takes no VPKG yet (Amazon staff, Dec 2025), so the .vpkg
+# goes into the Amazon version by hand: the tag then says "vega: X.Y.Z" and
+# release.yml's amazon-submit only uploads the APK, without submitting, so
+# APK and VPKG go to review together from the Developer Console.
+#
 # Override via env:
 #   PILEUS_RELEASE_REMOTE      git remote to push to       (default: origin)
 #   PILEUS_RELEASE_BRANCH      branch to push               (default: main)
@@ -37,6 +47,9 @@
 #   PILEUS_SKIP_LINUX_BUILD    set to 1 to skip the linux.yml dispatch
 #   PILEUS_SKIP_WINDOWS_BUILD  set to 1 to skip the windows.yml dispatch
 #   PILEUS_SKIP_STORE_BUILD    set to 1 to skip the store.yml dispatch
+#   PILEUS_VEGA_DIR            pileus-vega checkout   (default: ~/Dev/ReactNative/pileus-vega)
+#   PILEUS_VEGA_VERSION        Vega version to release (default: last tag's patch + 1)
+#   PILEUS_SKIP_VEGA           set to 1 to leave Vega out of this release
 set -euo pipefail
 
 REMOTE=${PILEUS_RELEASE_REMOTE:-origin}
@@ -45,6 +58,8 @@ ACTIONS_URL=${PILEUS_ACTIONS_URL:-}
 SKIP_LINUX=${PILEUS_SKIP_LINUX_BUILD:-0}
 SKIP_WINDOWS=${PILEUS_SKIP_WINDOWS_BUILD:-0}
 SKIP_STORE=${PILEUS_SKIP_STORE_BUILD:-0}
+VEGA_DIR=${PILEUS_VEGA_DIR:-$HOME/Dev/ReactNative/pileus-vega}
+SKIP_VEGA=${PILEUS_SKIP_VEGA:-0}
 
 ver=${1:-}
 dry=false
@@ -94,13 +109,79 @@ target mobile && echo "  -> Play (mobile): build, upload, submit for review"
 target webos && echo "  -> LG webOS: .ipk on the GitHub Release, upload by hand to the Seller Lounge"
 target tv || target mobile || target webos || echo "  -> no store target changed: GitHub Release only"
 
+# --- Vega OS (pileus-vega) ---------------------------------------------------
+vega_ver=""
+if [[ "$SKIP_VEGA" != 1 && -d "$VEGA_DIR/.git" ]]; then
+  vega_last=$(git -C "$VEGA_DIR" describe --tags --abbrev=0 --match 'v[0-9]*' 2>/dev/null || true)
+  if [[ -z "$vega_last" ]] || [[ $(git -C "$VEGA_DIR" rev-list --count "$vega_last..HEAD") -gt 0 ]]; then
+    if [[ -n "${PILEUS_VEGA_VERSION:-}" ]]; then
+      vega_ver=$PILEUS_VEGA_VERSION
+    else
+      # Patch + 1 over the last tag, or over manifest.toml's version (the
+      # one the store has) before the first tag.
+      base=${vega_last#v}
+      [[ -n "$base" ]] || base=$(sed -nE '0,/^version = "(.*)"/s//\1/p' "$VEGA_DIR/manifest.toml")
+      IFS=. read -r va vb vc <<<"$base"
+      vega_ver="${va:-1}.${vb:-0}.$(( ${vc:-0} + 1 ))"
+    fi
+    [[ "$vega_ver" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo "bad Vega version '$vega_ver'." >&2; exit 1; }
+    git -C "$VEGA_DIR" rev-parse -q --verify "refs/tags/v$vega_ver" >/dev/null && \
+      { echo "pileus-vega: tag v$vega_ver already exists." >&2; exit 1; }
+    [[ $(git -C "$VEGA_DIR" branch --show-current) == main ]] || { echo "pileus-vega: not on 'main'." >&2; exit 1; }
+    # Only the files the bump rewrites may already be modified.
+    vdirty=$(git -C "$VEGA_DIR" status --porcelain --untracked-files=no \
+      | grep -vE ' (manifest\.toml|package\.json|package-lock\.json|README\.md)$' || true)
+    [[ -z "$vdirty" ]] || { echo "pileus-vega working tree is dirty:"; echo "$vdirty"; exit 1; }
+    echo "  -> Vega OS ${vega_last:-(no tag)} -> v$vega_ver: build .vpkg, commit + tag + push pileus-vega,"
+    echo "     .vpkg on its GitHub Release; Amazon: APK uploaded as draft, add the .vpkg and submit by hand"
+  else
+    echo "  -> Vega OS: no commits since $vega_last, not released"
+  fi
+fi
+
 if $dry; then echo "(dry-run, nothing done)"; exit 0; fi
+
+# Vega first: if its tests or build fail, nothing of this release is pushed.
+if [[ -n "$vega_ver" ]]; then
+  echo
+  echo "== Vega OS v$vega_ver =="
+  (
+    cd "$VEGA_DIR"
+    npx tsc --noEmit
+    npx jest --silent
+    npm version "$vega_ver" --no-git-tag-version --allow-same-version >/dev/null
+    sed -i -E "0,/^version = \".*\"/s//version = \"$vega_ver\"/" manifest.toml
+    sed -i -E "s/\*\*Version [0-9]+\.[0-9]+\.[0-9]+\*\*/**Version $vega_ver**/" README.md
+    vpkg=build/armv7-release/pileus-vega_armv7.vpkg
+    rm -f "$vpkg" # never ship the one a previous deploy.sh left there
+    # The store rejects a build number that doesn't grow: epoch seconds do.
+    npx react-native build-vega --build-type Release --target armv7 --build-number "$(date +%s)" \
+      | grep -E "created:|ERROR" || true
+    test -f "$vpkg"
+    out="build/pileus-vega-$vega_ver-armv7.vpkg"
+    cp "$vpkg" "$out"
+    ( cd build && sha256sum "$(basename "$out")" > "pileus-vega-$vega_ver-SHA256SUMS.txt" )
+    git add manifest.toml package.json package-lock.json README.md
+    git commit -m "v$vega_ver"
+    git tag -a "v$vega_ver" -m "v$vega_ver"
+    git push origin main
+    git push origin "v$vega_ver"
+    gh release create "v$vega_ver" -R "$(git remote get-url origin | sed -E 's#.*github.com[:/](.*)\.git$#\1#')" \
+      --title "v$vega_ver" --notes "Pileus for Vega OS $vega_ver (armv7). Upload the .vpkg in the Amazon Developer Console." \
+      "$out" "build/pileus-vega-$vega_ver-SHA256SUMS.txt"
+    echo "Vega .vpkg: $VEGA_DIR/$out"
+  )
+fi
 
 sed -i -E "s/^version:.*/${new_line}/" pubspec.yaml
 
 git add pubspec.yaml
 git commit -m "$tag"
-git tag -a "$tag" -m "$tag"
+# "vega: X.Y.Z" tells release.yml's amazon-submit not to submit the edit:
+# the .vpkg still has to be added to it by hand.
+tag_msg="$tag"
+[[ -n "$vega_ver" ]] && tag_msg="$tag"$'\n\n'"vega: $vega_ver"
+git tag -a "$tag" -m "$tag_msg"
 
 git push "$REMOTE" "$BRANCH"
 git push "$REMOTE" "$tag"
@@ -152,6 +233,18 @@ if ! target tv && ! target mobile; then SKIP_STORE=1; fi
 dispatch_workflow store.yml "$SKIP_STORE" \
   "the signed AAB + per-ABI APKs for Play/Amazon, as a downloadable workflow artifact (pileus-${ver}-store)" \
   PILEUS_SKIP_STORE_BUILD
+
+if [[ -n "$vega_ver" ]]; then
+  echo
+  echo "Amazon (Fire TV + Vega OS): the App Submission API takes no VPKG yet."
+  if target tv; then
+    echo "Once release.yml's amazon-submit job finishes, the APK is in an open"
+    echo "Amazon edit, NOT submitted. In the Developer Console open that version,"
+  else
+    echo "No Fire TV change in this release: in the Developer Console add a new version,"
+  fi
+  echo "upload $VEGA_DIR/build/pileus-vega-${vega_ver}-armv7.vpkg (Vega OS), then submit."
+fi
 
 if target webos; then
   echo

@@ -1,15 +1,18 @@
+import 'dart:developer' show Timeline;
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter/scheduler.dart';
 
 /// Master switch for all release-visible diagnostics: the `perf()` /
 /// `perfReset()` wall-clock trace and the [installJankLogger] frame sampler.
 ///
-/// Defaults to [kDebugMode] so a normal release build ships silent. `main()`
+/// Defaults to on in debug and profile builds (a profile build exists only
+/// to be measured), so a normal release build ships silent. `main()`
 /// raises it at startup when `SettingsRepository.getDiagnostics()` is on —
 /// a hidden Preferenze toggle used to pull field logs off a specific TV box
 /// (the Tanix W2 tuning work) without a debug build. Not `const`: it's set
 /// once, after settings load, before `runApp`.
-bool kPerfDiagnostics = kDebugMode;
+bool kPerfDiagnostics = kDebugMode || kProfileMode;
 
 /// Lightweight wall-clock tracing for the playback start pipeline.
 ///
@@ -28,6 +31,9 @@ final Stopwatch _perfClock = Stopwatch()..start();
 void perf(String event) {
   if (!kPerfDiagnostics) return;
   debugPrint('[pileus/perf] t=${_perfClock.elapsedMilliseconds}ms  $event');
+  // Profile builds: also a marker on the DevTools timeline, so slow frames
+  // can be matched to the screen/step that produced them.
+  if (kProfileMode) Timeline.instantSync('pileus/perf', arguments: {'event': event});
 }
 
 /// Restart the wall-clock — call the instant a new playback session begins

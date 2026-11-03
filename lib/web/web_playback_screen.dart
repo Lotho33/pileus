@@ -389,9 +389,12 @@ class _ViewState extends State<_View> {
   // LiveStallWatchdog's doc).
   bool _buffering = false;
 
+  final _phoneLandscape = _PhoneLandscape();
+
   @override
   void initState() {
     super.initState();
+    _phoneLandscape.enter();
     _resumeSeek = ResumeSeekController(
         targetSec: widget.args.seekTo, isLive: widget.args.isLive);
     // isLive skips this on purpose even for the single-device-lease
@@ -592,6 +595,7 @@ class _ViewState extends State<_View> {
 
   @override
   void dispose() {
+    _phoneLandscape.exit();
     _mediaSession.clear();
     AppLifecycleReactor.instance.state.removeListener(_onLifecycle);
     _progressTimer?.cancel();
@@ -1739,6 +1743,49 @@ class _ViewState extends State<_View> {
   }
 }
 
+// ── Phone browsers: landscape while the player is open ─────────────────────
+// A page may only lock the screen orientation while it is fullscreen
+// (Chrome/Firefox on Android); iOS Safari supports neither for a page, and
+// there this stays a no-op. The player is opened by a tap, so the
+// fullscreen request still has the user activation it needs. Leaving the
+// player exits fullscreen, which drops the lock: the phone goes back to
+// following the sensor (portrait when held upright).
+class _PhoneLandscape {
+  bool _entered = false;
+
+  static bool get _isPhone {
+    try {
+      final s = web.window.screen;
+      return web.window.matchMedia('(pointer: coarse)').matches &&
+          (s.width < s.height ? s.width : s.height) < 600;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  Future<void> enter() async {
+    if (!_isPhone || web.document.fullscreenElement != null) return;
+    try {
+      await web.document.documentElement!.requestFullscreen().toDart;
+      _entered = true;
+      await web.window.screen.orientation.lock('landscape').toDart;
+    } catch (_) {
+      // Not allowed or not supported: the player just stays as it is.
+    }
+  }
+
+  void exit() {
+    if (!_entered) return;
+    _entered = false;
+    try {
+      web.window.screen.orientation.unlock();
+    } catch (_) {}
+    try {
+      if (web.document.fullscreenElement != null) web.document.exitFullscreen();
+    } catch (_) {}
+  }
+}
+
 class _Overlay extends StatelessWidget {
   final String text;
   final IconData? icon;
@@ -1783,11 +1830,20 @@ class _Overlay extends StatelessWidget {
             ],
           ),
         ),
-        SafeArea(
-          child: IconButton(
-            tooltip: 'Indietro',
-            icon: const Icon(Icons.arrow_back, color: Colors.white),
-            onPressed: onBack,
+        // Aligned, not a bare child of the expanding Stack: with the Stack's
+        // tight full-screen constraints the IconButton grew to the whole
+        // page (arrow on top of the spinner, a screen-sized hover oval).
+        Align(
+          alignment: Alignment.topLeft,
+          child: SafeArea(
+            child: Padding(
+              padding: const EdgeInsets.all(8),
+              child: IconButton(
+                tooltip: 'Indietro',
+                icon: const Icon(Icons.arrow_back, color: Colors.white),
+                onPressed: onBack,
+              ),
+            ),
           ),
         ),
       ],

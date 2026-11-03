@@ -257,7 +257,11 @@ jobs:
           # builds — a web/PWA install is always "latest" from the origin
           # it's served from, so the sideload update-check/dialog (which
           # points at GitHub releases) doesn't apply here.
+          # --no-web-resources-cdn: CanvasKit ships in the bundle and comes
+          # from mycelium (gzipped) instead of www.gstatic.com, so the app
+          # also starts on a LAN without internet.
           flutter build web --release -t lib/main_web.dart --base-href / \
+            --no-web-resources-cdn \
             --build-name="$V" --build-number="${{ steps.v.outputs.build }}" \
             --dart-define=PILEUS_STORE_BUILD=true
           mkdir -p dist
@@ -356,7 +360,19 @@ jobs:
             echo "::error::set secrets AMAZON_CLIENT_ID / AMAZON_CLIENT_SECRET (scripts/set-amazon-secrets.sh) and repo variable AMAZON_APP_ID first."
             exit 1
           fi
-          scripts/amazon-upload-edit.sh --submit amazon-apks/*.apk
+          # A release that also ships Vega OS (tag message "vega: X.Y.Z",
+          # set by scripts/release.sh) is only uploaded: the App Submission
+          # API takes no VPKG yet, so the .vpkg is added to this same edit in
+          # the Developer Console and both go to review from there.
+          tag="${{ github.event.inputs.tag || github.ref_name }}"
+          git fetch -q --force origin "refs/tags/$tag:refs/tags/$tag" || true
+          vega="$(git tag -l --format='%(contents)' "$tag" | sed -n 's/^vega: //p')"
+          if [ -n "$vega" ]; then
+            scripts/amazon-upload-edit.sh amazon-apks/*.apk
+            echo "::notice::Release with Vega OS $vega: APK uploaded, edit NOT submitted. Add pileus-vega-$vega-armv7.vpkg (pileus-vega release v$vega) in the Developer Console and submit."
+          else
+            scripts/amazon-upload-edit.sh --submit amazon-apks/*.apk
+          fi
 
   # Play Store: the Android TV app (tv flavor) and the mobile app are two
   # listings; each is built and sent to the PLAY_TRACK track (default

@@ -1,4 +1,4 @@
-import 'package:flutter/foundation.dart' show kDebugMode;
+import 'package:flutter/foundation.dart' show kDebugMode, kProfileMode;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -56,7 +56,7 @@ Future<void> runMobileApp() async {
   AppLifecycleReactor.instance.attach();
 
   final settings = getIt<SettingsRepository>();
-  kPerfDiagnostics = kDebugMode || settings.getDiagnostics();
+  kPerfDiagnostics = kDebugMode || kProfileMode || settings.getDiagnostics();
   installJankLogger();
   installMemoryProbe();
 
