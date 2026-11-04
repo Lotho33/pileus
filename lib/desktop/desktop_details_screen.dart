@@ -257,10 +257,14 @@ class _Body extends StatelessWidget {
         // One left edge for the poster/metadata and the rows below it.
         final pad = bp.gutter;
 
+        // One SliverList, not a sliver per part: the header's backdrop bleeds
+        // under the rows below it (bleedArtHeight), and a viewport paints its
+        // first sliver on top of the later ones, which hid the rows behind the
+        // art. A SliverList paints its children in order, like the home.
         return CustomScrollView(
           slivers: [
-            SliverToBoxAdapter(
-              child: _Header(
+            SliverList.list(children: [
+              _Header(
                 pluginId: pluginId,
                 fanart: _fanart,
                 logo: _logo,
@@ -275,9 +279,7 @@ class _Body extends StatelessWidget {
                 big: big,
                 onPlay: (label) => _play(context, sourceLabel: label),
               ),
-            ),
-            SliverToBoxAdapter(
-              child: Align(
+              Align(
                 alignment: Alignment.topLeft,
                 child: ConstrainedBox(
                   constraints: const BoxConstraints(maxWidth: kMaxContentWidth),
@@ -306,7 +308,7 @@ class _Body extends StatelessWidget {
                   ),
                 ),
               ),
-            ),
+            ]),
           ],
         );
       },

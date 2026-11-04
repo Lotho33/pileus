@@ -165,7 +165,12 @@ apk_etag() {
 # Not `mapfile < <(req …)`: a failing req in a process substitution can't
 # stop the script, and an empty list would turn every replace into an upload.
 apks_json="$(req GET "$API/edits/$EDIT_ID/apks")"
-mapfile -t existing < <(echo "$apks_json" | jq -r '.[]?.id // empty')
+# The list holds the Vega OS binary too (named "VPKG1" and so on): it is
+# not an APK of this release and must stay as it is. v1.7.9 replaced and
+# removed binaries by position and dropped the VPKG from the edit.
+echo "$apks_json" | jq -r '.[]? | "  nell'"'"'edit: \(.id) \(.name // "")"'
+mapfile -t existing < <(echo "$apks_json" \
+  | jq -r '.[]? | select(((.name // "") | test("^vpkg"; "i")) or ((.id // "") | test("^STAGING_")) | not) | .id // empty')
 
 echo "== 3/3: carico $# APK (nell'edit ce ne sono ${#existing[@]}) =="
 i=0
