@@ -20,8 +20,10 @@ import '../features/media/bloc/plugin_state.dart';
 import '../shared/responsive.dart';
 import 'desktop_home_screen.dart';
 import 'desktop_search_screen.dart';
+import 'desktop_my_list_pane.dart';
 import 'desktop_settings_pane.dart';
 import 'widgets/desktop_nav_rail.dart';
+import '../features/media/my_list.dart';
 
 /// The desktop home destination: a left rail (Home / Cerca / plugin list /
 /// Impostazioni) beside a content area that swaps between the three panes.
@@ -53,6 +55,7 @@ class _DesktopShellState extends State<DesktopShell> {
     super.initState();
     // Startup clock (Metrics.startup) ends on the home's first frame.
     WidgetsBinding.instance.addPostFrameCallback((_) => Metrics.homeShown());
+    MyList.instance.refresh();
     final pb = getIt<PluginBloc>();
     if (pb.state is PluginInitial) pb.add(const LoadPluginsEvent());
     final cw = getIt<ContinueWatchingBloc>();
@@ -205,6 +208,7 @@ class _DesktopShellState extends State<DesktopShell> {
                                 _homePane(ps, active),
                                 DesktopSearchScreen(
                                     visible: _section == DesktopSection.search),
+                                const DesktopMyListPane(),
                                 const DesktopSettingsPane(),
                               ],
                             ),

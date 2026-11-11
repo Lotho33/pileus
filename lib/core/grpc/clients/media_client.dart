@@ -10,8 +10,14 @@ import '../generated/media.pbgrpc.dart';
 
 export '../generated/media.pbgrpc.dart'
     show
+        LogoMeta,
         CatalogItem,
         EpisodeInfo,
+        MyListItem,
+        MyListRequest,
+        MyListResponse,
+        SetMyListItemRequest,
+        SetMyListItemResponse,
         CatalogRequest,
         CatalogResponse,
         SearchRequest,
@@ -241,6 +247,15 @@ class MediaGrpcClient {
       low: true,
       () => _mediaStub.warmStream(request,
           options: CallOptions(timeout: _defaultRpcTimeout)));
+
+  /// "La mia lista" — see proto/media.proto's MyListItem.
+  Future<MyListResponse> getMyList(MyListRequest request) =>
+      _mediaStub.getMyList(request,
+          options: CallOptions(timeout: _defaultRpcTimeout));
+
+  Future<SetMyListItemResponse> setMyListItem(SetMyListItemRequest request) =>
+      _mediaStub.setMyListItem(request,
+          options: CallOptions(timeout: _defaultRpcTimeout));
 
   Future<ContinueWatchingResponse> getContinueWatching(
           ContinueWatchingRequest request) =>

@@ -17,9 +17,11 @@ import '../features/media/data/media_repository.dart';
 import '../features/player/bloc/playback_bloc.dart';
 import '../features/player/bloc/playback_event.dart';
 import '../features/player/bloc/playback_state.dart';
+import '../features/player/engine/playback_speed.dart';
 import '../features/player/engine/player_engine.dart';
 import '../features/player/episode_poster.dart';
 import '../features/player/episode_nav.dart' show loadSeasonEpisodes;
+import '../features/player/player_languages.dart';
 import '../features/player/episode_prefetch.dart';
 import '../features/player/live_stall_watchdog.dart';
 import '../features/player/models/playback_args.dart';
@@ -29,7 +31,7 @@ import '../core/utils/perf_log.dart';
 import '../features/player/next_episode_countdown.dart';
 import '../features/player/player_tuning.dart';
 import '../features/player/resume_seek.dart' show resolveStartPositionSec;
-import '../features/player/playback_episode_cache.dart';
+import '../features/player/playback_episode_list.dart';
 import '../features/player/presentation/widgets/player_audio_artwork.dart';
 import '../features/player/presentation/widgets/player_seek_bar.dart';
 import '../features/player/presentation/widgets/pointer_next_episode_banner.dart';
@@ -823,117 +825,23 @@ class _MobilePlayerViewState extends State<_MobilePlayerView> {
         _baseArgs.parentId.isEmpty) {
       return;
     }
-    final target = (_curTitle ?? '').trim().toLowerCase();
-    final cacheKey = '${widget.args.epPluginId} ${_baseArgs.parentId}';
-    final cached = playbackEpisodeCache[cacheKey];
-    if (cached != null && cached.length >= 2) {
-      _applyResolvedEpisodes(cached, target);
-      return;
-    }
+    final target = episodeMatchKey(_curTitle);
     try {
-      final repo = getIt<MediaRepository>();
-      final res =
-          await repo.browse(widget.args.epPluginId, _baseArgs.parentId, '');
-      if (!mounted) return;
-
-      var eps = <({
-        String id,
-        String title,
-        String thumb,
-        int episodeNumber,
-        int seasonNumber
-      })>[];
-      if (res.episodes.isNotEmpty) {
-        eps = [
-          for (final e in res.episodes)
-            (
-              id: e.id,
-              title: e.title,
-              thumb: e.thumbnailUrl,
-              episodeNumber: e.episodeNumber,
-              seasonNumber: e.seasonNumber,
-            )
-        ];
-      } else {
-        eps = [
-          for (final e in res.items)
-            if (!e.isDir)
-              (
-                id: e.id,
-                title: e.title,
-                thumb: e.posterUrl,
-                episodeNumber: e.episodeNumber,
-                seasonNumber: e.seasonNumber,
-              ),
-        ];
-      }
-
-      // The parent may itself be a list of season directories — walk a
-      // bounded number of them looking for one whose episode titles match.
-      if (eps.length < 2) {
-        final seasonDirs = res.items.where((i) => i.isDir).toList();
-        for (final s in seasonDirs.take(8)) {
-          if (!mounted) return;
-          final sr = await repo.browse(widget.args.epPluginId, s.id, '');
-          final se = sr.episodes.isNotEmpty
-              ? [
-                  for (final e in sr.episodes)
-                    (
-                      id: e.id,
-                      title: e.title,
-                      thumb: e.thumbnailUrl,
-                      episodeNumber: e.episodeNumber,
-                      seasonNumber: e.seasonNumber,
-                    )
-                ]
-              : [
-                  for (final e in sr.items)
-                    if (!e.isDir)
-                      (
-                        id: e.id,
-                        title: e.title,
-                        thumb: e.posterUrl,
-                        episodeNumber: e.episodeNumber,
-                        seasonNumber: e.seasonNumber,
-                      ),
-                ];
-          if (se.length > 1 &&
-              (target.isEmpty ||
-                  se.any((e) => e.title.trim().toLowerCase() == target))) {
-            eps = se;
-            break;
-          }
-        }
-      }
-
-      if (!mounted || eps.length < 2) return;
-      playbackEpisodeCache[cacheKey] = eps;
-      _applyResolvedEpisodes(eps, target);
+      final eps = await resolvePlaybackEpisodes(getIt<MediaRepository>(),
+          pluginId: widget.args.epPluginId,
+          parentId: _baseArgs.parentId,
+          target: target,
+          cancelled: () => !mounted);
+      if (eps != null) _applyResolvedEpisodes(eps, target);
     } catch (_) {
       // ignore — no next-episode nav this session
     }
   }
 
-  void _applyResolvedEpisodes(
-      List<
-              ({
-                String id,
-                String title,
-                String thumb,
-                int episodeNumber,
-                int seasonNumber
-              })>
-          eps,
-      String target) {
+  void _applyResolvedEpisodes(List<PlaybackEpisode> eps, String target) {
     if (!mounted) return;
-    var idx = eps.indexWhere((e) => e.id == _curMediaId);
-    if (idx < 0 && target.isNotEmpty) {
-      idx = eps.indexWhere((e) => e.title.trim().toLowerCase() == target);
-    }
-    if (idx < 0) {
-      idx =
-          eps.indexWhere((e) => e.id.length >= 8 && _curMediaId.contains(e.id));
-    }
+    final idx =
+        matchPlaybackEpisode(eps, currentId: _curMediaId, target: target);
     if (idx < 0) return;
     setState(() {
       _curEpisodeList = [for (final e in eps) e.id];
@@ -1759,18 +1667,13 @@ class _MobilePlayerViewState extends State<_MobilePlayerView> {
   // separate streams (see playerLanguageOptions). Fetched for the current
   // episode when the tracks sheet opens — GetStreams is cached, the Play
   // asked for the same list moments ago.
-  List<StreamSource> _langSources = const [];
-  String? _langFor;
+  final _languages = PlayerLanguages();
+  List<StreamSource> get _langSources => _languages.sources;
+  String? get _langFor => _languages.loadedFor;
 
   Future<void> _loadLanguages() async {
-    if (widget.args.isLive || _langFor == _curMediaId) return;
-    final media = _curMediaId;
-    try {
-      final r = await getIt<MediaRepository>()
-          .getStreams(widget.args.epPluginId, media);
-      _langSources = r.sources;
-      _langFor = media;
-    } catch (_) {}
+    if (widget.args.isLive) return;
+    await _languages.load(widget.args.epPluginId, _curMediaId);
   }
 
   /// Same title, same position, other language version. A movie's old row
@@ -1838,6 +1741,7 @@ class _MobilePlayerViewState extends State<_MobilePlayerView> {
           // "Formato" below is always there for video, so "nothing to pick"
           // only applies to audio-only media now.
           final nothing = widget.args.isAudio &&
+              widget.args.isLive &&
               video.length < 2 &&
               audio.length < 2 &&
               subs.isEmpty &&
@@ -1910,6 +1814,29 @@ class _MobilePlayerViewState extends State<_MobilePlayerView> {
                   for (final m in VideoViewMode.values)
                     tile(m.label, videoViewMode.value == m,
                         () => videoViewMode.value = m),
+                ],
+                // On-demand only (podcasts included) — on live the
+                // live-sync owns the rate. See playback_speed.dart.
+                if (!widget.args.isLive) ...[
+                  const _SheetHeader('Velocità'),
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+                    child: Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
+                      children: [
+                        for (final v in kPlaybackSpeeds)
+                          ChoiceChip(
+                            label: Text(playbackSpeedLabel(v)),
+                            selected: (_engine.speed - v).abs() < 0.001,
+                            onSelected: (_) {
+                              _engine.setSpeed(v);
+                              setSheet(() {});
+                            },
+                          ),
+                      ],
+                    ),
+                  ),
                 ],
               ],
             ),

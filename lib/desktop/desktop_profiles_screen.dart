@@ -8,9 +8,11 @@ import '../core/theme/app_theme.dart';
 import '../features/auth/bloc/auth_bloc.dart';
 import '../features/auth/bloc/auth_event.dart';
 import '../features/auth/bloc/auth_state.dart';
+import '../shared/widgets/avatar_picker_dialog.dart';
 import '../shared/widgets/default_avatars.dart';
 import '../shared/widgets/native_pin_dialogs.dart';
 import '../shared/widgets/text_prompt_dialog.dart';
+import '../shared/widgets/profile_avatar_cache.dart';
 import 'package:cached_network_image_platform_interface/cached_network_image_platform_interface.dart'
     show ImageRenderMethodForWeb;
 
@@ -54,9 +56,13 @@ class _DesktopProfilesScreenState extends State<DesktopProfilesScreen> {
       hint: 'Nome',
       confirmLabel: 'Crea',
     );
-    if (name != null && name.isNotEmpty) {
-      getIt<AuthBloc>().add(CreateProfileEvent(name: name));
-    }
+    if (name == null || name.isEmpty || !mounted) return;
+    // Second step: initial (preselected) or a built-in avatar. Dismissing
+    // it cancels the creation, like "Annulla" on the name prompt.
+    final avatarUrl = await showAvatarPicker(context,
+        title: 'Avatar di $name', initialName: name, tileSize: 64);
+    if (avatarUrl == null) return;
+    getIt<AuthBloc>().add(CreateProfileEvent(name: name, avatarUrl: avatarUrl));
   }
 
   // Same as _selectProfile in profile_selection_screen.dart (TV) — a
@@ -206,6 +212,8 @@ class _ProfileTileState extends State<_ProfileTile> {
                                     imageRenderMethodForWeb:
                                         ImageRenderMethodForWeb.HttpGet,
                                     imageUrl: p.avatarUrl,
+                                    cacheManager: profileAvatarCache,
+                                    cacheKey: profileAvatarCacheKey(p.avatarUrl),
                                     memCacheWidth: 320,
                                     fit: BoxFit.cover,
                                     errorWidget: (_, __, ___) =>

@@ -1,5 +1,6 @@
 import '../media/data/media_repository.dart';
 import 'models/playback_args.dart';
+import 'playback_episode_list.dart';
 
 /// One season's episodes, as parallel lists (the shape every player keeps).
 class SeasonEpisodes {
@@ -37,28 +38,7 @@ Future<SeasonEpisodes?> loadSeasonEpisodes(
     MediaRepository repo, String pluginId, String seasonId) async {
   final res =
       await repo.browse(pluginId, seasonId, '').timeout(seasonBrowseTimeout);
-  final eps = res.episodes.isNotEmpty
-      ? [
-          for (final e in res.episodes)
-            (
-              id: e.id,
-              title: e.title,
-              thumb: e.thumbnailUrl,
-              episodeNumber: e.episodeNumber,
-              seasonNumber: e.seasonNumber,
-            )
-        ]
-      : [
-          for (final i in res.items)
-            if (!i.isDir)
-              (
-                id: i.id,
-                title: i.title,
-                thumb: i.posterUrl,
-                episodeNumber: i.episodeNumber,
-                seasonNumber: i.seasonNumber,
-              )
-        ];
+  final eps = episodesOf(res);
   if (eps.isEmpty) return null;
   return SeasonEpisodes(
     ids: [for (final e in eps) e.id],
@@ -163,6 +143,24 @@ class EpisodeNavState {
           seasonIndex + 1 < allSeasonIds.length);
 
   bool get hasPrevious => isEpisodic && (episodeIndex > 0 || seasonIndex > 0);
+
+  /// Adopts a list rebuilt by [resolvePlaybackEpisodes] when the launch
+  /// carried none (a Continue Watching resume), positioned on [currentId].
+  /// False — nothing changed — when there already is a list or the playing
+  /// episode isn't in it.
+  bool adoptResolved(List<PlaybackEpisode> eps,
+      {required String currentId, required String target}) {
+    if (episodeList.isNotEmpty) return false;
+    final idx = matchPlaybackEpisode(eps, currentId: currentId, target: target);
+    if (idx < 0) return false;
+    episodeList = [for (final e in eps) e.id];
+    episodeTitles = [for (final e in eps) e.title];
+    episodeThumbs = [for (final e in eps) e.thumb];
+    episodeNumbers = [for (final e in eps) e.episodeNumber];
+    seasonNumbers = [for (final e in eps) e.seasonNumber];
+    episodeIndex = idx;
+    return true;
+  }
 
   Future<EpisodeNavTarget?> resolveNext(MediaRepository repo) =>
       _resolveAt(repo, episodeIndex + 1);

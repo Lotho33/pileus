@@ -539,7 +539,7 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
       CreateProfileEvent event, Emitter<AuthState> emit) async {
     try {
       final response =
-          await _repo.createProfile(name: event.name, avatarUrl: '');
+          await _repo.createProfile(name: event.name, avatarUrl: event.avatarUrl);
       final profiles = await _repo.syncProfilesFromServer();
       // First-time setup: the very first profile a fresh install creates
       // becomes the remembered default (see _onAppStarted), so day-two

@@ -37,20 +37,42 @@ message CatalogItem {
   bool   is_external       = 14;
   // escape hatch for plugin-specific edge cases — NOT for structured data:
   map<string, string> extra = 15;
-  // logo_url: transparent PNG/SVG wordmark (from TMDB images.logos or Fanart.tv)
+  // logo_url: transparent PNG/SVG wordmark of the title
   string logo_url    = 16;
-  // banner_url: wide landscape image (AniList bannerImage, TMDB backdrop for banner-mode)
+  // banner_url: wide landscape image (banner-mode)
   string banner_url  = 17;
+  // Set by the core, never by plugins: see LogoMeta.
+  LogoMeta logo_meta = 18;
+}
+
+// LogoMeta describes a logo_url image, measured by the core the first time
+// the URL goes out (in the background: until then the field is unset, and a
+// later response carries it). Clients use it to decide whether the logo
+// needs a halo to read on the background they draw it on.
+// Luminance values are WCAG relative luminance, 0 (black) to 1 (white), of
+// the logo's visible pixels (alpha >= 50%).
+message LogoMeta {
+  int32  width       = 1;  // measured image size: the logo's aspect ratio
+  int32  height      = 2;
+  float  lum_low     = 3;  // 10th percentile: the darkest parts
+  float  lum_mid     = 4;  // median: the logo's body
+  float  lum_high    = 5;  // 90th percentile: the lightest parts
+  float  dark_share  = 6;  // share of visible pixels darker than 0.10
+  float  light_share = 7;  // share of visible pixels lighter than 0.60
+  float  coverage    = 8;  // visible pixels / all pixels (low = thin strokes or lots of padding)
+  uint32 color       = 9;  // dominant colour, 0xRRGGBB
+  // halo suggested for a dark background: "" (none) or "light". A client
+  // drawing on a light background decides from the values above instead.
+  string halo        = 10;
 }
 
 // EpisodeInfo is the rich episode object returned when browsing a season.
-// TMDB-first: all fields map 1:1 to TMDB episode response.
 message EpisodeInfo {
   string id             = 1;
   string title          = 2;
   int32  episode_number = 3;
   int32  season_number  = 4;
-  string thumbnail_url  = 5;   // TMDB still_path, 16:9
+  string thumbnail_url  = 5;   // still image, 16:9
   string air_date       = 6;   // "2023-04-02"
   int32  duration       = 7;   // minutes
   double vote           = 8;   // 0.0–10.0
@@ -70,7 +92,7 @@ message SeasonInfo {
   string poster_url    = 4;
   int32  year          = 5;
   int32  episode_count = 6;
-  string overview      = 7;   // TMDB season overview
+  string overview      = 7;   // season synopsis
   string air_date      = 8;   // "YYYY-MM-DD"
 }
 
@@ -144,6 +166,7 @@ message MovieDetails {
   string          poster_url     = 11;  // full-res (may differ from tile)
   string          fanart_url     = 12;
   string          logo_url       = 13;  // transparent wordmark PNG/SVG
+  LogoMeta        logo_meta      = 14;  // set by the core
 }
 
 message SeriesDetails {
@@ -162,6 +185,7 @@ message SeriesDetails {
   string          fanart_url      = 13;
   repeated SeasonInfo seasons     = 14;
   string          logo_url        = 15; // transparent wordmark PNG/SVG
+  LogoMeta        logo_meta       = 16; // set by the core
 }
 
 message EpisodeDetails {
@@ -362,7 +386,7 @@ message WarmStreamRequest {
 message WarmStreamResponse {
   // "started" | "joined" (already in flight) | "skipped"
   string outcome = 1;
-  // When skipped: a short reason code (informational only).
+  // When skipped: "disabled", "busy", "budget", "browser_busy", "recent".
   string reason  = 2;
 }
 
@@ -689,6 +713,46 @@ message DownloadActionResponse {
 // option "delete after the device fetched it" on, the server copy goes
 // (unless another profile's download still uses it).
 
+// ─── My List ("La mia lista") ─────────────────────────────────────────────────
+// Titles a profile saved to watch later, kept per profile on the server so the
+// list follows the profile across devices. The client sends the card fields it
+// already has (from a catalog item or a details page): the server stores them
+// as-is and never asks the plugin again.
+message MyListItem {
+  string plugin_id  = 1;
+  string media_id   = 2;
+  string title      = 3;
+  string poster_url = 4;
+  string media_type = 5;   // "movie"|"series"|… — CatalogItem.media_type
+  int32  year       = 6;
+  double rating     = 7;
+  string fanart_url = 8;
+  string logo_url   = 9;
+  int64  added_at   = 10;  // unix seconds, set by the server
+  // Same keys as CatalogItem.extra (plot, genres, cover_url, anilist_id…):
+  // what a card needs when it is shown again, with no call to the plugin.
+  map<string, string> extra = 11;
+  LogoMeta logo_meta = 12;  // set by the core
+}
+
+// Empty plugin_id = every plugin, most recently added first.
+message MyListRequest {
+  string plugin_id = 1;
+}
+message MyListResponse {
+  repeated MyListItem items = 1;
+}
+
+// in_list = true adds (or refreshes) item, false removes it — only
+// item.plugin_id/media_id matter then. Idempotent both ways.
+message SetMyListItemRequest {
+  MyListItem item    = 1;
+  bool       in_list = 2;
+}
+message SetMyListItemResponse {
+  bool ok = 1;
+}
+
 service MediaPipeline {
   rpc GetCatalog       (CatalogRequest)        returns (CatalogResponse);
   rpc GetSearchFilters (SearchFiltersRequest)  returns (SearchFiltersResponse);
@@ -710,4 +774,6 @@ service MediaPipeline {
   rpc AckDownloadFetched (DownloadIdRequest)      returns (DownloadActionResponse);
   rpc ReleasePlayback    (ReleasePlaybackRequest) returns (ReleasePlaybackResponse);
   rpc WarmStream         (WarmStreamRequest)      returns (WarmStreamResponse);
+  rpc GetMyList          (MyListRequest)          returns (MyListResponse);
+  rpc SetMyListItem      (SetMyListItemRequest)   returns (SetMyListItemResponse);
 }

@@ -412,7 +412,7 @@ class _PosterGridView extends StatelessWidget {
               crossAxisCount: cols,
               mainAxisSpacing: cardGap,
               crossAxisSpacing: cardGap,
-              childAspectRatio: 2 / 3,
+              mainAxisExtent: MediaCatalogCard.cellHeight(context, actualCardH),
             ),
             itemCount: items.length,
             itemBuilder: (context, i) {

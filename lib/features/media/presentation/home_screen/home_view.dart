@@ -121,6 +121,7 @@ class _HomeViewState extends State<_HomeView> {
     super.initState();
     // Startup clock (Metrics.startup) ends on the home's first frame.
     WidgetsBinding.instance.addPostFrameCallback((_) => Metrics.homeShown());
+    MyList.instance.refresh();
     // Android TV "Watch Next" row: a card opened Pileus (cold start) or was
     // opened while it runs — resume that title like our own CW card.
     WatchNext.listen(() => WatchNext.resumePending(appRouter, _watchNextItems));

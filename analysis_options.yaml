@@ -17,6 +17,8 @@ analyzer:
     - macos/**
     - linux/**
     - third_party/**
+    # protoc output: it copies the .proto comments, its lints aren't ours.
+    - lib/core/grpc/generated/**
 include: package:flutter_lints/flutter.yaml
 
 linter:

@@ -4,6 +4,7 @@ import '../../../../core/theme/app_scale.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../../../shared/widgets/tv_focusable.dart';
 import '../../../../core/grpc/clients/media_client.dart' show StreamSource;
+import '../../engine/playback_speed.dart';
 import '../../engine/player_engine.dart';
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -17,7 +18,7 @@ import '../../engine/player_engine.dart';
 // deals with playback-track selection.
 // ─────────────────────────────────────────────────────────────────────────────
 
-enum _SettingsCategory { language, audio, video, format, subtitles }
+enum _SettingsCategory { language, audio, video, format, speed, subtitles }
 
 enum _PanelView { master, detail }
 
@@ -39,6 +40,9 @@ class PlayerSettingsPanel extends StatefulWidget {
   final String? currentStreamId;
   final ValueChanged<StreamSource>? onLanguageSelected;
 
+  /// "Velocità" (on-demand only — the screen passes false for live).
+  final bool showSpeed;
+
   const PlayerSettingsPanel({
     super.key,
     required this.engine,
@@ -49,6 +53,7 @@ class PlayerSettingsPanel extends StatefulWidget {
     this.languages = const [],
     this.currentStreamId,
     this.onLanguageSelected,
+    this.showSpeed = true,
   });
 
   @override
@@ -72,6 +77,7 @@ class PlayerSettingsPanelState extends State<PlayerSettingsPanel> {
   final _audioRowFn = FocusNode();
   final _videoRowFn = FocusNode();
   final _formatRowFn = FocusNode();
+  final _speedRowFn = FocusNode();
   final _subsRowFn = FocusNode();
 
   // Entry point into each category's option list, landed on when a row is
@@ -80,6 +86,7 @@ class PlayerSettingsPanelState extends State<PlayerSettingsPanel> {
   final _audioFirstFn = FocusNode();
   final _videoFirstFn = FocusNode();
   final _formatFirstFn = FocusNode();
+  final _speedFirstFn = FocusNode();
   final _subsFirstFn = FocusNode();
 
   List<MediaTrack> get _audioTracks => widget.engine.audioTracks;
@@ -128,6 +135,7 @@ class PlayerSettingsPanelState extends State<PlayerSettingsPanel> {
     _langRowFn.canRequestFocus = _hasLang;
     _audioRowFn.canRequestFocus = _hasAudio;
     _videoRowFn.canRequestFocus = _hasVideo;
+    _speedRowFn.canRequestFocus = widget.showSpeed;
     _subsRowFn.canRequestFocus = _hasSubs;
     if (_view == _PanelView.detail) {
       final stillVisible = switch (_detailCategory!) {
@@ -135,6 +143,7 @@ class PlayerSettingsPanelState extends State<PlayerSettingsPanel> {
         _SettingsCategory.audio => _hasAudio,
         _SettingsCategory.video => _hasVideo,
         _SettingsCategory.format => true,
+        _SettingsCategory.speed => widget.showSpeed,
         _SettingsCategory.subtitles => _hasSubs,
       };
       // The category the user was looking at just disappeared (e.g. an
@@ -153,11 +162,13 @@ class PlayerSettingsPanelState extends State<PlayerSettingsPanel> {
     _audioRowFn.dispose();
     _videoRowFn.dispose();
     _formatRowFn.dispose();
+    _speedRowFn.dispose();
     _subsRowFn.dispose();
     _langFirstFn.dispose();
     _audioFirstFn.dispose();
     _videoFirstFn.dispose();
     _formatFirstFn.dispose();
+    _speedFirstFn.dispose();
     _subsFirstFn.dispose();
     super.dispose();
   }
@@ -176,6 +187,7 @@ class PlayerSettingsPanelState extends State<PlayerSettingsPanel> {
         _audioRowFn,
         _videoRowFn,
         _formatRowFn,
+        _speedRowFn,
         _subsRowFn
       ];
 
@@ -210,6 +222,7 @@ class PlayerSettingsPanelState extends State<PlayerSettingsPanel> {
           _SettingsCategory.audio => _audioRowFn,
           _SettingsCategory.video => _videoRowFn,
           _SettingsCategory.format => _formatRowFn,
+          _SettingsCategory.speed => _speedRowFn,
           _SettingsCategory.subtitles => _subsRowFn,
           null => _volumeRowFn,
         };
@@ -337,6 +350,17 @@ class PlayerSettingsPanelState extends State<PlayerSettingsPanel> {
           onOpen: () => _openDetail(_SettingsCategory.format, _formatFirstFn),
           onCloseFromLeft: widget.onClose,
         ),
+        if (widget.showSpeed)
+          _CategoryRow(
+            icon: Icons.speed_rounded,
+            label: 'Velocità',
+            value: playbackSpeedLabel(widget.engine.speed),
+            focusNode: _speedRowFn,
+            onUp: () => _moveMasterRow(_speedRowFn, -1),
+            onDown: () => _moveMasterRow(_speedRowFn, 1),
+            onOpen: () => _openDetail(_SettingsCategory.speed, _speedFirstFn),
+            onCloseFromLeft: widget.onClose,
+          ),
         if (_hasSubs)
           _CategoryRow(
             icon: Icons.subtitles_rounded,
@@ -431,6 +455,27 @@ class PlayerSettingsPanelState extends State<PlayerSettingsPanel> {
                 onTap: () => setState(
                     () => videoViewMode.value = VideoViewMode.values[i]),
                 focusNode: i == 0 ? _formatFirstFn : null,
+                onBack: _returnToMaster,
+              ),
+          ],
+        );
+
+      case _SettingsCategory.speed:
+        final active = widget.engine.speed;
+        return ListView(
+          key: const ValueKey('detail_speed'),
+          padding: EdgeInsets.symmetric(vertical: AppScale.space(context, 8)),
+          children: [
+            _DetailHeader(label: 'Velocità', onBack: _returnToMaster),
+            for (var i = 0; i < kPlaybackSpeeds.length; i++)
+              _TrackTile(
+                label: playbackSpeedLabel(kPlaybackSpeeds[i]),
+                selected: (active - kPlaybackSpeeds[i]).abs() < 0.001,
+                onTap: () {
+                  widget.engine.setSpeed(kPlaybackSpeeds[i]);
+                  setState(() {});
+                },
+                focusNode: i == 0 ? _speedFirstFn : null,
                 onBack: _returnToMaster,
               ),
           ],

@@ -78,10 +78,13 @@ class _SearchCarouselState extends State<_SearchCarousel> {
 
   @override
   Widget build(BuildContext context) {
+    // Live events get the landscape card of the home's live rows — a sport
+    // search used to show them as tall posters.
+    final variant = variantForResults(widget.items);
     final block = CardCarouselBlock(
       sectionId: 'search_${widget.pluginId}',
       pluginId: widget.pluginId,
-      variant: SduiCardVariant.poster,
+      variant: variant,
       items:
           widget.items.map(sduiCardItemFromCatalogItem).toList(growable: false),
       // false: the search bar owns focus by default (see _SearchViewState),
@@ -104,7 +107,11 @@ class _SearchCarouselState extends State<_SearchCarousel> {
           CardCarouselBlockView(
             key: ValueKey('search_${widget.pluginId}'),
             block: block,
-            visibleCardsOverride: 7,
+            // The live row keeps its own (fewer, wider) slots; it has no
+            // trailing load-more card, so a live search shows its first
+            // page only.
+            visibleCardsOverride:
+                variant == SduiCardVariant.live ? null : 7,
             loadMore: widget.hasMore
                 ? CarouselLoadMore(
                     isLoading: widget.isLoadingMore,

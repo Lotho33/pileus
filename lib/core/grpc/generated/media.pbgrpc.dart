@@ -291,6 +291,20 @@ class MediaPipelineClient extends $grpc.Client {
     return $createUnaryCall(_$warmStream, request, options: options);
   }
 
+  $grpc.ResponseFuture<$0.MyListResponse> getMyList(
+    $0.MyListRequest request, {
+    $grpc.CallOptions? options,
+  }) {
+    return $createUnaryCall(_$getMyList, request, options: options);
+  }
+
+  $grpc.ResponseFuture<$0.SetMyListItemResponse> setMyListItem(
+    $0.SetMyListItemRequest request, {
+    $grpc.CallOptions? options,
+  }) {
+    return $createUnaryCall(_$setMyListItem, request, options: options);
+  }
+
   // method descriptors
 
   static final _$getCatalog =
@@ -348,11 +362,11 @@ class MediaPipelineClient extends $grpc.Client {
           '/mycelium.MediaPipeline/ListPlugins',
           ($0.PluginListRequest value) => value.writeToBuffer(),
           $0.PluginListResponse.fromBuffer);
-  static final _$getDownloadOptions = $grpc.ClientMethod<
-          $0.DownloadOptionsRequest, $0.DownloadOptionsResponse>(
-      '/mycelium.MediaPipeline/GetDownloadOptions',
-      ($0.DownloadOptionsRequest value) => value.writeToBuffer(),
-      $0.DownloadOptionsResponse.fromBuffer);
+  static final _$getDownloadOptions =
+      $grpc.ClientMethod<$0.DownloadOptionsRequest, $0.DownloadOptionsResponse>(
+          '/mycelium.MediaPipeline/GetDownloadOptions',
+          ($0.DownloadOptionsRequest value) => value.writeToBuffer(),
+          $0.DownloadOptionsResponse.fromBuffer);
   static final _$createDownload =
       $grpc.ClientMethod<$0.CreateDownloadRequest, $0.DownloadInfo>(
           '/mycelium.MediaPipeline/CreateDownload',
@@ -393,6 +407,16 @@ class MediaPipelineClient extends $grpc.Client {
           '/mycelium.MediaPipeline/WarmStream',
           ($0.WarmStreamRequest value) => value.writeToBuffer(),
           $0.WarmStreamResponse.fromBuffer);
+  static final _$getMyList =
+      $grpc.ClientMethod<$0.MyListRequest, $0.MyListResponse>(
+          '/mycelium.MediaPipeline/GetMyList',
+          ($0.MyListRequest value) => value.writeToBuffer(),
+          $0.MyListResponse.fromBuffer);
+  static final _$setMyListItem =
+      $grpc.ClientMethod<$0.SetMyListItemRequest, $0.SetMyListItemResponse>(
+          '/mycelium.MediaPipeline/SetMyListItem',
+          ($0.SetMyListItemRequest value) => value.writeToBuffer(),
+          $0.SetMyListItemResponse.fromBuffer);
 }
 
 @$pb.GrpcServiceName('mycelium.MediaPipeline')
@@ -554,15 +578,29 @@ abstract class MediaPipelineServiceBase extends $grpc.Service {
         ($core.List<$core.int> value) =>
             $0.ReleasePlaybackRequest.fromBuffer(value),
         ($0.ReleasePlaybackResponse value) => value.writeToBuffer()));
+    $addMethod($grpc.ServiceMethod<$0.WarmStreamRequest, $0.WarmStreamResponse>(
+        'WarmStream',
+        warmStream_Pre,
+        false,
+        false,
+        ($core.List<$core.int> value) => $0.WarmStreamRequest.fromBuffer(value),
+        ($0.WarmStreamResponse value) => value.writeToBuffer()));
+    $addMethod($grpc.ServiceMethod<$0.MyListRequest, $0.MyListResponse>(
+        'GetMyList',
+        getMyList_Pre,
+        false,
+        false,
+        ($core.List<$core.int> value) => $0.MyListRequest.fromBuffer(value),
+        ($0.MyListResponse value) => value.writeToBuffer()));
     $addMethod(
-        $grpc.ServiceMethod<$0.WarmStreamRequest, $0.WarmStreamResponse>(
-            'WarmStream',
-            warmStream_Pre,
+        $grpc.ServiceMethod<$0.SetMyListItemRequest, $0.SetMyListItemResponse>(
+            'SetMyListItem',
+            setMyListItem_Pre,
             false,
             false,
             ($core.List<$core.int> value) =>
-                $0.WarmStreamRequest.fromBuffer(value),
-            ($0.WarmStreamResponse value) => value.writeToBuffer()));
+                $0.SetMyListItemRequest.fromBuffer(value),
+            ($0.SetMyListItemResponse value) => value.writeToBuffer()));
   }
 
   $async.Future<$0.CatalogResponse> getCatalog_Pre($grpc.ServiceCall $call,
@@ -735,4 +773,21 @@ abstract class MediaPipelineServiceBase extends $grpc.Service {
 
   $async.Future<$0.WarmStreamResponse> warmStream(
       $grpc.ServiceCall call, $0.WarmStreamRequest request);
+
+  $async.Future<$0.MyListResponse> getMyList_Pre(
+      $grpc.ServiceCall $call, $async.Future<$0.MyListRequest> $request) async {
+    return getMyList($call, await $request);
+  }
+
+  $async.Future<$0.MyListResponse> getMyList(
+      $grpc.ServiceCall call, $0.MyListRequest request);
+
+  $async.Future<$0.SetMyListItemResponse> setMyListItem_Pre(
+      $grpc.ServiceCall $call,
+      $async.Future<$0.SetMyListItemRequest> $request) async {
+    return setMyListItem($call, await $request);
+  }
+
+  $async.Future<$0.SetMyListItemResponse> setMyListItem(
+      $grpc.ServiceCall call, $0.SetMyListItemRequest request);
 }

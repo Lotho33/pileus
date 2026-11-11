@@ -17,6 +17,7 @@ import '../../features/media/presentation/browse_screen.dart';
 import '../../features/media/presentation/details_screen.dart';
 import '../../features/media/presentation/episode_detail_screen.dart';
 import '../../features/media/presentation/home_screen.dart';
+import '../../features/media/presentation/my_list_screen.dart';
 import '../../features/media/presentation/plugin_settings_screen.dart';
 import '../../features/media/presentation/search_screen.dart';
 import '../../features/player/presentation/playback_screen.dart';
@@ -168,6 +169,10 @@ final GoRouter appRouter = GoRouter(
               pluginName: extra?['pluginName'] as String? ?? '',
             ));
       },
+    ),
+    GoRoute(
+      path: '/mylist',
+      pageBuilder: (_, state) => _fadePage(state, const MyListScreen()),
     ),
     GoRoute(
       path: '/settings',

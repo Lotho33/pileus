@@ -5,6 +5,7 @@ import '../../core/di/injection.dart';
 import '../../core/grpc/clients/media_client.dart' hide ContinueWatchingItem;
 import '../../core/theme/app_theme.dart';
 import '../../core/utils/image_sizing.dart';
+import '../../core/widgets/smart_logo.dart';
 import '../../features/media/data/media_repository.dart';
 import '../../shared/widgets/open_catalog_item.dart';
 import 'package:cached_network_image_platform_interface/cached_network_image_platform_interface.dart'
@@ -40,6 +41,7 @@ class _MobileHeroState extends State<MobileHero>
 
   List<String> _genres = const [];
   String _logoUrl = '';
+  LogoMeta? _logoMeta;
   String _backdrop = '';
   String _portrait = '';
   // False until getDetails returns. While false and there's no logo yet the
@@ -61,12 +63,17 @@ class _MobileHeroState extends State<MobileHero>
     if (old.item.id != widget.item.id) {
       _reset();
       _enrich();
+    } else if (widget.item.hasLogoMeta() &&
+        widget.item.logoUrl == _logoUrl) {
+      // The row was re-read with the logo measured (same title, new data).
+      _logoMeta = widget.item.logoMeta;
     }
   }
 
   void _reset() {
     _genres = const [];
     _logoUrl = widget.item.logoUrl;
+    _logoMeta = widget.item.logoMeta;
     // Backdrop only — never the portrait poster. Prefer a portrait key-art
     // if the server ever provides one (`extra['portrait_backdrop_url']` /
     // `extra['keyart_url']` — not populated today; when it is, the taller
@@ -95,19 +102,27 @@ class _MobileHeroState extends State<MobileHero>
       if (!mounted || seq != _enrichSeq) return;
       List<String> genres = const [];
       String logo = _logoUrl;
+      LogoMeta? logoMeta = _logoMeta;
       String fanart = '';
       if (d.hasSeries()) {
         genres = d.series.genres;
         if (logo.isEmpty) logo = d.series.logoUrl;
+        if (logo == d.series.logoUrl && d.series.hasLogoMeta()) {
+          logoMeta = d.series.logoMeta;
+        }
         fanart = d.series.fanartUrl;
       } else if (d.hasMovie()) {
         genres = d.movie.genres;
         if (logo.isEmpty) logo = d.movie.logoUrl;
+        if (logo == d.movie.logoUrl && d.movie.hasLogoMeta()) {
+          logoMeta = d.movie.logoMeta;
+        }
         fanart = d.movie.fanartUrl;
       }
       setState(() {
         _genres = genres;
         _logoUrl = logo;
+        _logoMeta = logoMeta;
         _enriched = true;
         if (_backdrop.isEmpty && fanart.isNotEmpty) _backdrop = fanart;
       });
@@ -198,22 +213,14 @@ class _MobileHeroState extends State<MobileHero>
                 SizedBox(
                   height: 92,
                   width: size.width * 0.8,
-                  child: (_logoUrl.isNotEmpty && !_logoUrl.endsWith('.svg'))
-                      ? CachedNetworkImage(
-                          // Web-only, no-op on every other platform — see image_sizing.dart's
-                          // "ImageRenderMethodForWeb.HttpGet" section for why every
-                          // CachedNetworkImage call site in the app sets this.
-                          imageRenderMethodForWeb:
-                              ImageRenderMethodForWeb.HttpGet,
-                          imageUrl: _logoUrl,
-                          memCacheWidth:
-                              cacheWidthFor(context, size.width * 0.8),
-                          fit: BoxFit.contain,
+                  child: _logoUrl.isNotEmpty
+                      ? SmartLogo(
+                          url: _logoUrl,
+                          meta: _logoMeta,
+                          maxWidth: size.width * 0.8,
+                          maxHeight: 92,
                           alignment: Alignment.center,
-                          fadeInDuration: const Duration(milliseconds: 150),
-                          placeholder: (_, __) => const SizedBox.shrink(),
-                          errorWidget: (_, __, ___) =>
-                              Center(child: _TitleText(it.title)),
+                          fallback: Center(child: _TitleText(it.title)),
                         )
                       : _enriched
                           ? Center(child: _TitleText(it.title))

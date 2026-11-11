@@ -1,4 +1,5 @@
 import 'package:cached_network_image/cached_network_image.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
@@ -19,10 +20,12 @@ import '../features/settings/bloc/profile_management_state.dart';
 import '../features/player/source_preference.dart' show PreferredLanguage;
 import '../features/settings/data/settings_repository.dart';
 import '../core/grpc/clients/media_client.dart' show PluginInfo;
+import '../shared/widgets/avatar_picker_dialog.dart';
 import '../shared/widgets/default_avatars.dart';
 import '../shared/widgets/metrics_dialog.dart';
 import '../shared/widgets/native_pin_dialogs.dart';
 import '../shared/widgets/text_prompt_dialog.dart';
+import '../shared/widgets/profile_avatar_cache.dart';
 import 'package:cached_network_image_platform_interface/cached_network_image_platform_interface.dart'
     show ImageRenderMethodForWeb;
 
@@ -546,7 +549,7 @@ class _ProfileSection extends StatelessWidget {
                   child: SizedBox(
                     width: 88,
                     height: 88,
-                    child: _Avatar(url: p.avatarUrl),
+                    child: _Avatar(url: p.avatarUrl, name: p.profileName),
                   ),
                 ),
                 const SizedBox(width: 20),
@@ -560,21 +563,38 @@ class _ProfileSection extends StatelessWidget {
                               fontSize: 20,
                               fontWeight: FontWeight.w700)),
                       const SizedBox(height: 6),
-                      OutlinedButton.icon(
-                        icon: const Icon(Icons.edit_outlined, size: 16),
-                        label: const Text('Rinomina'),
-                        onPressed: () async {
-                          final name = await showTextPrompt(context,
-                              title: 'Rinomina profilo',
-                              initial: p.profileName,
-                              confirmLabel: 'Salva');
-                          if (name != null &&
-                              name.isNotEmpty &&
-                              name != p.profileName) {
-                            cubit.rename(name);
-                          }
-                        },
-                      ),
+                      Wrap(spacing: 8, runSpacing: 8, children: [
+                        OutlinedButton.icon(
+                          icon: const Icon(Icons.edit_outlined, size: 16),
+                          label: const Text('Rinomina'),
+                          onPressed: () async {
+                            final name = await showTextPrompt(context,
+                                title: 'Rinomina profilo',
+                                initial: p.profileName,
+                                confirmLabel: 'Salva');
+                            if (name != null &&
+                                name.isNotEmpty &&
+                                name != p.profileName) {
+                              cubit.rename(name);
+                            }
+                          },
+                        ),
+                        // Built-in avatars only — a photo is set from
+                        // mycelium's dashboard (same as TV / mobile).
+                        OutlinedButton.icon(
+                          icon: const Icon(Icons.face_outlined, size: 16),
+                          label: const Text('Avatar'),
+                          onPressed: () async {
+                            final url = await showAvatarPicker(context,
+                                currentAvatarUrl: p.avatarUrl, tileSize: 64);
+                            if (url != null &&
+                                url.isNotEmpty &&
+                                url != p.avatarUrl) {
+                              cubit.updateAvatarUrl(url);
+                            }
+                          },
+                        ),
+                      ]),
                     ],
                   ),
                 ),
@@ -712,23 +732,46 @@ Future<void> _confirmForgetDevice(
 
 class _Avatar extends StatelessWidget {
   final String url;
-  const _Avatar({required this.url});
+  final String name;
+  const _Avatar({required this.url, required this.name});
+
+  Widget _initial() => DecoratedBox(
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: [
+              AppTheme.primary.withValues(alpha: 0.8),
+              AppTheme.primary.withValues(alpha: 0.3),
+            ],
+          ),
+        ),
+        child: Center(
+          child: Text(
+            name.trim().isNotEmpty ? name.trim()[0].toUpperCase() : '?',
+            style: const TextStyle(
+                color: Colors.white, fontSize: 36, fontWeight: FontWeight.w700),
+          ),
+        ),
+      );
 
   @override
   Widget build(BuildContext context) {
     if (isDefaultAvatarUrl(url)) {
       return DefaultAvatarView(index: defaultAvatarIndex(url), size: 88);
     }
-    if (url.isEmpty) return const ColoredBox(color: AppTheme.surface2);
+    if (url.isEmpty) return _initial();
     return CachedNetworkImage(
       // Web-only, no-op on every other platform — see image_sizing.dart's
       // "ImageRenderMethodForWeb.HttpGet" section for why every
       // CachedNetworkImage call site in the app sets this.
       imageRenderMethodForWeb: ImageRenderMethodForWeb.HttpGet,
       imageUrl: url,
+      cacheManager: profileAvatarCache,
+      cacheKey: profileAvatarCacheKey(url),
       memCacheWidth: 200,
       fit: BoxFit.cover,
-      errorWidget: (_, __, ___) => const ColoredBox(color: AppTheme.surface2),
+      errorWidget: (_, __, ___) => _initial(),
     );
   }
 }
@@ -788,35 +831,20 @@ class _AdvancedSectionState extends State<_AdvancedSection> {
           ),
         ),
         const SizedBox(height: 8),
-        Card(
-          color: AppTheme.surface,
-          child: ListTile(
-            leading: const Icon(Icons.delete_sweep_outlined,
-                color: AppTheme.textMid),
-            title: const Text('Svuota cache catalogo',
+        // Perf log to stdout — no console to read it on web.
+        if (!kIsWeb)
+          SwitchListTile(
+            contentPadding: EdgeInsets.zero,
+            value: _diag,
+            onChanged: (v) => setState(() {
+              _diag = v;
+              _s.setDiagnostics(v);
+            }),
+            title: const Text('Diagnostica',
                 style: TextStyle(color: AppTheme.textHigh)),
-            onTap: () async {
-              await getIt<MediaRepository>().clearCatalogCache();
-              if (context.mounted) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('Cache svuotata')));
-              }
-            },
+            subtitle: const Text('Log di performance. Richiede il riavvio.',
+                style: TextStyle(color: AppTheme.textLow, fontSize: 12)),
           ),
-        ),
-        const SizedBox(height: 8),
-        SwitchListTile(
-          contentPadding: EdgeInsets.zero,
-          value: _diag,
-          onChanged: (v) => setState(() {
-            _diag = v;
-            _s.setDiagnostics(v);
-          }),
-          title: const Text('Diagnostica',
-              style: TextStyle(color: AppTheme.textHigh)),
-          subtitle: const Text('Log di performance. Richiede il riavvio.',
-              style: TextStyle(color: AppTheme.textLow, fontSize: 12)),
-        ),
         ListTile(
           contentPadding: EdgeInsets.zero,
           leading: const Icon(Icons.timer_outlined, color: AppTheme.textMid),

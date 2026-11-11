@@ -21,7 +21,11 @@ import '../features/player/bloc/playback_state.dart';
 import '../features/player/audio_lang_pref.dart';
 import '../features/player/engine/buffer_policy.dart' show hlsJsBuffer;
 import '../features/player/engine/media_track.dart';
+import '../features/player/engine/playback_speed.dart';
 import '../features/player/episode_nav.dart';
+import '../features/player/player_languages.dart';
+import '../features/player/playback_episode_list.dart';
+import '../features/player/source_continuity.dart' show inferSourceLabel;
 import '../features/player/episode_poster.dart';
 import '../features/player/episode_prefetch.dart';
 import '../features/player/live_stall_watchdog.dart';
@@ -429,7 +433,47 @@ class _ViewState extends State<_View> {
         },
       )..arm();
     }
+    _resolveEpisodeListIfMissing();
   }
+  // A Continue Watching resume carries only this episode: rebuild the list
+  // around it so prev/next and auto-advance work — same shared helper as
+  // the other players (playback_episode_list.dart). Every save reads _nav
+  // fresh, so adopting the list is all Continue Watching needs.
+  Future<void> _resolveEpisodeListIfMissing() async {
+    if (widget.args.isLive ||
+        _nav.episodeList.isNotEmpty ||
+        _nav.parentId.isEmpty) {
+      return;
+    }
+    final target = episodeMatchKey(_curTitle);
+    try {
+      final repo = getIt<MediaRepository>();
+      final eps = await resolvePlaybackEpisodes(repo,
+          pluginId: _nav.pluginId,
+          parentId: _nav.parentId,
+          target: target,
+          cancelled: () => !mounted);
+      if (eps == null || !mounted || _transitioningEpisode) return;
+      if (!_nav.adoptResolved(eps, currentId: _curMediaId, target: target)) {
+        return;
+      }
+      setState(() {});
+      final stream = widget.args.directStreamId;
+      if (_curSourceLabel.isNotEmpty || stream == null || stream.isEmpty) {
+        return;
+      }
+      final label = await inferSourceLabel(repo,
+          pluginId: _nav.pluginId,
+          episodeId: _nav.episodeList[_nav.episodeIndex],
+          streamId: stream);
+      if (mounted && label != null && _curSourceLabel.isEmpty) {
+        _curSourceLabel = label;
+      }
+    } catch (_) {
+      // best-effort — no prev/next this session
+    }
+  }
+
 
   /// `HtmlElementView.fromTagName`'s creation callback — fires once, with the
   /// freshly created `<video>`, before it's attached to the DOM. Replaces the
@@ -634,19 +678,15 @@ class _ViewState extends State<_View> {
   // "Lingua": the language versions of what's playing (see
   // playerLanguageOptions) — hidden, as on the other players, when the
   // stream itself carries several audio tracks ("Tracce" switches those).
-  List<StreamSource> _langSources = const [];
-  String? _langFor;
+  final _languages = PlayerLanguages();
+  List<StreamSource> get _langSources => _languages.sources;
+  String? get _langFor => _languages.loadedFor;
 
   Future<void> _loadLanguages() async {
-    if (widget.args.isLive || _langFor == _curMediaId) return;
-    final media = _curMediaId;
-    try {
-      final r = await getIt<MediaRepository>()
-          .getStreams(widget.args.epPluginId, media);
-      _langSources = r.sources;
-      _langFor = media;
-      if (mounted) setState(() {});
-    } catch (_) {}
+    if (widget.args.isLive) return;
+    if (await _languages.load(widget.args.epPluginId, _curMediaId) && mounted) {
+      setState(() {});
+    }
   }
 
   List<StreamSource> get _languageOptions => widget.args.isLive ||
@@ -1164,9 +1204,22 @@ class _ViewState extends State<_View> {
     setState(() => _subIdx = index);
   }
 
+  // User-chosen speed (playback_speed.dart): kept across episode switches
+  // of this session. A new src resets playbackRate to defaultPlaybackRate,
+  // hence both. Live stays at 1 — _syncLive drives the rate there.
+  double _speed = 1.0;
+
+  void _setSpeed(double v) {
+    setState(() => _speed = v);
+    _video.defaultPlaybackRate = v;
+    _video.playbackRate = v;
+  }
+
   void _attachSource(String url, {Duration? startPosition}) {
     _liveSyncTimer?.cancel();
-    _video.playbackRate = 1;
+    final rate = widget.args.isLive ? 1.0 : _speed;
+    _video.defaultPlaybackRate = rate;
+    _video.playbackRate = rate;
     _updateMediaSession();
     // A new stream: its own tracks, and the audio preference applies again.
     _audioPref.reset();
@@ -1657,6 +1710,24 @@ class _ViewState extends State<_View> {
                                               color: Colors.white)),
                                     ),
                                 ],
+                              ],
+                            ),
+                          if (!widget.args.isLive)
+                            PopupMenuButton<double>(
+                              tooltip: 'Velocità',
+                              icon: const Icon(Icons.speed_rounded,
+                                  color: Colors.white70),
+                              color: const Color(0xFF141428),
+                              onSelected: _setSpeed,
+                              itemBuilder: (_) => [
+                                for (final v in kPlaybackSpeeds)
+                                  CheckedPopupMenuItem<double>(
+                                    value: v,
+                                    checked: (_speed - v).abs() < 0.001,
+                                    child: Text(playbackSpeedLabel(v),
+                                        style: const TextStyle(
+                                            color: Colors.white)),
+                                  ),
                               ],
                             ),
                           if (!widget.args.isLive && _nav.hasPrevious) ...[

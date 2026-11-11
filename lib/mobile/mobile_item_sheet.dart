@@ -7,6 +7,8 @@ import '../core/grpc/clients/media_client.dart' hide ContinueWatchingItem;
 import '../core/theme/app_theme.dart';
 import '../core/utils/image_sizing.dart';
 import '../features/media/data/media_repository.dart';
+import '../features/media/my_list.dart';
+import '../shared/widgets/my_list_button.dart';
 import '../shared/widgets/open_catalog_item.dart';
 import '../features/player/episode_poster.dart';
 import '../features/player/continue_watching_launch.dart';
@@ -50,6 +52,8 @@ class _ItemSheetState extends State<_ItemSheet> {
   // fallback chain for the CW poster below, not displayed anywhere in this
   // sheet itself.
   String _movieFanart = '';
+  // What a "La mia lista" entry saved from here carries (plot, genres…).
+  DetailsResponse? _details;
   bool _preparing = false;
   bool _closed = false;
 
@@ -65,6 +69,7 @@ class _ItemSheetState extends State<_ItemSheet> {
           .getDetails(widget.pluginId, widget.item.id);
       if (!mounted) return;
       setState(() {
+        _details = d;
         if (d.hasSeries()) {
           _genres = d.series.genres;
           _plot = d.series.plot;
@@ -296,6 +301,15 @@ class _ItemSheetState extends State<_ItemSheet> {
                     label: const Text('Info'),
                   ),
                 ),
+                if (MyList.instance.supported &&
+                    (it.mediaType == 'series' || it.mediaType == 'movie')) ...[
+                  const SizedBox(width: 10),
+                  MyListButton(
+                      pluginId: widget.pluginId,
+                      item: it,
+                      mediaType: it.mediaType,
+                      details: _details),
+                ],
               ],
             ),
           ],

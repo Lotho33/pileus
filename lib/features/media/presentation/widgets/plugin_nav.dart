@@ -14,6 +14,7 @@ import '../../../../shared/utils/time_format.dart';
 import '../../../../shared/widgets/tv_focusable.dart';
 import '../../bloc/plugin_bloc.dart';
 import '../../bloc/plugin_event.dart';
+import '../../my_list.dart';
 
 // ── plugin display names & icons ───────────────────────────────────────────
 // Public (not home_screen.dart-private) — used both by PluginNav below and
@@ -207,10 +208,25 @@ class PluginNav extends StatefulWidget {
 
 class _PluginNavState extends State<PluginNav> {
   final FocusNode _settingsFn = FocusNode();
+  final FocusNode _myListFn = FocusNode();
+
+  // The entries under the plugin list; "La mia lista" is absent on a server
+  // without the feature.
+  void _focusBelowPlugins() =>
+      (MyList.instance.supported ? _myListFn : _settingsFn).requestFocus();
+
+  void _focusAboveSettings() {
+    if (MyList.instance.supported) {
+      _myListFn.requestFocus();
+    } else if (widget.pluginFocusNodes.isNotEmpty) {
+      widget.pluginFocusNodes.last.requestFocus();
+    }
+  }
 
   @override
   void dispose() {
     _settingsFn.dispose();
+    _myListFn.dispose();
     super.dispose();
   }
 
@@ -301,7 +317,7 @@ class _PluginNavState extends State<PluginNav> {
                           : null,
                       onFocusDown: i < widget.plugins.length - 1
                           ? () => widget.pluginFocusNodes[i + 1].requestFocus()
-                          : () => _settingsFn.requestFocus(),
+                          : _focusBelowPlugins,
                       onNavigateRight: widget.onClose,
                       onNavigateLeft: widget.onClose,
                       onEsc: widget.onClose,
@@ -314,6 +330,23 @@ class _PluginNavState extends State<PluginNav> {
         const Divider(color: AppTheme.border, height: 1),
         // Profilo folded into Impostazioni; "Esci" moved there too, so this
         // panel is now just plugin switching + one way into settings.
+        ListenableBuilder(
+          listenable: MyList.instance,
+          builder: (context, _) => !MyList.instance.supported
+              ? const SizedBox.shrink()
+              : _NavAction(
+                  icon: Icons.bookmark_rounded,
+                  label: 'La mia lista',
+                  focusNode: _myListFn,
+                  onTap: () => context.push('/mylist'),
+                  onFocusUp: widget.pluginFocusNodes.isNotEmpty
+                      ? () => widget.pluginFocusNodes.last.requestFocus()
+                      : null,
+                  onFocusDown: () => _settingsFn.requestFocus(),
+                  onNavigateRight: widget.onClose,
+                  onEsc: widget.onClose,
+                ),
+        ),
         _NavAction(
           icon: Icons.settings_rounded,
           label: 'Impostazioni',
@@ -328,9 +361,7 @@ class _PluginNavState extends State<PluginNav> {
               pluginBloc.add(const RefreshPluginsEvent());
             });
           },
-          onFocusUp: widget.pluginFocusNodes.isNotEmpty
-              ? () => widget.pluginFocusNodes.last.requestFocus()
-              : null,
+          onFocusUp: _focusAboveSettings,
           onFocusDown: null,
           onNavigateRight: widget.onClose,
           onEsc: widget.onClose,

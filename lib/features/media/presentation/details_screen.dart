@@ -39,6 +39,8 @@ import '../../player/resume_lookup.dart';
 import '../../player/source_continuity.dart' show pickSourceByLabel;
 import '../../player/source_preference.dart' show preferredFirst;
 import '../../player/stream_warmer.dart';
+import '../my_list.dart';
+import 'widgets/details_actions.dart';
 import 'widgets/details_common.dart';
 import 'widgets/series_page_layout.dart';
 import 'package:cached_network_image_platform_interface/cached_network_image_platform_interface.dart'
@@ -241,73 +243,3 @@ class _DetailsContent extends StatelessWidget {
 
 // ── Shared helpers ────────────────────────────────────────────────────────────
 
-// Parses "url|norm_w|norm_h|dark" encoded logo string. Returns the URL part.
-// Also handles legacy "url|w|h" (3-part) format.
-String logoUrlOnly(String encoded) {
-  final parts = encoded.split('|');
-  // 4-part: url|norm_w|norm_h|dark  — url is everything before the last 3 pipes
-  if (parts.length >= 4) {
-    return parts.sublist(0, parts.length - 3).join('|');
-  }
-  // 3-part legacy: url|w|h
-  if (parts.length == 3) {
-    return parts.sublist(0, parts.length - 2).join('|');
-  }
-  return encoded;
-}
-
-// Returns true if the logo was flagged dark (field 4 == "1").
-bool logoDark(String encoded) {
-  final parts = encoded.split('|');
-  if (parts.length >= 4) return parts.last == '1';
-  return false;
-}
-
-// Computes render size for a logo using server-side normalized dimensions.
-// norm_w/norm_h come from mycelium.image.analyze_logo (800px wide, cap 200h).
-// maxH/maxW are Flutter-side caps (screen-relative). Falls back to 3:1 if dims unknown.
-({double w, double h}) logoRenderSize(
-  String encoded, {
-  required double targetW,
-  required double maxH,
-  required double maxW,
-}) {
-  double srcW = 0, srcH = 0;
-  final parts = encoded.split('|');
-  // 4-part: url|norm_w|norm_h|dark
-  if (parts.length >= 4) {
-    srcW = double.tryParse(parts[parts.length - 3]) ?? 0;
-    srcH = double.tryParse(parts[parts.length - 2]) ?? 0;
-  } else if (parts.length == 3) {
-    // legacy 3-part: url|w|h
-    srcW = double.tryParse(parts[parts.length - 2]) ?? 0;
-    srcH = double.tryParse(parts[parts.length - 1]) ?? 0;
-  }
-
-  double rw, rh;
-  if (srcW > 0 && srcH > 0) {
-    rw = targetW;
-    rh = targetW * srcH / srcW;
-  } else {
-    rw = targetW;
-    rh = targetW / 3.0;
-  }
-
-  // Cap: se troppo alto (logo quasi quadrato) scala giù da maxH.
-  if (rh > maxH) {
-    rw = rw * maxH / rh;
-    rh = maxH;
-  }
-  // Cap larghezza (non dovrebbe servire ma per sicurezza).
-  if (rw > maxW) {
-    rh = rh * maxW / rw;
-    rw = maxW;
-  }
-  // Floor: loghi ultra-wide non diventano filini.
-  final minH = maxH * 0.30;
-  if (rh < minH) {
-    rh = minH;
-  }
-
-  return (w: rw, h: rh);
-}

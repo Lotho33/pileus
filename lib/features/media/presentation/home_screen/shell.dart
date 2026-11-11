@@ -28,6 +28,7 @@ class _StandardHomeShell extends StatefulWidget {
   final void Function(FocusNode) onFirstCardFocus;
   final VoidCallback onOpenNav;
   final VoidCallback onNavigateUpFromCarousel;
+  final VoidCallback onAllCatalogsEmpty;
 
   const _StandardHomeShell({
     super.key,
@@ -38,6 +39,7 @@ class _StandardHomeShell extends StatefulWidget {
     required this.onFirstCardFocus,
     required this.onOpenNav,
     required this.onNavigateUpFromCarousel,
+    required this.onAllCatalogsEmpty,
   });
 
   @override
@@ -290,7 +292,10 @@ class _StandardHomeShellState extends State<_StandardHomeShell> {
     if (!identical(_cwDisplayItem, next)) {
       setState(() => _cwDisplayItem = next);
     }
-    if (!_cwHeroCache.containsKey(key)) _fetchCwHero(item, key);
+    final cachedHero = _cwHeroCache[key];
+    if (cachedHero == null || logoMetaPending(cachedHero)) {
+      _fetchCwHero(item, key);
+    }
   }
 
   // Per-card cooldown so a `_fetchCwHero` that keeps failing (no parentID,
@@ -301,7 +306,8 @@ class _StandardHomeShellState extends State<_StandardHomeShell> {
   final Map<String, DateTime> _cwHeroFetchAt = {};
 
   Future<void> _fetchCwHero(ContinueWatchingItem item, String key) async {
-    if (_cwHeroCache.containsKey(key)) return;
+    final cachedHero = _cwHeroCache[key];
+    if (cachedHero != null && !logoMetaPending(cachedHero)) return;
     final last = _cwHeroFetchAt[key];
     if (last != null &&
         DateTime.now().difference(last) < const Duration(seconds: 30)) {
@@ -363,6 +369,7 @@ class _StandardHomeShellState extends State<_StandardHomeShell> {
           title: title,
           posterUrl: s.posterUrl.isNotEmpty ? s.posterUrl : item.poster,
           logoUrl: s.logoUrl,
+          logoMeta: s.hasLogoMeta() ? s.logoMeta : null,
           mediaType: 'series',
           isDir: false,
           year: s.year,
@@ -380,6 +387,7 @@ class _StandardHomeShellState extends State<_StandardHomeShell> {
           title: title,
           posterUrl: m.posterUrl.isNotEmpty ? m.posterUrl : item.poster,
           logoUrl: m.logoUrl,
+          logoMeta: m.hasLogoMeta() ? m.logoMeta : null,
           mediaType: 'movie',
           isDir: false,
           year: m.year,
@@ -469,9 +477,15 @@ class _StandardHomeShellState extends State<_StandardHomeShell> {
       });
       return;
     }
-    // All catalogs empty — hand focus back up so the user isn't stranded.
+    // All catalogs empty: Continue Watching if there is one, else the page
+    // owner shows its "nothing here" notice.
+    if (_hasCW) {
+      setState(() => _activeCatalog = -1);
+      _focusFirstAfterSwitch();
+      return;
+    }
     WidgetsBinding.instance
-        .addPostFrameCallback((_) => widget.onNavigateUpFromCarousel());
+        .addPostFrameCallback((_) => widget.onAllCatalogsEmpty());
   }
 
   // Guards row-to-row switching against native key-repeat (~20-30
@@ -782,16 +796,14 @@ class _StandardHomeShellState extends State<_StandardHomeShell> {
                         height: zTitleH,
                         child: Align(
                           alignment: logoAlign,
-                          child: Builder(builder: (ctx) {
-                            final maxH = zTitleH;
-                            final maxW = metaW * 0.65;
-                            final size = logoRenderSize(item.logoUrl,
-                                targetW: maxW, maxH: maxH, maxW: maxW);
-                            return _LogoWidget(
-                              url: logoUrlOnly(item.logoUrl),
-                              width: size.w,
-                              height: size.h,
-                              isDark: logoDark(item.logoUrl),
+                          child: SmartLogo(
+                              url: item.logoUrl,
+                              meta: item.logoMeta,
+                              // ~2 righe di titolo in altezza: loghi di plugin diversi
+                              // restano visivamente consistenti.
+                              maxWidth: metaW * 0.65,
+                              maxHeight: zTitleH,
+                              alignment: logoAlign,
                               fallback: SizedBox(
                                 width: liveTitleW,
                                 child: Text(item.title,
@@ -805,8 +817,7 @@ class _StandardHomeShellState extends State<_StandardHomeShell> {
                                     maxLines: 2,
                                     overflow: TextOverflow.ellipsis),
                               ),
-                            );
-                          }),
+                          ),
                         ),
                       )
                     : SizedBox(
@@ -847,22 +858,14 @@ class _StandardHomeShellState extends State<_StandardHomeShell> {
                         height: zTitleH,
                         child: Align(
                           alignment: Alignment.centerLeft,
-                          child: Builder(builder: (ctx) {
-                            // Logo cappato a ~2 righe di titolo in altezza, 50% pannello in larghezza.
-                            // Questo rende loghi di plugin diversi visivamente consistenti.
-                            final maxH = zTitleH;
-                            final maxW = metaW * 0.65;
-                            final size = logoRenderSize(
-                              item.logoUrl,
-                              targetW: maxW,
-                              maxH: maxH,
-                              maxW: maxW,
-                            );
-                            return _LogoWidget(
-                              url: logoUrlOnly(item.logoUrl),
-                              width: size.w,
-                              height: size.h,
-                              isDark: logoDark(item.logoUrl),
+                          child: SmartLogo(
+                              url: item.logoUrl,
+                              meta: item.logoMeta,
+                              // ~2 righe di titolo in altezza: loghi di plugin diversi
+                              // restano visivamente consistenti.
+                              maxWidth: metaW * 0.65,
+                              maxHeight: zTitleH,
+                              alignment: Alignment.centerLeft,
                               fallback: SizedBox(
                                 width: metaW,
                                 child: Text(
@@ -878,8 +881,7 @@ class _StandardHomeShellState extends State<_StandardHomeShell> {
                                   overflow: TextOverflow.ellipsis,
                                 ),
                               ),
-                            );
-                          }),
+                          ),
                         ),
                       )
                     : SizedBox(

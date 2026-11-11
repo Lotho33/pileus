@@ -18,8 +18,11 @@ import '../features/media/data/media_repository.dart';
 import '../features/player/bloc/playback_bloc.dart';
 import '../features/player/bloc/playback_event.dart';
 import '../features/player/bloc/playback_state.dart';
+import '../features/player/engine/playback_speed.dart';
 import '../features/player/engine/player_engine.dart';
 import '../features/player/episode_nav.dart';
+import '../features/player/player_languages.dart';
+import '../features/player/playback_episode_list.dart';
 import '../features/player/episode_poster.dart';
 import '../features/player/episode_prefetch.dart';
 import '../features/player/live_stall_watchdog.dart';
@@ -317,6 +320,48 @@ class _ViewState extends State<_View> with WindowListener {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) _focus.requestFocus();
     });
+    _resolveEpisodeListIfMissing();
+  }
+
+  // A Continue Watching resume carries only this episode: rebuild the list
+  // around it so prev/next and auto-advance work, and finishing it rolls the
+  // series forward in Continue Watching instead of dropping it. Same shared
+  // helper as TV/mobile (playback_episode_list.dart).
+  Future<void> _resolveEpisodeListIfMissing() async {
+    if (widget.args.isLive ||
+        _nav.episodeList.isNotEmpty ||
+        _nav.parentId.isEmpty) {
+      return;
+    }
+    final target = episodeMatchKey(_curTitle);
+    try {
+      final repo = getIt<MediaRepository>();
+      final eps = await resolvePlaybackEpisodes(repo,
+          pluginId: _nav.pluginId,
+          parentId: _nav.parentId,
+          target: target,
+          cancelled: () => !mounted);
+      if (eps == null || !mounted || _transitioningEpisode) return;
+      if (!_nav.adoptResolved(eps, currentId: _curMediaId, target: target)) {
+        return;
+      }
+      setState(() {});
+      _progress.args = _currentArgs(seekTo: _progress.args.seekTo);
+      // Without the source label the next episode resolves with whatever
+      // source comes first (often another language) — source_continuity.dart.
+      final stream = _curStreamId;
+      if (_curSourceLabel.isNotEmpty || stream == null) return;
+      final label = await inferSourceLabel(repo,
+          pluginId: _nav.pluginId,
+          episodeId: _nav.episodeList[_nav.episodeIndex],
+          streamId: stream);
+      if (mounted && label != null && _curSourceLabel.isEmpty &&
+          _curStreamId == stream) {
+        _curSourceLabel = label;
+      }
+    } catch (_) {
+      // best-effort — no prev/next this session
+    }
   }
 
   @override
@@ -843,18 +888,13 @@ class _ViewState extends State<_View> with WindowListener {
   // "Lingua": the language versions of what's playing, when they are
   // separate streams (see playerLanguageOptions) — fetched for the current
   // episode when the tracks panel opens (GetStreams is cached).
-  List<StreamSource> _langSources = const [];
-  String? _langFor;
+  final _languages = PlayerLanguages();
+  List<StreamSource> get _langSources => _languages.sources;
+  String? get _langFor => _languages.loadedFor;
 
   Future<void> _loadLanguages() async {
-    if (widget.args.isLive || _langFor == _curMediaId) return;
-    final media = _curMediaId;
-    try {
-      final r = await getIt<MediaRepository>()
-          .getStreams(widget.args.epPluginId, media);
-      _langSources = r.sources;
-      _langFor = media;
-    } catch (_) {}
+    if (widget.args.isLive) return;
+    await _languages.load(widget.args.epPluginId, _curMediaId);
   }
 
   /// Same title, same position, other language version. A movie's old row
@@ -1277,6 +1317,7 @@ class _ViewState extends State<_View> with WindowListener {
                 if (_tracksPanel)
                   _TracksPanel(
                     engine: _engine,
+                    showSpeed: !widget.args.isLive,
                     onClose: () {
                       setState(() => _tracksPanel = false);
                       _armAutoHide();
@@ -1581,8 +1622,11 @@ class _TracksPanel extends StatefulWidget {
   final List<StreamSource> languages;
   final String? currentStreamId;
   final void Function(StreamSource) onPickLanguage;
+  // "Velocità" — on-demand only (live-sync owns the rate on live).
+  final bool showSpeed;
   const _TracksPanel({
     required this.engine,
+    required this.showSpeed,
     required this.onClose,
     required this.onPickAudio,
     this.languages = const [],
@@ -1678,6 +1722,12 @@ class _TracksPanelState extends State<_TracksPanel> {
                     for (final m in VideoViewMode.values)
                       tile(m.label, videoViewMode.value == m,
                           () => videoViewMode.value = m),
+                    if (widget.showSpeed) ...[
+                      const _PanelHeader('Velocità'),
+                      for (final v in kPlaybackSpeeds)
+                        tile(playbackSpeedLabel(v),
+                            (e.speed - v).abs() < 0.001, () => e.setSpeed(v)),
+                    ],
                   ],
                 ),
               ),

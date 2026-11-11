@@ -7,9 +7,14 @@ import '../../core/grpc/clients/media_client.dart' hide ContinueWatchingItem;
 import '../../core/theme/app_theme.dart';
 import '../../core/utils/image_sizing.dart';
 import '../../features/media/data/media_repository.dart';
+import '../../features/media/my_list.dart';
+import '../../features/player/continue_watching_launch.dart';
+import '../../features/player/resume_lookup.dart';
+import '../../shared/widgets/my_list_button.dart';
 import '../../features/player/episode_poster.dart';
 import '../../features/player/resolve_and_play.dart';
 import '../../shared/widgets/open_catalog_item.dart';
+import '../../shared/utils/tap_guard.dart';
 import 'meta_line.dart';
 import 'package:cached_network_image_platform_interface/cached_network_image_platform_interface.dart'
     show ImageRenderMethodForWeb;
@@ -109,6 +114,8 @@ class _ItemPanelState extends State<_ItemPanel> {
   // Movie's own fanart — only used as the middle tier of posterForMovie()'s
   // fallback chain for the CW poster below, not displayed in this dialog.
   String _movieFanart = '';
+  // What a "La mia lista" entry saved from here carries (plot, genres…).
+  DetailsResponse? _details;
 
   @override
   void initState() {
@@ -122,6 +129,7 @@ class _ItemPanelState extends State<_ItemPanel> {
           .getDetails(widget.pluginId, widget.item.id);
       if (!mounted) return;
       setState(() {
+        _details = d;
         if (d.hasSeries()) {
           _genres = d.series.genres;
           _plot = d.series.plot;
@@ -139,9 +147,27 @@ class _ItemPanelState extends State<_ItemPanel> {
     openCatalogItem(context, widget.pluginId, widget.item);
   }
 
-  void _play() {
+  Future<void> _play() async {
     final mt = widget.item.mediaType;
-    Navigator.of(context).pop();
+    // A movie already in Continue Watching resumes, like the details page's
+    // main button and the mobile sheet — it used to always start from 0.
+    if (mt == 'movie') {
+      final router = GoRouter.of(context);
+      final resume = await findResumeEntry(getIt<MediaRepository>(),
+          pluginId: widget.pluginId, itemId: widget.item.id, isSeries: false);
+      if (!mounted) return;
+      if (resume != null) {
+        if (!popIfCurrent(context)) return;
+        PlayerLaunchGuard.push(
+          router,
+          '/player/${widget.pluginId}/${Uri.encodeComponent(resume.playableID)}',
+          extra: continueWatchingPlayerExtra(resume,
+              posterFallback: widget.item.posterUrl),
+        );
+        return;
+      }
+    }
+    if (!mounted || !popIfCurrent(context)) return;
     if (mt == 'movie' || mt == 'episode') {
       resolveAndPlay(context, widget.pluginId, widget.item.id, extra: {
         'title': widget.item.title,
@@ -250,6 +276,15 @@ class _ItemPanelState extends State<_ItemPanel> {
                   label: const Text('Dettagli'),
                 ),
               ),
+              if (MyList.instance.supported &&
+                    (it.mediaType == 'series' || it.mediaType == 'movie')) ...[
+                  const SizedBox(width: 10),
+                  MyListButton(
+                      pluginId: widget.pluginId,
+                      item: it,
+                      mediaType: it.mediaType,
+                      details: _details),
+                ],
             ],
           ),
         ],

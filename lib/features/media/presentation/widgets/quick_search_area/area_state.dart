@@ -499,10 +499,13 @@ class _QuickSearchAreaState extends State<QuickSearchArea> {
                           final allItems = state.items.cast<CatalogItem>();
                           final items = allItems.take(previewCount).toList();
                           final remaining = allItems.length - items.length;
+                          // Live events: landscape cards, fewer per row
+                          // (see variantForResults).
+                          final variant = variantForResults(items);
                           final block = CardCarouselBlock(
                             sectionId: 'quick_search_${widget.pluginId}',
                             pluginId: widget.pluginId,
-                            variant: SduiCardVariant.poster,
+                            variant: variant,
                             items: items
                                 .map(sduiCardItemFromCatalogItem)
                                 .toList(growable: false),
@@ -572,7 +575,9 @@ class _QuickSearchAreaState extends State<QuickSearchArea> {
                                             'quick_search_${widget.pluginId}_$_lastQuery'),
                                         block: block,
                                         visibleCardsOverride:
-                                            _kQuickSearchVisibleCards,
+                                            variant == SduiCardVariant.live
+                                                ? _kQuickSearchVisibleLiveCards
+                                                : _kQuickSearchVisibleCards,
                                         availableWidthOverride: cc.maxWidth,
                                         hPadOverride: AppScale.catalogHPadRatio(
                                             cc.maxWidth),

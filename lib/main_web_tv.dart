@@ -61,11 +61,9 @@ Future<void> runWebTvApp() async {
 
   // A real TV, always — unlike main.dart's Android build, there is no
   // native FEATURE_LEANBACK channel to actually ask, so this is simply
-  // assumed true for this dedicated entrypoint (see PileusApp's
-  // MaterialApp.router builder in main.dart: it only reads this on
-  // `!kIsWeb && Platform.isAndroid`, so today it's a no-op on any web
-  // build regardless — kept true here anyway so it reads correctly the
-  // moment that builder's condition is ever extended to cover web/TV too).
+  // assumed true for this dedicated entrypoint. PileusApp's builder treats
+  // every web build as a TV anyway (no desktop text boost, the shared
+  // 540-high canvas — see _TvCanvas in main.dart).
   isAndroidTv = true;
   // No device-profile channel to weigh "is this hardware weak" against,
   // the way main.dart's readDeviceProfile() does on real Android TV — smart

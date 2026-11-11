@@ -676,6 +676,32 @@ class _SeriesPageLayoutState extends State<_SeriesPageLayout> {
                                                         _fmtStatus(sd.status)),
                                             ]),
                                       ],
+                                      // "La mia lista" / "Trailer": reached
+                                      // with Left from the seasons/episodes
+                                      // (default traversal, like the plot).
+                                      if (MyList.instance.supported ||
+                                          (sd?.trailerUrl ?? '')
+                                              .isNotEmpty) ...[
+                                        SizedBox(height: 10 * s),
+                                        Wrap(
+                                          spacing: 10,
+                                          runSpacing: 8,
+                                          children: [
+                                            TvMyListChip(
+                                              item: MyList.itemFrom(widget.pluginId, item,
+                                                  mediaType: 'series',
+                                                  plot: seriesPlot,
+                                                  genres: sd?.genres ?? const [],
+                                                  fanartUrl: fanartUrl,
+                                                  logoUrl: sd?.logoUrl ?? ''),
+                                            ),
+                                            if ((sd?.trailerUrl ?? '')
+                                                .isNotEmpty)
+                                              TvTrailerChip(
+                                                  url: sd!.trailerUrl),
+                                          ],
+                                        ),
+                                      ],
                                       if (seriesPlot.isNotEmpty ||
                                           currentSeasonPlot.isNotEmpty) ...[
                                         SizedBox(height: 10 * s),

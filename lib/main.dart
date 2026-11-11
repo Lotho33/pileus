@@ -387,12 +387,18 @@ class _PileusAppState extends State<PileusApp> with WidgetsBindingObserver {
           // device_profile.dart) is what actually distinguishes them, not
           // `Platform.isAndroid` on its own (2026-09 audit: every non-TV
           // Android device was silently skipping this and reading small).
+          //
+          // 2026-11: that boost now only reaches a non-TV Android device
+          // running this TV build. The TV web build (webOS/Tizen) and the
+          // Linux preview used to get it too — text 35% larger than the
+          // sh-proportional boxes around it — and every TV now draws on the
+          // same 540-high canvas (see _TvCanvas), so fixed-px sizes match
+          // the AppScale ones on every panel and density.
           builder: (ctx, child) {
             // kIsWeb short-circuits before Platform.isAndroid: dart:io's
             // Platform throws at runtime on web (see _isDesktop above for
-            // the same class of bug) — this branch should run on web same
-            // as desktop, just never by evaluating the native check there.
-            if (kIsWeb || !Platform.isAndroid || !isAndroidTv) {
+            // the same class of bug).
+            if (!kIsWeb && Platform.isAndroid && !isAndroidTv) {
               final mq = MediaQuery.of(ctx);
               final base = mq.textScaler.scale(1.0);
               final trim = (mq.size.height / 1080.0).clamp(0.85, 1.0);
@@ -412,7 +418,7 @@ class _PileusAppState extends State<PileusApp> with WidgetsBindingObserver {
             // SettingsRepository.overscan.
             return ValueListenableBuilder<double>(
               valueListenable: getIt<SettingsRepository>().overscan,
-              child: child!,
+              child: _TvCanvas(child: child!),
               builder: (ctx, pct, inner) {
                 if (pct <= 0) return inner!;
                 final mq = MediaQuery.of(ctx);
@@ -440,6 +446,58 @@ class _PileusAppState extends State<PileusApp> with WidgetsBindingObserver {
           shortcuts: kIsWeb ? _tvWebShortcuts : null,
           theme: AppTheme.dark(),
           routerConfig: appRouter,
+        ),
+      ),
+    );
+  }
+}
+
+/// One logical canvas for every TV: [designHeight] dp tall, width following
+/// the panel's own aspect ratio (so still no letterboxing), scaled up or
+/// down to the real screen.
+///
+/// The TV screens mix two kinds of size: AppScale's `sh * ratio` ones, which
+/// follow the screen height anyway, and plain logical px (dialog widths, the
+/// player's seek-bar labels, the PIN pad, the episode banner, every const
+/// EdgeInsets…). The latter were tuned on Fire TV / MiTV, where the system
+/// density turns a 1080p or 4K panel into 960×540 dp. A box whose firmware
+/// reports another density — 1280×720 dp (hdpi), 1920×1080 dp (mdpi, common
+/// on cheap boxes), a TV browser at 1920×1080 or 1280×720 CSS px — drew
+/// those px 1.33–2× smaller relative to everything else: tiny dialogs and
+/// labels next to normally-sized rows. Normalizing the canvas makes both
+/// kinds of size agree everywhere.
+///
+/// devicePixelRatio is scaled by the same factor, so decode sizes
+/// (image_sizing.dart's cacheWidthFor/backdropCacheWidth) and anything else
+/// asking for physical pixels still gets the real panel resolution.
+class _TvCanvas extends StatelessWidget {
+  static const double designHeight = 540;
+  final Widget child;
+  const _TvCanvas({required this.child});
+
+  @override
+  Widget build(BuildContext context) {
+    final mq = MediaQuery.of(context);
+    final h = mq.size.height;
+    if (h <= 0 || mq.size.width <= 0) return child;
+    final k = h / designHeight;
+    if ((k - 1).abs() < 0.01) return child;
+    final logical = Size(mq.size.width / k, designHeight);
+    return FittedBox(
+      fit: BoxFit.fill,
+      alignment: Alignment.topLeft,
+      child: SizedBox.fromSize(
+        size: logical,
+        child: MediaQuery(
+          data: mq.copyWith(
+            size: logical,
+            devicePixelRatio: mq.devicePixelRatio * k,
+            padding: mq.padding / k,
+            viewPadding: mq.viewPadding / k,
+            viewInsets: mq.viewInsets / k,
+            systemGestureInsets: mq.systemGestureInsets / k,
+          ),
+          child: child,
         ),
       ),
     );

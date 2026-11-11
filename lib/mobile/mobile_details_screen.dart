@@ -32,6 +32,8 @@ import '../shared/widgets/error_retry_view.dart';
 import 'package:cached_network_image_platform_interface/cached_network_image_platform_interface.dart'
     show ImageRenderMethodForWeb;
 import '../shared/utils/tap_guard.dart';
+import '../shared/widgets/my_list_button.dart';
+import '../shared/widgets/trailer_button.dart';
 
 class MobileDetailsScreen extends StatelessWidget {
   final String pluginId;
@@ -650,7 +652,21 @@ class _PlayButtonState extends State<_PlayButton> {
     );
     // Movie only for now — an episode's own download button lives on its
     // tile in _Seasons below; a series has no single stream to offer here.
-    if (widget.isSeries) return playButton;
+    final myList = MyListButton(
+        pluginId: widget.pluginId,
+        item: widget.item,
+        mediaType: widget.isSeries ? 'series' : 'movie',
+        details: widget.details);
+    final trailerUrl = trailerUrlOf(widget.details);
+    final trailer = TrailerButton(url: trailerUrl);
+    if (widget.isSeries) {
+      return Row(children: [
+        Expanded(child: playButton),
+        const SizedBox(width: 8),
+        myList,
+        if (trailerUrl.isNotEmpty) ...[const SizedBox(width: 8), trailer],
+      ]);
+    }
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -667,6 +683,9 @@ class _PlayButtonState extends State<_PlayButton> {
                 poster: widget.item.posterUrl,
               ),
             ),
+            const SizedBox(width: 8),
+            myList,
+            if (trailerUrl.isNotEmpty) ...[const SizedBox(width: 8), trailer],
           ],
         ),
         // A resume keeps the language it was watched in.

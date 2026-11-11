@@ -101,6 +101,9 @@ class _DesktopCardState extends State<DesktopCard> {
         child: GestureDetector(
           onTap: _open,
           onSecondaryTap: _sheet,
+          // Touchscreen laptops / tablets that still land on the desktop
+          // shell have no right-click: a long press opens the same sheet.
+          onLongPress: _sheet,
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             mainAxisSize: MainAxisSize.min,

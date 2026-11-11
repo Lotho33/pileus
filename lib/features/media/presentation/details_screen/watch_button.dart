@@ -1,7 +1,6 @@
 // Part of details_screen.dart — split out for readability (plan 2e). The
 // library file holds the shared imports, the layout-ratio comment, the
-// DetailsScreen / _DetailsView / _DetailsContent entry chain and the shared
-// logo helpers (logoUrlOnly / logoDark / logoRenderSize); private
+// DetailsScreen / _DetailsView / _DetailsContent entry chain; private
 // identifiers are shared across all parts.
 part of '../details_screen.dart';
 
@@ -27,6 +26,11 @@ class _WatchButton extends StatefulWidget {
   final List<String> genres;
   final double rating;
   final int year;
+  // The card "La mia lista" saves — null: no chip (clips, music: nothing to
+  // come back to).
+  final MyListItem? myListItem;
+  // MovieDetails.trailer_url — empty: no "Trailer" chip.
+  final String trailerUrl;
   const _WatchButton({
     required this.pluginId,
     required this.mediaId,
@@ -39,6 +43,8 @@ class _WatchButton extends StatefulWidget {
     this.genres = const [],
     this.rating = 0.0,
     this.year = 0,
+    this.myListItem,
+    this.trailerUrl = '',
   });
 
   @override
@@ -70,6 +76,8 @@ class _WatchButtonState extends State<_WatchButton> {
   final _watchFn = FocusNode();
   final _retryFn = FocusNode();
   final _downloadFn = FocusNode();
+  final _myListFn = FocusNode();
+  final _trailerFn = FocusNode();
   // One node per language/source button beyond the first (index 0 always
   // reuses _watchFn above — _maybeRequestInitialFocus's target and this
   // map's index-0 entry must stay the same node). Row count is fixed once
@@ -105,6 +113,8 @@ class _WatchButtonState extends State<_WatchButton> {
     _watchFn.dispose();
     _retryFn.dispose();
     _downloadFn.dispose();
+    _myListFn.dispose();
+    _trailerFn.dispose();
     for (final n in _sourceFns.values) {
       n.dispose();
     }
@@ -246,6 +256,46 @@ class _WatchButtonState extends State<_WatchButton> {
     );
   }
 
+  // The secondary chips right of the play button(s), in order. Any of them
+  // may be missing ("Scarica" only once its chip has confirmed the plugin
+  // supports it), so D-pad moves skip to the next one actually on screen.
+  List<FocusNode> get _chipOrder => [_downloadFn, _myListFn, _trailerFn];
+
+  void _moveChip(FocusNode? from, int dir, VoidCallback toPlay) {
+    final order = _chipOrder;
+    var i = from == null ? -1 : order.indexOf(from);
+    for (i += dir; i >= 0 && i < order.length; i += dir) {
+      if (order[i].context != null) {
+        order[i].requestFocus();
+        return;
+      }
+    }
+    if (dir < 0) toPlay();
+  }
+
+  void _focusAfterPlay() => _moveChip(null, 1, () {});
+
+  bool get _hasExtraChips =>
+      widget.myListItem != null || widget.trailerUrl.isNotEmpty;
+
+  /// "La mia lista" and "Trailer", whichever apply. [toPlay] focuses the
+  /// play button a Left from the first chip goes back to.
+  List<Widget> _extraChips(VoidCallback toPlay) => [
+        if (widget.myListItem != null)
+          TvMyListChip(
+            item: widget.myListItem!,
+            focusNode: _myListFn,
+            onLeft: () => _moveChip(_myListFn, -1, toPlay),
+            onRight: () => _moveChip(_myListFn, 1, toPlay),
+          ),
+        if (widget.trailerUrl.isNotEmpty)
+          TvTrailerChip(
+            url: widget.trailerUrl,
+            focusNode: _trailerFn,
+            onLeft: () => _moveChip(_trailerFn, -1, toPlay),
+          ),
+      ];
+
   @override
   Widget build(BuildContext context) {
     // Audio: bottone singolo diretto
@@ -272,12 +322,20 @@ class _WatchButtonState extends State<_WatchButton> {
     // riprendi direttamente invece di proporre sempre "Guarda" da zero.
     final resume = _resume;
     if (resume != null) {
-      return TvFocusable(
+      final button = TvFocusable(
         focusNode: _resumeFn,
         autofocus: true,
         onActivate: () => _playResume(context, resume),
+        onRight: _hasExtraChips ? _focusAfterPlay : null,
         builder: (context, focused) => _buildSingleButton(
             focused, 'Riprendi «${resume.title}»', Icons.play_arrow_rounded),
+      );
+      if (!_hasExtraChips) return button;
+      return Wrap(
+        spacing: 12,
+        runSpacing: 12,
+        crossAxisAlignment: WrapCrossAlignment.center,
+        children: [button, ..._extraChips(_resumeFn.requestFocus)],
       );
     }
 
@@ -311,7 +369,7 @@ class _WatchButtonState extends State<_WatchButton> {
             focusNode: _watchFn,
             autofocus: true,
             onActivate: onActivate,
-            onRight: () => _downloadFn.requestFocus(),
+            onRight: _focusAfterPlay,
             builder: (context, focused) => _buildSingleButton(
                 focused, 'Guarda', Icons.play_arrow_rounded),
           ),
@@ -328,7 +386,9 @@ class _WatchButtonState extends State<_WatchButton> {
             ),
             focusNode: _downloadFn,
             onLeft: () => _watchFn.requestFocus(),
+            onRight: () => _moveChip(_downloadFn, 1, _watchFn.requestFocus),
           ),
+          ..._extraChips(_watchFn.requestFocus),
         ],
       );
     }
@@ -364,7 +424,7 @@ class _WatchButtonState extends State<_WatchButton> {
                 onLeft: i > 0 ? () => _sourceFn(i - 1).requestFocus() : null,
                 onRight: i < _sources.length - 1
                     ? () => _sourceFn(i + 1).requestFocus()
-                    : () => _downloadFn.requestFocus(),
+                    : _focusAfterPlay,
               ),
             _DownloadChip(
               pluginId: widget.pluginId,
@@ -378,7 +438,11 @@ class _WatchButtonState extends State<_WatchButton> {
               ),
               focusNode: _downloadFn,
               onLeft: () => _sourceFn(_sources.length - 1).requestFocus(),
+              onRight: () => _moveChip(_downloadFn, 1,
+                  () => _sourceFn(_sources.length - 1).requestFocus()),
             ),
+            ..._extraChips(
+                () => _sourceFn(_sources.length - 1).requestFocus()),
           ],
         ),
       ],
@@ -436,6 +500,7 @@ class _DownloadChip extends StatefulWidget {
   // caller can't just assume it's there to traverse past implicitly.
   final FocusNode? focusNode;
   final VoidCallback? onLeft;
+  final VoidCallback? onRight;
 
   const _DownloadChip({
     required this.pluginId,
@@ -445,6 +510,7 @@ class _DownloadChip extends StatefulWidget {
     required this.posterUrl,
     this.focusNode,
     this.onLeft,
+    this.onRight,
   });
 
   @override
@@ -479,6 +545,7 @@ class _DownloadChipState extends State<_DownloadChip> {
     return TvFocusable(
       focusNode: widget.focusNode,
       onLeft: widget.onLeft,
+      onRight: widget.onRight,
       onActivate: () => pushTvDownloadOptions(
         context,
         pluginId: widget.pluginId,
@@ -490,57 +557,8 @@ class _DownloadChipState extends State<_DownloadChip> {
           poster: widget.posterUrl,
         ),
       ),
-      builder: (context, focused) {
-        final sh = MediaQuery.sizeOf(context).height;
-        // A secondary action next to "Guarda"/the language buttons, not a
-        // second one of equal weight — it used to be sized and bolded
-        // identically to _buildSingleButton's primary "Guarda" (same
-        // padding/icon/font constants), reading as competing for attention
-        // rather than offering an extra option. Unfocused state is now a
-        // plain ghost outline (no fill, dimmer icon/text) instead of a solid
-        // block; focused still gets the same primary-color treatment as
-        // every other focusable here, just scaled down, so it doesn't lose
-        // visibility as a D-pad target.
-        return AnimatedContainer(
-          duration: const Duration(milliseconds: 150),
-          padding: EdgeInsets.symmetric(
-              horizontal: sh * (20.0 / 1080.0),
-              vertical: sh * (10.0 / 1080.0)),
-          decoration: BoxDecoration(
-            color: focused ? AppTheme.primary : Colors.transparent,
-            borderRadius: BorderRadius.circular(6),
-            border: Border.all(
-              color: focused ? AppTheme.primary : AppTheme.textLow,
-              width: focused ? 0 : 1,
-            ),
-            boxShadow: focused
-                ? [
-                    BoxShadow(
-                        color: AppTheme.primary.withValues(alpha: 0.4),
-                        blurRadius: 12,
-                        spreadRadius: 1)
-                  ]
-                : null,
-          ),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(Icons.download_rounded,
-                  size: sh * (14.0 / 1080.0),
-                  color: focused ? AppTheme.textHigh : AppTheme.textMid),
-              SizedBox(width: sh * (6.0 / 1080.0)),
-              Text(
-                'Scarica',
-                style: TextStyle(
-                  color: focused ? AppTheme.textHigh : AppTheme.textMid,
-                  fontSize: sh * (14.0 / 1080.0),
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-            ],
-          ),
-        );
-      },
+      builder: (context, focused) =>
+          detailsSecondaryChip(context, focused, Icons.download_rounded, 'Scarica'),
     );
   }
 }

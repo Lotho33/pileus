@@ -10,6 +10,7 @@ import '../core/di/injection.dart';
 import '../core/grpc/clients/media_client.dart' hide ContinueWatchingItem;
 import '../core/theme/app_theme.dart';
 import '../core/utils/image_sizing.dart';
+import '../core/widgets/smart_logo.dart';
 import '../features/auth/bloc/auth_bloc.dart';
 import '../features/auth/bloc/auth_event.dart';
 import '../features/downloads/bloc/download_options_cubit.dart'
@@ -20,6 +21,7 @@ import '../features/media/bloc/details_event.dart';
 import '../features/media/bloc/details_state.dart';
 import '../features/media/data/continue_watching_item.dart';
 import '../features/media/data/media_repository.dart';
+import '../features/player/continue_watching_launch.dart';
 import '../features/player/episode_poster.dart';
 import '../features/player/resolve_and_play.dart';
 import '../features/player/source_continuity.dart' show defaultPlayStreamId;
@@ -30,6 +32,8 @@ import '../shared/responsive.dart';
 import '../shared/widgets/error_retry_view.dart';
 import 'widgets/meta_line.dart';
 import 'widgets/bleed_backdrop.dart';
+import '../shared/widgets/my_list_button.dart';
+import '../shared/widgets/trailer_button.dart';
 import 'package:cached_network_image_platform_interface/cached_network_image_platform_interface.dart'
     show ImageRenderMethodForWeb;
 
@@ -56,6 +60,7 @@ class DesktopDetailsScreen extends StatelessWidget {
     return BlocProvider(
       create: (_) => DetailsBloc(
         getIt<MediaRepository>(),
+        refreshLogoMeta: true,
         onSessionExpired: () =>
             getIt<AuthBloc>().add(const SessionExpiredEvent()),
       )..add(LoadDetailsEvent(pluginId: pluginId, mediaId: mediaId)),
@@ -143,6 +148,19 @@ class _Body extends StatelessWidget {
             ? d.movie.logoUrl
             : '';
     return l.isNotEmpty ? l : item.logoUrl;
+  }
+
+  LogoMeta? get _logoMeta {
+    final d = details;
+    final s = d != null && d.hasSeries() ? d.series : null;
+    final m = d != null && d.hasMovie() ? d.movie : null;
+    final url = s?.logoUrl ?? m?.logoUrl ?? '';
+    final measured = s?.hasLogoMeta() ?? m?.hasLogoMeta() ?? false;
+    // The same logo may already be measured on the catalog item.
+    if (url.isEmpty || (!measured && url == item.logoUrl)) {
+      return item.logoMeta;
+    }
+    return s?.logoMeta ?? m?.logoMeta;
   }
 
   String get _fanart {
@@ -268,11 +286,13 @@ class _Body extends StatelessWidget {
                 pluginId: pluginId,
                 fanart: _fanart,
                 logo: _logo,
+                logoMeta: _logoMeta,
                 item: item,
                 seasons: _seasons,
                 isSeries: _isSeries,
                 plot: _plot,
                 genres: _genres,
+                details: details,
                 loading: loading,
                 height: headerH,
                 pad: pad,
@@ -320,11 +340,13 @@ class _Header extends StatelessWidget {
   final String pluginId;
   final String fanart;
   final String logo;
+  final LogoMeta? logoMeta;
   final CatalogItem item;
   final List<SeasonInfo> seasons;
   final bool isSeries;
   final String plot;
   final List<String> genres;
+  final DetailsResponse? details;
   final bool loading;
   final double height;
   final double pad;
@@ -336,11 +358,13 @@ class _Header extends StatelessWidget {
     required this.pluginId,
     required this.fanart,
     required this.logo,
+    this.logoMeta,
     required this.item,
     required this.seasons,
     required this.isSeries,
     required this.plot,
     required this.genres,
+    this.details,
     required this.loading,
     required this.height,
     required this.pad,
@@ -386,21 +410,13 @@ class _Header extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         mainAxisSize: MainAxisSize.min,
         children: [
-          if (logo.isNotEmpty && !logo.endsWith('.svg'))
-            ConstrainedBox(
-              constraints: BoxConstraints(
-                  maxHeight: big ? 130 : 100, maxWidth: big ? 460 : 360),
-              child: CachedNetworkImage(
-                // Web-only, no-op on every other platform — see image_sizing.dart's
-                // "ImageRenderMethodForWeb.HttpGet" section for why every
-                // CachedNetworkImage call site in the app sets this.
-                imageRenderMethodForWeb: ImageRenderMethodForWeb.HttpGet,
-                imageUrl: logo,
-                memCacheWidth: cacheWidthFor(context, 460),
-                fit: BoxFit.contain,
-                alignment: Alignment.centerLeft,
-                errorWidget: (_, __, ___) => _Title(item.title, big: big),
-              ),
+          if (logo.isNotEmpty)
+            SmartLogo(
+              url: logo,
+              meta: logoMeta,
+              maxWidth: big ? 460 : 360,
+              maxHeight: big ? 130 : 100,
+              fallback: _Title(item.title, big: big),
             )
           else
             _Title(item.title, big: big),
@@ -443,13 +459,26 @@ class _Header extends StatelessWidget {
           ],
           SizedBox(height: big ? 22 : 16),
           if (isSeries)
-            _PlayButton(
-              pluginId: pluginId,
-              item: item,
-              isSeries: isSeries,
-              big: big,
-              onPlayDefault: onPlay,
-              seasons: seasons,
+            Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                _PlayButton(
+                  pluginId: pluginId,
+                  item: item,
+                  isSeries: isSeries,
+                  big: big,
+                  onPlayDefault: onPlay,
+                  seasons: seasons,
+                ),
+                const SizedBox(width: 8),
+                MyListButton(
+                    pluginId: pluginId,
+                    item: item,
+                    mediaType: 'series',
+                    details: details),
+                const SizedBox(width: 8),
+                TrailerButton(url: trailerUrlOf(details)),
+              ],
             )
           else
             Row(
@@ -473,6 +502,14 @@ class _Header extends StatelessWidget {
                     poster: item.posterUrl,
                   ),
                 ),
+                const SizedBox(width: 8),
+                MyListButton(
+                    pluginId: pluginId,
+                    item: item,
+                    mediaType: 'movie',
+                    details: details),
+                const SizedBox(width: 8),
+                TrailerButton(url: trailerUrlOf(details)),
               ],
             ),
         ],
@@ -676,19 +713,14 @@ class _PlayButtonState extends State<_PlayButton> {
       widget.onPlayDefault(_chosenLabel);
       return;
     }
-    // Same minimal push as the home Continue Watching card's resume — see
-    // mobile_home_screen.dart's _CwCard._resume() for the identical pattern.
-    context.push(
+    // Same launch as the home Continue Watching card — the shared extra
+    // also starts a roll-forward row (stored at ~31 s, not a real resume
+    // point) from the top, which this hand-built copy didn't.
+    PlayerLaunchGuard.push(
+      GoRouter.of(context),
       '/player/${widget.pluginId}/${Uri.encodeComponent(resume.playableID)}',
-      extra: <String, dynamic>{
-        'streamId': resume.playableID,
-        'title': resume.title,
-        'showTitle': resume.showTitle,
-        'poster':
-            resume.poster.isNotEmpty ? resume.poster : widget.item.posterUrl,
-        'parentId': resume.parentID,
-        'seekTo': resume.progressTime.toInt(),
-      },
+      extra: continueWatchingPlayerExtra(resume,
+          posterFallback: widget.item.posterUrl),
     );
   }
 

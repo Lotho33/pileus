@@ -8,16 +8,19 @@ import '../bloc/auth_bloc.dart';
 import '../../../shared/utils/back_dispatch.dart';
 import '../bloc/auth_event.dart';
 import '../bloc/auth_state.dart';
+import '../../../core/theme/app_theme.dart';
 import '../../../core/db/models/local_profile.dart';
 import '../../../core/di/injection.dart';
 import '../../../core/theme/app_scale.dart';
 import '../../../core/utils/image_sizing.dart';
+import '../../../shared/widgets/avatar_picker_dialog.dart';
 import '../../../shared/widgets/default_avatars.dart';
 import '../../../shared/widgets/on_screen_keyboard.dart';
 import '../../../shared/widgets/pileus_spinner.dart';
 import '../../../shared/widgets/settings/dialog_action_button.dart';
 import '../../../shared/widgets/tv_focusable.dart';
 import 'widgets/profile_pin_dialog.dart';
+import '../../../shared/widgets/profile_avatar_cache.dart';
 import 'package:cached_network_image_platform_interface/cached_network_image_platform_interface.dart'
     show ImageRenderMethodForWeb;
 
@@ -427,17 +430,22 @@ class _ProfileCard extends StatelessWidget {
                                     imageRenderMethodForWeb:
                                         ImageRenderMethodForWeb.HttpGet,
                                     imageUrl: profile.avatarUrl,
+                                    cacheManager: profileAvatarCache,
+                                    cacheKey: profileAvatarCacheKey(profile.avatarUrl),
                                     width: cardSize,
                                     height: cardSize,
                                     fit: BoxFit.cover,
                                     memCacheWidth:
                                         cacheWidthFor(context, cardSize),
-                                    fadeInDuration:
-                                        const Duration(milliseconds: 200),
-                                    placeholder: (_, __) => _AvatarFallback(
-                                      name: profile.profileName,
-                                      accent: accent,
-                                      size: cardSize,
+                                    fadeInDuration: Duration.zero,
+                                    // Neutral, not the initial: for the instant
+                                    // the picture takes to come off disk the
+                                    // initial read as a different avatar.
+                                    placeholder: (_, __) => SizedBox(
+                                      width: cardSize,
+                                      height: cardSize,
+                                      child: const ColoredBox(
+                                          color: AppTheme.surface2),
                                     ),
                                     errorWidget: (_, __, ___) =>
                                         _AvatarFallback(
@@ -551,7 +559,14 @@ class _AddProfileCard extends StatelessWidget {
       builder: (ctx) => const _AddProfileDialog(),
     );
     if (name == null || !context.mounted) return;
-    context.read<AuthBloc>().add(CreateProfileEvent(name: name));
+    // Second step: initial (preselected) or a built-in avatar. Back cancels
+    // the creation, like "Annulla" on the name dialog.
+    final avatarUrl = await showAvatarPicker(context,
+        title: 'Avatar di $name', initialName: name);
+    if (avatarUrl == null || !context.mounted) return;
+    context
+        .read<AuthBloc>()
+        .add(CreateProfileEvent(name: name, avatarUrl: avatarUrl));
   }
 
   @override

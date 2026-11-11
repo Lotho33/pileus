@@ -1,8 +1,6 @@
 import 'dart:async';
-import 'dart:ui' show ImageFilter;
 
 import 'package:cached_network_image/cached_network_image.dart';
-import 'package:flutter_svg/flutter_svg.dart';
 import 'package:flutter/foundation.dart'
     show ValueListenable, ValueNotifier, kDebugMode;
 import 'package:flutter/material.dart';
@@ -11,7 +9,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
 
-import 'details_screen.dart' show logoUrlOnly, logoDark, logoRenderSize;
+import '../../../core/widgets/smart_logo.dart';
 
 import '../../auth/bloc/auth_bloc.dart';
 import '../../auth/bloc/auth_event.dart';
@@ -30,6 +28,7 @@ import '../../../core/router/app_router.dart' show appRouter;
 import '../../../core/utils/metrics.dart';
 import '../../../core/watch_next.dart';
 import '../data/media_repository.dart';
+import '../my_list.dart';
 import '../../player/episode_poster.dart' show episodeBadge;
 import '../../../shared/sdui/sdui_block.dart';
 import '../../../shared/sdui/sdui_block_view.dart';

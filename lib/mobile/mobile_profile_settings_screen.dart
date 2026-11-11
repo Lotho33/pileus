@@ -9,6 +9,7 @@ import '../features/auth/bloc/auth_event.dart';
 import '../features/auth/bloc/auth_state.dart';
 import '../features/settings/bloc/profile_management_cubit.dart';
 import '../features/settings/bloc/profile_management_state.dart';
+import '../shared/widgets/avatar_picker_dialog.dart';
 import '../shared/widgets/default_avatars.dart';
 import '../shared/widgets/native_pin_dialogs.dart';
 import 'mobile_router.dart';
@@ -181,30 +182,11 @@ class _Body extends StatelessWidget {
   Future<void> _pickAvatar(
       BuildContext context, ProfileManagementCubit cubit) async {
     if (!TapGuard.acquire()) return; // double tap — see tap_guard.dart
-    final idx = await showDialog<int>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        backgroundColor: AppTheme.surface,
-        title: const Text('Scegli avatar'),
-        content: SizedBox(
-          width: 280,
-          child: GridView.count(
-            crossAxisCount: 4,
-            shrinkWrap: true,
-            mainAxisSpacing: 12,
-            crossAxisSpacing: 12,
-            children: [
-              for (var i = 0; i < kDefaultAvatars.length; i++)
-                GestureDetector(
-                  onTap: () => popIfCurrent(ctx, i),
-                  child: ClipOval(child: DefaultAvatarView(index: i, size: 60)),
-                ),
-            ],
-          ),
-        ),
-      ),
-    );
-    if (idx != null) cubit.updateAvatarUrl(defaultAvatarUrlFor(idx));
+    final s = cubit.state;
+    final current = s is ProfileMgmtLoaded ? s.profile.avatarUrl : '';
+    final url = await showAvatarPicker(context,
+        currentAvatarUrl: current, tileSize: 56);
+    if (url != null && url.isNotEmpty) cubit.updateAvatarUrl(url);
   }
 
   Future<void> _confirmDelete(

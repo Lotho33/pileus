@@ -16,6 +16,7 @@ class MediaCatalogCard extends StatelessWidget {
   final VoidCallback onTap;
   final FocusNode? focusNode;
   final bool autofocus;
+  final bool centerTitle; // the title under the poster, centered
   final bool wide; // 16:9 (live/landscape) vs 2:3 (poster) aspect
   final bool isFirst; // true → handles ← by calling onNavigateLeft
   final double width; // actual on-screen size, computed by the caller from
@@ -37,6 +38,7 @@ class MediaCatalogCard extends StatelessWidget {
     this.focusNode,
     this.rating,
     this.autofocus = false,
+    this.centerTitle = false,
     this.wide = false,
     this.isFirst = false,
     this.onFocused,
@@ -44,6 +46,16 @@ class MediaCatalogCard extends StatelessWidget {
     this.onNavigateUp,
     this.onNavigateDown,
   });
+
+  /// Height of a grid cell for a poster card [posterHeight] tall: the card
+  /// also has a two-line title under the poster. A 2:3 cell only fits the
+  /// poster, and the title ran into the next row.
+  static double cellHeight(BuildContext context, double posterHeight) =>
+      posterHeight +
+      AppScale.space(context, 8) +
+      MediaQuery.textScalerOf(context).scale(AppScale.caption(context)) *
+          1.3 *
+          2;
 
   void _onFocusChange(BuildContext context, bool v) {
     if (v) {
@@ -182,6 +194,7 @@ class MediaCatalogCard extends StatelessWidget {
                 width: width,
                 child: Text(
                   title,
+                  textAlign: centerTitle ? TextAlign.center : TextAlign.start,
                   style: TextStyle(
                     color: focused ? Colors.white : Colors.white70,
                     fontSize: AppScale.caption(context),

@@ -7,7 +7,7 @@ import '../../core/theme/app_theme.dart';
 import '../../features/media/presentation/widgets/plugin_nav.dart'
     show PluginIcon, pluginLabel;
 
-enum DesktopSection { home, search, settings }
+enum DesktopSection { home, search, myList, settings }
 
 /// Left navigation rail for the desktop shell. Collapsible: icon-only at
 /// 68px, labelled at 236px. Fixed destinations (Home / Cerca) + the dynamic
@@ -140,6 +140,14 @@ class DesktopNavRail extends StatelessWidget {
                 labelSize: labelSize,
                 selected: false,
                 onTap: () => context.push('/downloads'),
+              ),
+              _RailItem(
+                icon: Icons.bookmark_rounded,
+                label: 'La mia lista',
+                extended: extended,
+                labelSize: labelSize,
+                selected: section == DesktopSection.myList,
+                onTap: () => onSection(DesktopSection.myList),
               ),
               _RailItem(
                 icon: Icons.settings_rounded,

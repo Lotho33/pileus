@@ -38,6 +38,7 @@ import 'widgets/press_scale.dart';
 import 'package:cached_network_image_platform_interface/cached_network_image_platform_interface.dart'
     show ImageRenderMethodForWeb;
 import '../shared/utils/tap_guard.dart';
+import '../features/media/my_list.dart';
 
 class MobileHomeScreen extends StatelessWidget {
   const MobileHomeScreen({super.key});
@@ -88,6 +89,7 @@ class _MobileHomeViewState extends State<_MobileHomeView> {
   void initState() {
     super.initState();
     _activePlugin.addListener(_onActiveChanged);
+    MyList.instance.refresh();
   }
 
   void _onActiveChanged() {

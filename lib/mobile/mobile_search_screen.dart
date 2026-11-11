@@ -4,7 +4,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
 import '../core/di/injection.dart';
-import '../core/grpc/clients/media_client.dart' show PluginInfo, SearchFilter;
+import '../core/grpc/clients/media_client.dart'
+    show CatalogItem, PluginInfo, SearchFilter;
 import '../core/theme/app_theme.dart';
 import '../features/auth/bloc/auth_bloc.dart';
 import '../features/auth/bloc/auth_event.dart';
@@ -26,6 +27,7 @@ import '../shared/widgets/recent_searches_list.dart';
 import '../shared/widgets/skeleton.dart';
 import 'widgets/mobile_poster_card.dart';
 import '../shared/utils/tap_guard.dart';
+import '../shared/sdui/sdui_parser.dart' show resultsAreLive;
 
 /// Shortest query the search will dispatch, unless a filter is carrying it.
 const _kMinLen = 2;
@@ -482,23 +484,26 @@ class _MobileSearchScreenState extends State<MobileSearchScreen> {
                                 SliverPadding(
                                   padding:
                                       const EdgeInsets.fromLTRB(16, 6, 16, 8),
-                                  sliver: SliverGrid(
-                                    gridDelegate:
-                                        const SliverGridDelegateWithMaxCrossAxisExtent(
-                                      maxCrossAxisExtent: 118,
-                                      childAspectRatio: 0.48,
-                                      mainAxisSpacing: 20,
-                                      crossAxisSpacing: 14,
-                                    ),
-                                    delegate: SliverChildBuilderDelegate(
-                                      (_, i) => MobilePosterCard(
-                                        pluginId: active?.pluginId ?? '',
-                                        item: s.items[i],
-                                        width: 118,
-                                      ),
-                                      childCount: s.items.length,
-                                    ),
-                                  ),
+                                  sliver: resultsAreLive(s.items)
+                                      ? _liveGrid(context,
+                                          active?.pluginId ?? '', s.items)
+                                      : SliverGrid(
+                                          gridDelegate:
+                                              const SliverGridDelegateWithMaxCrossAxisExtent(
+                                            maxCrossAxisExtent: 118,
+                                            childAspectRatio: 0.48,
+                                            mainAxisSpacing: 20,
+                                            crossAxisSpacing: 14,
+                                          ),
+                                          delegate: SliverChildBuilderDelegate(
+                                            (_, i) => MobilePosterCard(
+                                              pluginId: active?.pluginId ?? '',
+                                              item: s.items[i],
+                                              width: 118,
+                                            ),
+                                            childCount: s.items.length,
+                                          ),
+                                        ),
                                 ),
                                 if (s.hasMore)
                                   SliverToBoxAdapter(
@@ -654,4 +659,35 @@ class _Hint extends StatelessWidget {
       ),
     );
   }
+}
+
+/// Live events: landscape cards, two (or more, on a tablet) per row — the
+/// same 16:9 card as the home's live rows, instead of tall posters.
+Widget _liveGrid(
+    BuildContext context, String pluginId, List<CatalogItem> items) {
+  return SliverLayoutBuilder(builder: (context, c) {
+    const spacing = 14.0;
+    final w = c.crossAxisExtent;
+    final cols = ((w + spacing) / (240 + spacing)).floor().clamp(2, 6);
+    final cardW = (w - spacing * (cols - 1)) / cols;
+    final caption =
+        MediaQuery.textScalerOf(context).scale(13) * 1.25 * 2 + 8;
+    return SliverGrid(
+      gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+        crossAxisCount: cols,
+        mainAxisExtent: cardW * 9 / 16 + 6 + caption,
+        mainAxisSpacing: 16,
+        crossAxisSpacing: spacing,
+      ),
+      delegate: SliverChildBuilderDelegate(
+        (_, i) => MobilePosterCard(
+          pluginId: pluginId,
+          item: items[i],
+          width: cardW,
+          landscape: true,
+        ),
+        childCount: items.length,
+      ),
+    );
+  });
 }

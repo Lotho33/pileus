@@ -78,11 +78,15 @@ dependencies:
   # transitive dep of cached_network_image itself; listed directly now that
   # the app imports it by name, rather than relying on transitive resolution.
   cached_network_image_platform_interface: ^4.1.1
+  # Own cache for profile pictures (shared/widgets/profile_avatar_cache.dart).
+  flutter_cache_manager: ^3.4.1
 
   # Utils
   uuid: ^4.4.2
   collection: ^1.18.0
   window_manager: ^0.5.2
+  # Trailers: hands the link to the YouTube app / the browser.
+  url_launcher: ^6.3.3
 
   # Logo/wordmark (assets/branding) — vector, not raster, so the splash
   # screen and side nav render crisp at any size instead of scaling a fixed

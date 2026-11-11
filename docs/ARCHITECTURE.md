@@ -105,8 +105,10 @@ l'origine della pagina (`host_resolver_stub.dart`).
 ## MediaRepository — cache-first
 
 Le risposte di catalogo sono cache-ate in `SharedPreferences` sotto il
-keyspace `layoutcache:` con TTL. Il bump di `schemaVersion` fa il wipe di
-tutte le chiavi. `_client` è un getter su `getIt<MediaGrpcClient>()` (niente
+keyspace `layoutcache:` con TTL, solo la pagina 1. La manutenzione gira alla
+creazione del repository: un bump di `_cacheVersion` svuota le righe di
+catalogo, altrimenti vengono potate quelle oltre 7 giorni (gli snapshot `__…__`
+restano). `_client` è un getter su `getIt<MediaGrpcClient>()` (niente
 stale dopo `rebuildGrpcClients()`). Gli errori `unauthenticated` su
 progress / continue-watching fanno partire `SessionExpiredEvent` → routing
 all'auth flow, non vengono inghiottiti.

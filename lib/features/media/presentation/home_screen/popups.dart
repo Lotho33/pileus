@@ -34,6 +34,9 @@ class _CardContextMenuState extends State<_CardContextMenu> {
   // reached only via the liveRefreshable bypass below skips them rather
   // than risk those flows on a media type they were never verified against.
   bool get _isCatalogable => widget.item.mediaType != 'live';
+  // What "La mia lista" holds: titles with a details page to come back to.
+  bool get _savable =>
+      widget.item.mediaType == 'series' || widget.item.mediaType == 'movie';
 
   @override
   void initState() {
@@ -57,6 +60,18 @@ class _CardContextMenuState extends State<_CardContextMenu> {
             label: 'Riproduci',
             action: _openPlay,
           ),
+        if (MyList.instance.supported && _savable)
+          MyList.instance.contains(widget.pluginId, widget.item.id)
+              ? (
+                  icon: Icons.check_rounded,
+                  label: 'Rimuovi da La mia lista',
+                  action: _toggleMyList,
+                )
+              : (
+                  icon: Icons.add_rounded,
+                  label: 'Aggiungi a La mia lista',
+                  action: _toggleMyList,
+                ),
       ],
       if (widget.liveRefreshable)
         (
@@ -101,6 +116,13 @@ class _CardContextMenuState extends State<_CardContextMenu> {
     final messenger = ScaffoldMessenger.of(context);
     Navigator.of(context).pop();
     _fetchAndPlay(router, messenger);
+  }
+
+  void _toggleMyList() {
+    final messenger = ScaffoldMessenger.of(context);
+    Navigator.of(context).pop();
+    toggleMyListWithFeedback(
+        messenger, MyList.itemFrom(widget.pluginId, widget.item));
   }
 
   void _triggerRefresh() {

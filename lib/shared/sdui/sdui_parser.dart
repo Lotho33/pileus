@@ -57,6 +57,21 @@ SduiCardVariant _variantFor(CatalogDef catalogDef) {
   }
 }
 
+/// Card shape for results that come with no CatalogDef to read it from
+/// (search): live events get the landscape card the home's live rows use,
+/// films and series the poster. Mixed results follow the majority.
+SduiCardVariant variantForResults(Iterable<CatalogItem> items) =>
+    resultsAreLive(items) ? SduiCardVariant.live : SduiCardVariant.poster;
+
+bool resultsAreLive(Iterable<CatalogItem> items) {
+  var live = 0, n = 0;
+  for (final i in items) {
+    n++;
+    if (i.mediaType == 'live') live++;
+  }
+  return n > 0 && live * 2 > n;
+}
+
 /// Single source of truth for "is this catalog row featured" — also used
 /// by home_screen.dart's `_StandardHomeShell` to reserve the correct amount
 /// of vertical space above the carousel *before* the carousel widget

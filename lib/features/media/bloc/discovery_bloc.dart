@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:collection/collection.dart' show ListEquality;
 import 'package:flutter/foundation.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
@@ -30,6 +32,34 @@ class DiscoveryBloc extends Bloc<DiscoveryEvent, DiscoveryState> {
   // would otherwise be exposed to the exact same out-of-order response bug
   // _onSearch already guards against.
   int _catalogGeneration = 0;
+
+  // One re-read per catalog when logos in the row weren't measured yet (see
+  // logoMetaPending), so a dark logo gets its halo in this session and not
+  // only at the next start.
+  @visibleForTesting
+  static Duration logoMetaRetryDelay = const Duration(seconds: 6);
+  Timer? _logoMetaRetry;
+  final Set<String> _logoMetaRetried = {};
+
+  void _retryForLogoMeta(LoadCatalogEvent event, List<CatalogItem> items) {
+    if (event.page != 1 || !items.any(logoMetaPending)) return;
+    if (!_logoMetaRetried.add(event.catalogId)) return;
+    _logoMetaRetry?.cancel();
+    _logoMetaRetry = Timer(logoMetaRetryDelay, () {
+      if (isClosed) return;
+      add(RefreshCatalogEvent(
+        pluginId: event.pluginId,
+        catalogId: event.catalogId,
+        cacheTtlSeconds: event.cacheTtlSeconds,
+      ));
+    });
+  }
+
+  @override
+  Future<void> close() {
+    _logoMetaRetry?.cancel();
+    return super.close();
+  }
 
   DiscoveryBloc(this._repo, {this.onSessionExpired, this.onProfileLocked})
       : super(const DiscoveryInitial()) {
@@ -84,6 +114,8 @@ class DiscoveryBloc extends Bloc<DiscoveryEvent, DiscoveryState> {
       if (result.stale) {
         await _revalidate(event, myGeneration, result.catalog.items, emit);
       }
+      final shown = state;
+      if (shown is DiscoveryLoaded) _retryForLogoMeta(event, shown.items);
     } catch (e) {
       if (myGeneration != _catalogGeneration) return;
       if (isUnauthenticated(e)) {
@@ -127,7 +159,7 @@ class DiscoveryBloc extends Bloc<DiscoveryEvent, DiscoveryState> {
       // would see every refresh as a change.
       List<String> shape(List<CatalogItem> items) => [
             for (final i in items)
-              '${i.id}|${i.title}|${i.posterUrl}|${i.logoUrl}'
+              '${i.id}|${i.title}|${i.posterUrl}|${i.logoUrl}|${i.hasLogoMeta()}'
                   '${liveState ? '|${i.extra['is_live']}|${i.extra['plot']}' : ''}'
           ];
       if (const ListEquality<String>()

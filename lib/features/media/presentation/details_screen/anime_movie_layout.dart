@@ -1,7 +1,6 @@
 // Part of details_screen.dart — split out for readability (plan 2e). The
 // library file holds the shared imports, the layout-ratio comment, the
-// DetailsScreen / _DetailsView / _DetailsContent entry chain and the shared
-// logo helpers (logoUrlOnly / logoDark / logoRenderSize); private
+// DetailsScreen / _DetailsView / _DetailsContent entry chain; private
 // identifiers are shared across all parts.
 part of '../details_screen.dart';
 
@@ -194,6 +193,13 @@ class _AnimeMovieLayout extends StatelessWidget {
                       genres: genres,
                       rating: item.rating,
                       year: item.year,
+                      myListItem: MyList.itemFrom(pluginId, item,
+                          mediaType: 'movie',
+                          plot: plot,
+                          genres: genres,
+                          fanartUrl: fanartUrl,
+                          logoUrl: md?.logoUrl ?? sd?.logoUrl ?? ''),
+                      trailerUrl: md?.trailerUrl ?? '',
                     ),
                     if (plot.isNotEmpty) ...[
                       SizedBox(height: 12 * s),

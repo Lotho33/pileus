@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter_bloc/flutter_bloc.dart';
 
+import '../../../core/app_lifecycle.dart';
 import '../../../core/grpc/clients/media_client.dart' show DownloadInfo;
 import '../../../core/grpc/grpc_errors.dart';
 import '../../media/data/media_repository.dart';
@@ -21,6 +22,7 @@ class DownloadsListCubit extends Cubit<DownloadsListState> {
   // built yet) — TV, which never does, can use this cubit with none.
   final DownloadsLocalIndex? localIndex;
   Timer? _timer;
+  bool _polling = false;
 
   DownloadsListCubit(
     this._repo, {
@@ -37,7 +39,20 @@ class DownloadsListCubit extends Cubit<DownloadsListState> {
     // task alongside the rest of the local-download bookkeeping.
     localIndex?.syncPendingAcks(_repo);
     _timer?.cancel();
-    _timer = Timer.periodic(pollInterval, (_) => _refresh());
+    _timer = Timer.periodic(pollInterval, (_) => _poll());
+  }
+
+  // A tick skips while the previous ListDownloads is still out (a slow
+  // server or Wi-Fi would otherwise stack one call every [pollInterval])
+  // and while the app is in the background, where nobody sees the page.
+  Future<void> _poll() async {
+    if (_polling || AppLifecycleReactor.instance.isBackgrounded) return;
+    _polling = true;
+    try {
+      await _refresh();
+    } finally {
+      _polling = false;
+    }
   }
 
   /// True when this device already has a copy of [info] AND the server's

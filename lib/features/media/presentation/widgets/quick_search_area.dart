@@ -47,6 +47,7 @@ part 'quick_search_area/see_all_button.dart';
 // Fixed slot count for the preview row — keeps card size constant
 // regardless of result count.
 const int _kQuickSearchVisibleCards = 4;
+const int _kQuickSearchVisibleLiveCards = 3;
 // Shortest query quick search will actually dispatch to the backend — a
 // single letter is broad enough to be mostly noise and gets replaced
 // almost immediately by the next keystroke anyway.

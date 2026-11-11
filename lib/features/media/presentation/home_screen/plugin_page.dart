@@ -87,6 +87,7 @@ class _PluginPage extends StatelessWidget {
       plugin: plugin,
       onOpenNav: onOpenNav,
       onNavigateToSearch: onNavigateToSearch,
+      notReadyFocusNode: notReadyFocusNode,
     );
   }
 }
@@ -175,6 +176,11 @@ class _PluginNotReadyPageState extends State<_PluginNotReadyPage>
         if (k == LogicalKeyboardKey.arrowLeft ||
             k == LogicalKeyboardKey.escape ||
             k == LogicalKeyboardKey.goBack) {
+          // goBack also reaches us as an echo (a second key event on some
+          // boxes, the platform pop): one press, one menu opening.
+          if (k != LogicalKeyboardKey.arrowLeft && !consumeBackEvent()) {
+            return KeyEventResult.handled;
+          }
           widget.onOpenNav();
           return KeyEventResult.handled;
         }
@@ -283,12 +289,14 @@ class _PluginPageBody extends StatefulWidget {
   final PluginInfo plugin;
   final VoidCallback onOpenNav;
   final VoidCallback onNavigateToSearch;
+  final FocusNode notReadyFocusNode;
 
   const _PluginPageBody({
     super.key,
     required this.plugin,
     required this.onOpenNav,
     required this.onNavigateToSearch,
+    required this.notReadyFocusNode,
   });
 
   @override
@@ -297,6 +305,34 @@ class _PluginPageBody extends StatefulWidget {
 
 class _PluginPageBodyState extends State<_PluginPageBody> {
   _HomeFsm _fsm = _HomeFsm.loading;
+
+  // Every catalog came back empty: nothing to focus in the rows, so the page
+  // shows the not-ready notice, whose single focus stop reaches the menu with
+  // one press. Without it focus landed nowhere and the first press was spent
+  // getting it back.
+  bool _allEmpty = false;
+
+  void _onAllCatalogsEmpty() {
+    if (_allEmpty) return;
+    setState(() => _allEmpty = true);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) widget.notReadyFocusNode.requestFocus();
+    });
+  }
+
+  void _retryEmptyCatalogs() {
+    final catalogs = widget.plugin.catalogs;
+    for (var i = 0; i < catalogs.length && i < _sectionBlocs.length; i++) {
+      _sectionBlocs[i].add(LoadCatalogEvent(
+        pluginId: widget.plugin.pluginId,
+        catalogId: catalogs[i].id,
+        cacheTtlSeconds: catalogs[i].cacheTtlSeconds,
+        forceRefresh: true,
+      ));
+    }
+    setState(() => _allEmpty = false);
+    _focusFirstCard();
+  }
 
   // First item of the first loaded catalog — the hero's fallback until the
   // user focuses a card.
@@ -376,6 +412,7 @@ class _PluginPageBodyState extends State<_PluginPageBody> {
       _displayItemVN.value = null;
       setState(() {
         _fsm = _HomeFsm.loading;
+        _allEmpty = false;
         _firstCardFocus.clear();
         _pendingFocusFirstCard = false;
       });
@@ -400,7 +437,7 @@ class _PluginPageBodyState extends State<_PluginPageBody> {
       // no lost scroll/focus position — while only the rows that actually
       // appeared or disappeared touch the network or the widget tree.
       _reconcileBlocs(old.plugin, widget.plugin);
-      setState(() {});
+      setState(() => _allEmpty = false);
     }
   }
 
@@ -454,6 +491,10 @@ class _PluginPageBodyState extends State<_PluginPageBody> {
   // Called from _closeNav and from quick search's dismiss: restores focus
   // to the first card of the active carousel.
   void _focusFirstCard() {
+    if (_allEmpty) {
+      widget.notReadyFocusNode.requestFocus();
+      return;
+    }
     _pendingFocusFirstCard = true;
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted || !_pendingFocusFirstCard) return;
@@ -518,6 +559,13 @@ class _PluginPageBodyState extends State<_PluginPageBody> {
       // ValueListenableBuilder in the shell picks it up.
       _displayItemVN.value ??= first;
     }
+    // The row was re-read with its logos measured: the hero must not keep
+    // the copy without logo_meta.
+    final shown = _displayItemVN.value;
+    if (shown != null && !shown.hasLogoMeta()) {
+      final fresh = items.where((i) => i.id == shown.id).firstOrNull;
+      if (fresh != null && fresh.hasLogoMeta()) _displayItemVN.value = fresh;
+    }
     if (_fsm == _HomeFsm.loading) _transition(_HomeFsm.browsing);
   }
 
@@ -529,6 +577,16 @@ class _PluginPageBodyState extends State<_PluginPageBody> {
 
   @override
   Widget build(BuildContext context) {
+    if (_allEmpty) {
+      return _PluginNotReadyPage(
+        focusNode: widget.notReadyFocusNode,
+        onOpenNav: widget.onOpenNav,
+        icon: Icons.inbox_outlined,
+        title: 'Nessun contenuto',
+        subtitle: '${widget.plugin.name} non ha nulla da mostrare al momento.',
+        onRetry: _retryEmptyCatalogs,
+      );
+    }
     return BlocListener<DiscoveryBloc, DiscoveryState>(
       // Explicit bloc, not an implicit context lookup — this used to rely
       // on an ancestor BlocProvider that _PluginPage.build() created
@@ -567,6 +625,7 @@ class _PluginPageBodyState extends State<_PluginPageBody> {
               // topmost catalog row silently did nothing. Now it hands focus
               // directly to the search bar instead.
               onNavigateUpFromCarousel: widget.onNavigateToSearch,
+              onAllCatalogsEmpty: _onAllCatalogsEmpty,
             ),
             // Non-blocking: `reachable` is a health-check ping that has
             // turned out to false-positive on plugins that work fine (see

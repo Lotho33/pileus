@@ -65,9 +65,12 @@ class ForgetDeviceEvent extends AuthEvent {
 
 class CreateProfileEvent extends AuthEvent {
   final String name;
-  const CreateProfileEvent({required this.name});
+
+  /// A built-in avatar (`avatar://<n>`), or empty for the initial.
+  final String avatarUrl;
+  const CreateProfileEvent({required this.name, this.avatarUrl = ''});
   @override
-  List<Object?> get props => [name];
+  List<Object?> get props => [name, avatarUrl];
 }
 
 // Fired by any BLoC that receives a gRPC UNAUTHENTICATED error.

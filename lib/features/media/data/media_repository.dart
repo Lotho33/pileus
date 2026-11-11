@@ -2,7 +2,8 @@ import 'dart:async' show unawaited;
 import 'dart:convert';
 
 import 'package:fixnum/fixnum.dart' show Int64;
-import 'package:flutter/foundation.dart' show debugPrint, kDebugMode;
+import 'package:flutter/foundation.dart'
+    show debugPrint, kDebugMode, visibleForTesting;
 import 'package:grpc/grpc.dart' show GrpcError, StatusCode;
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -17,6 +18,43 @@ import '../../player/content_view_mode.dart';
 import '../../settings/data/settings_repository.dart';
 import 'continue_watching_item.dart';
 import 'plugin_prefs.dart';
+
+/// The server hasn't measured this item's logo yet: it does so in the
+/// background the first time the URL goes out, so the first answer has no
+/// logo_meta and a later one does. Without it a dark logo has no halo.
+/// Non-TMDB SVGs are never measured.
+bool logoMetaPending(CatalogItem i) =>
+    _logoPending(i.logoUrl, i.hasLogoMeta());
+
+/// [logoMetaPending] for the logo a details page draws.
+bool detailsLogoPending(DetailsResponse r) {
+  final s = r.hasSeries() ? r.series : null;
+  final m = r.hasMovie() ? r.movie : null;
+  final url = s?.logoUrl ?? m?.logoUrl ?? '';
+  if (url.isEmpty) return logoMetaPending(r.item);
+  return _logoPending(url, s?.hasLogoMeta() ?? m?.hasLogoMeta() ?? false);
+}
+
+bool _logoPending(String logoUrl, bool measured) {
+  if (logoUrl.isEmpty || measured) return false;
+  final url = logoUrl.toLowerCase();
+  if (url.contains('.svg') && !url.contains('image.tmdb.org')) return false;
+  // The server measures a logo within seconds of first seeing it. One it
+  // can't measure (fetch/decode failed, a format it doesn't read) never
+  // gets logo_meta, and "pending" forever meant: that catalog read as stale
+  // on every load (a network refetch each time) and those details cached
+  // for 4 s instead of 5 min. Past the window it's simply a logo without
+  // measurements for the rest of the session.
+  final now = DateTime.now();
+  if (_logoFirstSeen.length > 4000) _logoFirstSeen.clear();
+  final first = _logoFirstSeen.putIfAbsent(logoUrl, () => now);
+  return now.difference(first) < logoPendingWindow;
+}
+
+/// How long a logo without logo_meta is still expected to get one.
+@visibleForTesting
+Duration logoPendingWindow = const Duration(minutes: 2);
+final Map<String, DateTime> _logoFirstSeen = {};
 
 class MediaRepository {
   final SharedPreferences _prefs;
@@ -53,7 +91,9 @@ class MediaRepository {
   // never touch those).
   static const String _keyPrefix = 'layoutcache:';
 
-  MediaRepository(this._prefs, this._interceptor);
+  MediaRepository(this._prefs, this._interceptor) {
+    _maintainCatalogCache();
+  }
 
   /// Fired when a gRPC call here comes back `unauthenticated` — the in-memory
   /// JWT is dead (no refresh flow exists), so the whole session is over.
@@ -111,34 +151,71 @@ class MediaRepository {
         jsonEncode(entry.toJson()),
       );
 
-  Future<void> init() async {
+  // Runs once per repository (the constructor). Before 2026-11 this was an
+  // `init()` nothing ever called: a `_cacheVersion` bump never wiped
+  // anything, and rows were never removed — every page of every catalog the
+  // user ever scrolled stayed in SharedPreferences, which Android loads whole
+  // at startup and rewrites whole on every write. Synchronous on purpose:
+  // SharedPreferences updates its in-memory map before the disk write, so
+  // the first getCatalog right after already sees the cleaned cache.
+  //
+  // No marker at all = an install from before this ran: its rows were all
+  // written by the current _updateCache (the marker was simply never
+  // stamped), so it gets stamped now rather than wiped.
+  void _maintainCatalogCache() {
     final versionEntry = _readEntry(_cacheVersionKey);
-    final storedVersion = int.tryParse(
-          versionEntry?.jsonLayoutStructure ?? '0',
-        ) ??
-        0;
-    if (storedVersion < _cacheVersion) {
-      // Preserve user preferences stored alongside catalog caches — every
-      // profile's plugin-order entry, not just the active one (each is a
-      // separate row keyed '$_pluginOrderKeyPrefix:$profileId').
-      final savedOrders = _savedPluginOrders();
-      await _wipeAllLayoutCacheKeys();
-      final newVersion = LayoutCache()
+    final storedVersion = versionEntry == null
+        ? _cacheVersion
+        : int.tryParse(versionEntry.jsonLayoutStructure) ?? 0;
+    if (versionEntry == null || storedVersion < _cacheVersion) {
+      unawaited(_writeEntry(LayoutCache()
         ..screenEndpoint = _cacheVersionKey
         ..jsonLayoutStructure = '$_cacheVersion'
-        ..cachedAtTimestamp = DateTime.now().millisecondsSinceEpoch ~/ 1000;
-      await _writeEntry(newVersion);
-      for (final order in savedOrders) {
-        await _writeEntry(order);
+        ..cachedAtTimestamp = DateTime.now().millisecondsSinceEpoch ~/ 1000));
+    }
+    _pruneCatalogCache(all: storedVersion < _cacheVersion);
+  }
+
+  // toJson() writes cachedAtTimestamp last: reading it from the tail spares
+  // decoding every row (a whole catalog page each) just to learn its age.
+  static final _cachedAtRe = RegExp(r'"cachedAtTimestamp":(\d+)\}$');
+
+  /// Drops catalog rows past [_staleMaxSeconds] (getCatalog would never
+  /// show them again) and pages after the first (no longer written — see
+  /// _updateCache) — or, with [all] (a schema bump), every catalog row.
+  /// Only catalog rows (`$pluginId/$catalogId/$page`): the `__…__` ones —
+  /// version marker, plugin order/prefs, plugin-list and Continue Watching
+  /// snapshots — are not catalog cache and stay.
+  void _pruneCatalogCache({bool all = false}) {
+    final nowSec = DateTime.now().millisecondsSinceEpoch ~/ 1000;
+    for (final key in _prefs.getKeys().toList()) {
+      if (!key.startsWith(_keyPrefix)) continue;
+      final endpoint = key.substring(_keyPrefix.length);
+      if (endpoint.startsWith('__')) continue;
+      if (all) {
+        unawaited(_prefs.remove(key));
+        continue;
+      }
+      final raw = _prefs.getString(key);
+      final m = raw == null ? null : _cachedAtRe.firstMatch(raw);
+      final at = m == null ? 0 : int.parse(m.group(1)!);
+      if (nowSec - at >= _staleMaxSeconds || _catalogPage(endpoint) > 1) {
+        unawaited(_prefs.remove(key));
       }
     }
+  }
+
+  /// `$pluginId/$catalogId/$page` → page (1 when it can't tell).
+  static int _catalogPage(String endpoint) {
+    final i = endpoint.lastIndexOf('/');
+    return i < 0 ? 1 : int.tryParse(endpoint.substring(i + 1)) ?? 1;
   }
 
   /// User-triggered "Svuota cache" (Settings) — wipes every cached catalog
   /// response so stale/since-changed server-side catalog content stops
   /// being served from a still-live TTL window. Preserves every profile's
   /// plugin-order preference and re-seeds the version marker the same way
-  /// init()'s version-bump wipe does, so this doesn't get redundantly
+  /// _maintainCatalogCache's version-bump wipe does, so this doesn't get redundantly
   /// re-wiped again on next launch.
   Future<void> clearCatalogCache() async {
     final savedOrders = _savedPluginOrders();
@@ -228,7 +305,7 @@ class MediaRepository {
               .toList();
           final hasAnyLogo = mediaCards.any((i) => i.logoUrl.isNotEmpty);
           if (mediaCards.isEmpty || hasAnyLogo) {
-            return (catalog: parsed, fromCache: true, stale: age >= ttl);
+            return (catalog: parsed, fromCache: true, stale: age >= ttl || parsed.items.any(logoMetaPending));
           }
         }
       }
@@ -239,8 +316,10 @@ class MediaRepository {
     );
 
     // Don't persist live/no-cache catalogs — their data is always stale
-    // by the time it would be read back.
-    if (!skipCache) await _updateCache(endpoint, response);
+    // by the time it would be read back. Nor pages after the first: only
+    // page 1 paints a cold home, the rest come from scrolling (network
+    // either way) and only bloated the SharedPreferences file.
+    if (!skipCache && page <= 1) await _updateCache(endpoint, response);
     return (catalog: response, fromCache: false, stale: false);
   }
 
@@ -310,7 +389,30 @@ class MediaRepository {
   // fields those callers actually read (which don't change mid-session), a
   // stale cache could otherwise paper over a real "genuinely still doesn't
   // exist" 404 for 24h if this reused the catalog cache's TTL.
+  // The session caches below (details/browse/streams) only ever replaced an
+  // entry for the same key — expired ones stayed forever, a whole
+  // DetailsResponse (episode lists included) per title opened, which on a
+  // 1 GB TV box adds up over an evening of browsing. Oldest-first eviction
+  // (a Map keeps insertion order; re-putting a key moves it last) past this.
+  static const _sessionCacheMax = 48;
+
+  static void _putCapped<V>(
+      Map<String, (V, DateTime)> cache, String key, V value,
+      {DateTime? at}) {
+    cache.remove(key);
+    cache[key] = (value, at ?? DateTime.now());
+    while (cache.length > _sessionCacheMax) {
+      cache.remove(cache.keys.first);
+    }
+  }
+
   static const _detailsCacheTtl = Duration(minutes: 5);
+
+  // An answer whose logo isn't measured yet is kept only a few seconds: the
+  // next read must reach the server, which has the measurement by then.
+  static DateTime _detailsCachedAt(DetailsResponse r) => detailsLogoPending(r)
+      ? DateTime.now().subtract(_detailsCacheTtl - const Duration(seconds: 4))
+      : DateTime.now();
   final Map<String, (DetailsResponse, DateTime)> _detailsCache = {};
   final Map<String, Future<DetailsResponse>> _detailsInFlight = {};
 
@@ -319,10 +421,11 @@ class MediaRepository {
   // parked in the web RequestGate queue — so it fires its own, skipping the
   // queue, and refreshes the cache for everyone else.
   Future<DetailsResponse> getDetails(String pluginId, String mediaId,
-      {bool urgent = false}) async {
+      {bool urgent = false, bool fresh = false}) async {
     final key = '$pluginId|$mediaId';
     final cached = _detailsCache[key];
-    if (cached != null &&
+    if (!fresh &&
+        cached != null &&
         DateTime.now().difference(cached.$2) < _detailsCacheTtl) {
       return cached.$1;
     }
@@ -330,7 +433,7 @@ class MediaRepository {
       final resp = await _client.getDetails(
           DetailsRequest(pluginId: pluginId, mediaId: mediaId),
           urgent: true);
-      _detailsCache[key] = (resp, DateTime.now());
+      _putCapped(_detailsCache, key, resp, at: _detailsCachedAt(resp));
       return resp;
     }
     // Two heroes built in the same frame used to fire the same call twice.
@@ -362,7 +465,7 @@ class MediaRepository {
     try {
       final resp = await _client
           .getDetails(DetailsRequest(pluginId: pluginId, mediaId: mediaId));
-      _detailsCache[key] = (resp, DateTime.now());
+      _putCapped(_detailsCache, key, resp, at: _detailsCachedAt(resp));
       return resp;
     } finally {
       _detailsInFlight.remove(key);
@@ -405,7 +508,7 @@ class MediaRepository {
       final resp = await _client.browse(BrowseRequest(
           pluginId: pluginId, parentId: parentId, childId: childId));
       if (resp.items.isNotEmpty || resp.episodes.isNotEmpty) {
-        _browseCache[key] = (resp, DateTime.now());
+        _putCapped(_browseCache, key, resp);
       }
       return resp;
     } finally {
@@ -460,7 +563,7 @@ class MediaRepository {
           StreamsRequest(pluginId: pluginId, mediaId: mediaId));
       // An empty list can be a plugin that isn't ready yet — never let it
       // stick (same rule as the search filters).
-      if (resp.sources.isNotEmpty) _streamsCache[key] = (resp, DateTime.now());
+      if (resp.sources.isNotEmpty) _putCapped(_streamsCache, key, resp);
       return resp;
     } finally {
       _streamsInFlight.remove(key);
@@ -945,6 +1048,16 @@ class MediaRepository {
   /// server — or queued because the server didn't answer (see
   /// [_cwPendingPrefix]); false only when the session or the profile lock
   /// refused it, which nothing queued could fix.
+  /// The profile's "La mia lista", most recently added first.
+  Future<List<MyListItem>> getMyList() async =>
+      (await _client.getMyList(MyListRequest())).items;
+
+  /// Adds [item] (in: true) or removes it — only pluginId/mediaId matter
+  /// for a removal. Throws on failure; the caller rolls its optimistic
+  /// state back.
+  Future<void> setInMyList(MyListItem item, {required bool inList}) =>
+      _client.setMyListItem(SetMyListItemRequest(item: item, inList: inList));
+
   Future<bool> removeFromContinueWatching(
       {required String providerID, required String playableID}) async {
     try {
@@ -1213,6 +1326,8 @@ class MediaRepository {
               'subs': i.extra['subs'] ?? '',
               'subtype': i.extra['subtype'] ?? '',
               'logo_url': i.logoUrl,
+              if (i.hasLogoMeta())
+                'logo_meta': base64Encode(i.logoMeta.writeToBuffer()),
             })
         .toList();
     final jsonStr = jsonEncode({'items': items, 'has_more': response.hasMore});
@@ -1223,6 +1338,15 @@ class MediaRepository {
       ..cachedAtTimestamp = DateTime.now().millisecondsSinceEpoch ~/ 1000;
 
     await _writeEntry(entry);
+  }
+
+  static LogoMeta? _cachedLogoMeta(Object? encoded) {
+    if (encoded is! String) return null;
+    try {
+      return LogoMeta.fromBuffer(base64Decode(encoded));
+    } catch (_) {
+      return null;
+    }
   }
 
   CatalogResponse _parseCachedCatalog(String jsonStr) {
@@ -1246,6 +1370,7 @@ class MediaRepository {
           title: m['title'] as String? ?? '',
           posterUrl: m['poster_url'] as String? ?? '',
           logoUrl: logoUrl,
+          logoMeta: _cachedLogoMeta(m['logo_meta']),
           mediaType: m['media_type'] as String? ?? '',
           isDir: m['is_dir'] as bool? ?? false,
           year: m['year'] as int? ?? 0,

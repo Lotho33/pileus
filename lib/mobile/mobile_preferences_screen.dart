@@ -1,10 +1,10 @@
 import 'dart:io' show Platform;
 
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 
 import '../core/di/injection.dart';
 import '../core/theme/app_theme.dart';
-import '../features/media/data/media_repository.dart';
 import '../features/player/android_video_settings.dart';
 import '../features/player/source_preference.dart' show PreferredLanguage;
 import '../features/settings/data/settings_repository.dart';
@@ -187,17 +187,19 @@ class _MobilePreferencesScreenState extends State<MobilePreferencesScreen> {
             }),
           ),
           _header('Avanzate'),
-          SwitchListTile(
-            value: _diag,
-            onChanged: (v) => setState(() {
-              _diag = v;
-              _s.setDiagnostics(v);
-            }),
-            title: const Text('Diagnostica (log su adb)',
-                style: TextStyle(color: AppTheme.textHigh)),
-            subtitle: const Text('Richiede il riavvio dell\'app.',
-                style: TextStyle(color: AppTheme.textLow, fontSize: 12)),
-          ),
+          // The perf log goes to adb logcat: nothing to read it with on web.
+          if (!kIsWeb)
+            SwitchListTile(
+              value: _diag,
+              onChanged: (v) => setState(() {
+                _diag = v;
+                _s.setDiagnostics(v);
+              }),
+              title: const Text('Diagnostica (log su adb)',
+                  style: TextStyle(color: AppTheme.textHigh)),
+              subtitle: const Text('Richiede il riavvio dell\'app.',
+                  style: TextStyle(color: AppTheme.textLow, fontSize: 12)),
+            ),
           ListTile(
             leading: const Icon(Icons.timer_outlined, color: AppTheme.textMid),
             title: const Text('Tempi di risposta',
@@ -205,26 +207,6 @@ class _MobilePreferencesScreenState extends State<MobilePreferencesScreen> {
             subtitle: const Text('Avvio, apertura titoli, Play → primo frame',
                 style: TextStyle(color: AppTheme.textLow, fontSize: 12)),
             onTap: () => showMetricsDialog(context),
-          ),
-          ListTile(
-            leading: const Icon(Icons.delete_sweep_outlined,
-                color: AppTheme.textMid),
-            title: const Text('Svuota cache catalogo',
-                style: TextStyle(color: AppTheme.textHigh)),
-            onTap: () async {
-              final messenger = ScaffoldMessenger.of(context);
-              try {
-                await getIt<MediaRepository>().clearCatalogCache();
-                messenger.showSnackBar(
-                  const SnackBar(content: Text('Cache svuotata')),
-                );
-              } catch (e) {
-                // Same feedback as the TV settings screen — this used to
-                // fail silently (and leave an uncaught async error).
-                messenger.showSnackBar(SnackBar(
-                    content: Text('Impossibile svuotare la cache: $e')));
-              }
-            },
           ),
         ],
       ),

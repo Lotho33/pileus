@@ -20,7 +20,9 @@ import '../features/media/paging.dart';
 import '../shared/widgets/more_items_tile.dart';
 import '../features/media/data/continue_watching_item.dart';
 import '../features/media/data/media_repository.dart';
+import '../features/player/continue_watching_launch.dart';
 import '../features/player/episode_poster.dart' show episodeBadge;
+import '../features/player/resolve_and_play.dart' show PlayerLaunchGuard;
 import '../shared/responsive.dart';
 import 'widgets/desktop_card.dart';
 import 'widgets/desktop_dialogs.dart';
@@ -367,23 +369,16 @@ class _CwRow extends StatelessWidget {
     );
   }
 
-  void _resume(BuildContext context, ContinueWatchingItem it) {
-    // playableID is an already-resolved stream id — pass it as streamId so
-    // the player calls ResolveStream directly (same as the mobile CW tap).
-    context.push(
-      '/player/${it.providerID}/${Uri.encodeComponent(it.playableID)}',
-      extra: <String, dynamic>{
-        'streamId': it.playableID,
-        'title': it.title,
-        'showTitle': it.showTitle,
-        'poster': it.poster,
-        'parentId': it.parentID,
-        'seekTo': (it.totalTime <= 0 && it.progressTime <= 35)
-            ? 0
-            : it.progressTime.toInt(),
-      },
-    );
-  }
+  // Same launch as the TV/mobile Continue Watching cards: the shared extra
+  // (plot/rating/genres/year/duration were missing from this hand-built
+  // copy, so a desktop/web resume rewrote the row without them) and the
+  // one-launch-at-a-time guard (a double click opened two players).
+  void _resume(BuildContext context, ContinueWatchingItem it) =>
+      PlayerLaunchGuard.push(
+        GoRouter.of(context),
+        '/player/${it.providerID}/${Uri.encodeComponent(it.playableID)}',
+        extra: continueWatchingPlayerExtra(it),
+      );
 
   void _details(BuildContext context, ContinueWatchingItem it) {
     // For an episode, parentID resolves to the series page; movies use the id.
@@ -461,6 +456,7 @@ class _CwTileState extends State<_CwTile> {
         child: GestureDetector(
           onTap: widget.onResume,
           onSecondaryTap: _menu,
+          onLongPress: _menu, // touch: no right-click (see desktop_card.dart)
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             mainAxisSize: MainAxisSize.min,

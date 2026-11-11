@@ -729,6 +729,8 @@ class _PlaybackViewState extends State<_PlaybackView> {
     old.removeListener(_onEngineChanged);
 
     final fresh = PlayerEngine.create();
+    // The user's speed choice survives the restart (re-applied on open).
+    unawaited(fresh.setSpeed(old.speed));
     fresh.onError = _onEngineError;
     fresh.onVideoFrozen = _onVideoFrozen;
     fresh.addListener(_onEngineChanged);
@@ -815,129 +817,26 @@ class _PlaybackViewState extends State<_PlaybackView> {
   // appear a beat later. `_currentMediaId` here is the resolved stream id,
   // not a bare episode id, so matches fall back to the episode title.
   Future<void> _resolveEpisodeListIfMissing() async {
-    if (widget.args.isLive ||
-        _currentEpisodeList.isNotEmpty ||
-        _parentId.isEmpty) {
+    if (widget.args.isLive || _currentEpisodeList.isNotEmpty || _parentId.isEmpty) {
       return;
     }
-    final target = (_currentTitle ?? '').trim().toLowerCase();
-    final cacheKey = '${widget.args.epPluginId} $_parentId';
-    final cached = playbackEpisodeCache[cacheKey];
-    if (cached != null && cached.length >= 2) {
-      _applyResolvedEpisodes(cached, target);
-      return;
-    }
+    final target = episodeMatchKey(_currentTitle);
     try {
-      final repo = getIt<MediaRepository>();
-      final res = await repo.browse(widget.args.epPluginId, _parentId, '');
-      if (!mounted) return;
-
-      // Flat list straight off the parent?
-      var eps = <({
-        String id,
-        String title,
-        String thumb,
-        int episodeNumber,
-        int seasonNumber
-      })>[];
-      if (res.episodes.isNotEmpty) {
-        eps = [
-          for (final e in res.episodes)
-            (
-              id: e.id,
-              title: e.title,
-              thumb: e.thumbnailUrl,
-              episodeNumber: e.episodeNumber,
-              seasonNumber: e.seasonNumber,
-            )
-        ];
-      } else {
-        eps = [
-          for (final e in res.items)
-            if (!e.isDir)
-              (
-                id: e.id,
-                title: e.title,
-                thumb: e.posterUrl,
-                episodeNumber: e.episodeNumber,
-                seasonNumber: e.seasonNumber,
-              ),
-        ];
-      }
-
-      // Otherwise the parent is a list of season directories — walk them
-      // until one holds an episode whose title matches what's playing. Cap
-      // the walk: 25 sequential browses on a deep series (One Piece &co.)
-      // is a long stall right after playback starts, and prev/next is a
-      // convenience, not load-bearing. 8 covers virtually every real show.
-      if (eps.length < 2) {
-        final seasonDirs = res.items.where((i) => i.isDir).toList();
-        for (final s in seasonDirs.take(8)) {
-          if (!mounted) return;
-          final sr = await repo.browse(widget.args.epPluginId, s.id, '');
-          final se = sr.episodes.isNotEmpty
-              ? [
-                  for (final e in sr.episodes)
-                    (
-                      id: e.id,
-                      title: e.title,
-                      thumb: e.thumbnailUrl,
-                      episodeNumber: e.episodeNumber,
-                      seasonNumber: e.seasonNumber,
-                    )
-                ]
-              : [
-                  for (final e in sr.items)
-                    if (!e.isDir)
-                      (
-                        id: e.id,
-                        title: e.title,
-                        thumb: e.posterUrl,
-                        episodeNumber: e.episodeNumber,
-                        seasonNumber: e.seasonNumber,
-                      ),
-                ];
-          if (se.length > 1 &&
-              (target.isEmpty ||
-                  se.any((e) => e.title.trim().toLowerCase() == target))) {
-            eps = se;
-            break;
-          }
-        }
-      }
-
-      if (!mounted || eps.length < 2) return;
-      playbackEpisodeCache[cacheKey] = eps;
-      _applyResolvedEpisodes(eps, target);
+      final eps = await resolvePlaybackEpisodes(getIt<MediaRepository>(),
+          pluginId: widget.args.epPluginId,
+          parentId: _parentId,
+          target: target,
+          cancelled: () => !mounted);
+      if (eps != null) _applyResolvedEpisodes(eps, target);
     } catch (_) {
       // ignore — no prev/next this session
     }
   }
 
-  void _applyResolvedEpisodes(
-      List<
-              ({
-                String id,
-                String title,
-                String thumb,
-                int episodeNumber,
-                int seasonNumber
-              })>
-          eps,
-      String target) {
+  void _applyResolvedEpisodes(List<PlaybackEpisode> eps, String target) {
     if (!mounted) return;
-    var idx = eps.indexWhere((e) => e.id == _currentMediaId);
-    if (idx < 0 && target.isNotEmpty) {
-      idx = eps.indexWhere((e) => e.title.trim().toLowerCase() == target);
-    }
-    if (idx < 0) {
-      // Loose containment, last resort — only for ids long enough to be a
-      // real unique token. A bare "1"/"2" episode number is a substring of
-      // almost every resolved stream URL, so the old unguarded check
-      // matched episode 1 for nearly every continue-watching tap.
-      idx = eps.indexWhere(
-          (e) => e.id.length >= 8 && _currentMediaId.contains(e.id));
-    }
+    final idx =
+        matchPlaybackEpisode(eps, currentId: _currentMediaId, target: target);
     if (idx < 0) return;
     setState(() {
       _currentEpisodeList = [for (final e in eps) e.id];
@@ -1773,19 +1672,15 @@ class _PlaybackViewState extends State<_PlaybackView> {
   // "Lingua": the language versions of what's playing, when they are
   // separate streams (see playerLanguageOptions) — fetched for the current
   // episode when the settings panel opens (GetStreams is cached).
-  List<StreamSource> _langSources = const [];
-  String? _langFor;
+  final _languages = PlayerLanguages();
+  List<StreamSource> get _langSources => _languages.sources;
+  String? get _langFor => _languages.loadedFor;
 
   Future<void> _loadLanguages() async {
-    if (widget.args.isLive || _langFor == _currentMediaId) return;
-    final media = _currentMediaId;
-    try {
-      final r = await getIt<MediaRepository>()
-          .getStreams(widget.args.epPluginId, media);
-      _langSources = r.sources;
-      _langFor = media;
-      if (mounted) setState(() {});
-    } catch (_) {}
+    if (widget.args.isLive) return;
+    if (await _languages.load(widget.args.epPluginId, _currentMediaId) && mounted) {
+      setState(() {});
+    }
   }
 
   List<StreamSource> get _languageOptions => widget.args.isLive ||
@@ -2314,6 +2209,7 @@ class _PlaybackViewState extends State<_PlaybackView> {
                         languages: _languageOptions,
                         currentStreamId: _currentStreamId,
                         onLanguageSelected: _switchLanguage,
+                        showSpeed: !widget.args.isLive,
                         onVolumeChanged: (v) {
                           setState(() => _volume = v);
                           _engine.setVolume(v);

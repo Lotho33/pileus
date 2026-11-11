@@ -1,14 +1,13 @@
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
 
-import '../../../core/di/injection.dart';
 import '../../../core/utils/app_exit.dart';
 import '../../../core/theme/app_scale.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../features/auth/bloc/auth_bloc.dart';
 import '../../../features/auth/bloc/auth_event.dart';
-import '../../../features/media/data/media_repository.dart';
 import '../../../shared/widgets/ambient_glow_background.dart';
 import '../../../shared/widgets/settings/dialog_action_button.dart';
 import '../../../shared/widgets/settings/settings_header.dart';
@@ -33,9 +32,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   final _prefsFn = FocusNode();
   final _pluginsFn = FocusNode();
   final _downloadsFn = FocusNode();
-  final _clearCacheFn = FocusNode();
   final _exitFn = FocusNode();
-  bool _clearingCache = false;
 
   @override
   void dispose() {
@@ -45,27 +42,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
     _prefsFn.dispose();
     _pluginsFn.dispose();
     _downloadsFn.dispose();
-    _clearCacheFn.dispose();
     _exitFn.dispose();
     super.dispose();
-  }
-
-  Future<void> _clearCache() async {
-    if (_clearingCache) return;
-    setState(() => _clearingCache = true);
-    final messenger = ScaffoldMessenger.of(context);
-    try {
-      await getIt<MediaRepository>().clearCatalogCache();
-      messenger.showSnackBar(const SnackBar(
-        content: Text(
-            'Cache svuotata — i cataloghi si aggiorneranno al prossimo caricamento.'),
-      ));
-    } catch (e) {
-      messenger.showSnackBar(
-          SnackBar(content: Text('Impossibile svuotare la cache: $e')));
-    } finally {
-      if (mounted) setState(() => _clearingCache = false);
-    }
   }
 
   @override
@@ -137,29 +115,24 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     subtitle: 'Contenuti scaricati sul server',
                     focusNode: _downloadsFn,
                     onFocusUp: () => _pluginsFn.requestFocus(),
-                    onFocusDown: () => _clearCacheFn.requestFocus(),
+                    onFocusDown: kIsWeb ? () => _exitFn.requestFocus() : null,
                     onTap: () => context.push('/downloads'),
                   ),
-                  SettingsNavRow(
-                    icon: Icons.delete_sweep_rounded,
-                    label: 'Svuota cache catalogo',
-                    subtitle: _clearingCache
-                        ? 'Svuotamento in corso…'
-                        : 'Rimuove i cataloghi in cache — utile se compaiono contenuti vecchi',
-                    focusNode: _clearCacheFn,
-                    onFocusUp: () => _downloadsFn.requestFocus(),
-                    onFocusDown: () => _exitFn.requestFocus(),
-                    onTap: _clearCache,
-                  ),
-                  SizedBox(height: AppScale.space(context, 10)),
-                  SettingsNavRow(
-                    icon: Icons.logout_rounded,
-                    label: 'Esci dall\'app',
-                    subtitle: 'Chiude Pileus',
-                    focusNode: _exitFn,
-                    onFocusUp: () => _clearCacheFn.requestFocus(),
-                    onTap: () => _showExitDialog(context),
-                  ),
+                  // Only TV browsers (webOS/Tizen) need an in-app way out:
+                  // Android TV's guidelines leave that to Home/Back — and
+                  // the catalog cache now prunes itself, so its manual
+                  // "Svuota cache" row went too (2026-11).
+                  if (kIsWeb) ...[
+                    SizedBox(height: AppScale.space(context, 10)),
+                    SettingsNavRow(
+                      icon: Icons.logout_rounded,
+                      label: 'Esci dall\'app',
+                      subtitle: 'Chiude Pileus',
+                      focusNode: _exitFn,
+                      onFocusUp: () => _downloadsFn.requestFocus(),
+                      onTap: () => _showExitDialog(context),
+                    ),
+                  ],
                 ],
               ),
             ),

@@ -24,6 +24,7 @@ import '../shared/widgets/recent_searches_list.dart';
 import '../shared/widgets/skeleton.dart';
 import '../shared/responsive.dart';
 import 'widgets/desktop_card.dart';
+import '../shared/sdui/sdui_parser.dart' show resultsAreLive;
 
 const _kMinLen = 2;
 
@@ -357,7 +358,15 @@ class _DesktopSearchScreenState extends State<DesktopSearchScreen> {
                         }
                         final capH =
                             captionBoxHeight(context, bp.cardTitleSize);
-                        final cellH = bp.cardWidth * 1.5 + 8 + capH + 20;
+                        // Live events: the home's 16:9 live card (same
+                        // 1.8× width), not a tall poster.
+                        final live = resultsAreLive(s.items);
+                        final cardW =
+                            live ? bp.cardWidth * 1.8 : bp.cardWidth;
+                        final cellH = (live ? cardW * 9 / 16 : cardW * 1.5) +
+                            8 +
+                            capH +
+                            20;
                         return CustomScrollView(
                           controller: _scrollCtrl,
                           slivers: [
@@ -367,7 +376,7 @@ class _DesktopSearchScreenState extends State<DesktopSearchScreen> {
                               sliver: SliverGrid(
                                 gridDelegate:
                                     SliverGridDelegateWithMaxCrossAxisExtent(
-                                  maxCrossAxisExtent: bp.cardWidth + 24,
+                                  maxCrossAxisExtent: cardW + 24,
                                   mainAxisExtent: cellH,
                                   mainAxisSpacing: 20,
                                   crossAxisSpacing: 18,
@@ -377,7 +386,8 @@ class _DesktopSearchScreenState extends State<DesktopSearchScreen> {
                                     child: DesktopCard(
                                       pluginId: active?.pluginId ?? '',
                                       item: s.items[i],
-                                      width: bp.cardWidth,
+                                      width: cardW,
+                                      landscape: live,
                                       titleSize: bp.cardTitleSize,
                                       captionHeight: capH,
                                     ),

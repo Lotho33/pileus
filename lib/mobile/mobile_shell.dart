@@ -6,6 +6,7 @@ import '../core/utils/metrics.dart';
 import '../shared/widgets/offline_banner.dart';
 import 'mobile_home_screen.dart';
 import 'mobile_search_screen.dart';
+import 'mobile_my_list_screen.dart';
 import 'mobile_settings_screen.dart';
 
 /// The app's home destination: a bottom-nav shell over Home / Cerca /
@@ -65,6 +66,7 @@ class _MobileShellState extends State<MobileShell> {
               children: [
                 const MobileHomeScreen(),
                 MobileSearchScreen(visible: _tab == 1),
+                const MobileMyListScreen(),
                 const MobileSettingsScreen(),
               ],
             ),
@@ -103,6 +105,13 @@ class _MobileShellState extends State<MobileShell> {
                 selectedIcon:
                     Icon(Icons.search_rounded, color: AppTheme.textHigh),
                 label: 'Cerca',
+              ),
+              NavigationDestination(
+                icon: Icon(Icons.bookmark_border_rounded,
+                    color: AppTheme.textMid),
+                selectedIcon:
+                    Icon(Icons.bookmark_rounded, color: AppTheme.textHigh),
+                label: 'La mia lista',
               ),
               NavigationDestination(
                 icon: Icon(Icons.settings_outlined, color: AppTheme.textMid),

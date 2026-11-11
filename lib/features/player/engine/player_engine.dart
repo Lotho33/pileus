@@ -163,6 +163,24 @@ abstract class PlayerEngine extends ChangeNotifier {
   Future<void> setVolume(double percent);
   double get volume; // 0..maxVolume
 
+  /// User-chosen playback speed (see playback_speed.dart). Kept by the
+  /// engine and re-applied on every open(), so it survives an episode
+  /// switch; ignored on live streams, where live-sync drives the rate.
+  double get speed => _speed;
+  double _speed = 1.0;
+
+  Future<void> setSpeed(double speed) {
+    if ((speed - _speed).abs() < 0.001) return Future.value();
+    _speed = speed;
+    notifyListeners();
+    return applySpeed();
+  }
+
+  /// Pushes [speed] to the backend — no-op before the player exists or on
+  /// a live stream.
+  @protected
+  Future<void> applySpeed();
+
   /// Top of the volume range this backend can actually reach. 100 unless
   /// overridden.
   double get maxVolume => 100;
@@ -608,7 +626,18 @@ class _ExoPlayerEngine extends PlayerEngine {
       // fire-and-forget from the screen.
       _handleError(e.toString(), source: 'setupDataSource');
     }
+    if (speed != 1.0) unawaited(applySpeed());
     _emit();
+  }
+
+  @override
+  Future<void> applySpeed() async {
+    if (_controller == null || _isLive) return;
+    try {
+      await _c.setSpeed(speed);
+    } catch (e) {
+      perf('exo: setSpeed($speed) failed: $e');
+    }
   }
 
   @override
@@ -1093,6 +1122,7 @@ class _MpvPlayerEngine extends PlayerEngine {
             ? startPosition
             : null));
     _emit();
+    if (speed != 1.0) unawaited(applySpeed());
     if (_isLive) {
       _liveSync.reset();
       _liveTimer?.cancel();
@@ -1152,6 +1182,12 @@ class _MpvPlayerEngine extends PlayerEngine {
   Future<void> setVolume(double percent) {
     _volume = percent.clamp(0, maxVolume);
     return _player.setVolume(_volume);
+  }
+
+  @override
+  Future<void> applySpeed() async {
+    if (!_playerCreated || _isLive) return;
+    await _player.setRate(speed);
   }
 
   @override

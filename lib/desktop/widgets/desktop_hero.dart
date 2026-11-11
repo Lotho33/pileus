@@ -5,6 +5,7 @@ import '../../core/di/injection.dart';
 import '../../core/grpc/clients/media_client.dart' hide ContinueWatchingItem;
 import '../../core/theme/app_theme.dart';
 import '../../core/utils/image_sizing.dart';
+import '../../core/widgets/smart_logo.dart';
 import '../../features/media/data/media_repository.dart';
 import '../../features/player/episode_poster.dart';
 import '../../features/player/resolve_and_play.dart';
@@ -56,6 +57,7 @@ class _DesktopHeroState extends State<DesktopHero>
   final _repo = getIt<MediaRepository>();
   List<String> _genres = const [];
   String _logoUrl = '';
+  LogoMeta? _logoMeta;
   String _backdrop = '';
   String _plot = '';
   bool _enriched = false;
@@ -74,6 +76,10 @@ class _DesktopHeroState extends State<DesktopHero>
     if (old.item.id != widget.item.id) {
       _reset();
       _enrich();
+    } else if (widget.item.hasLogoMeta() &&
+        widget.item.logoUrl == _logoUrl) {
+      // The row was re-read with the logo measured (same title, new data).
+      _logoMeta = widget.item.logoMeta;
     }
   }
 
@@ -82,6 +88,7 @@ class _DesktopHeroState extends State<DesktopHero>
     _plot = '';
     _enriched = false;
     _logoUrl = widget.item.logoUrl;
+    _logoMeta = widget.item.logoMeta;
     final ex = widget.item.extra;
     _backdrop = (ex['fanart_url']?.isNotEmpty ?? false)
         ? ex['fanart_url']!
@@ -97,22 +104,30 @@ class _DesktopHeroState extends State<DesktopHero>
       if (!mounted || seq != _enrichSeq) return;
       List<String> genres = const [];
       String logo = _logoUrl;
+      LogoMeta? logoMeta = _logoMeta;
       String fanart = '';
       String plot = '';
       if (d.hasSeries()) {
         genres = d.series.genres;
         if (logo.isEmpty) logo = d.series.logoUrl;
+        if (logo == d.series.logoUrl && d.series.hasLogoMeta()) {
+          logoMeta = d.series.logoMeta;
+        }
         fanart = d.series.fanartUrl;
         plot = d.series.plot;
       } else if (d.hasMovie()) {
         genres = d.movie.genres;
         if (logo.isEmpty) logo = d.movie.logoUrl;
+        if (logo == d.movie.logoUrl && d.movie.hasLogoMeta()) {
+          logoMeta = d.movie.logoMeta;
+        }
         fanart = d.movie.fanartUrl;
         plot = d.movie.plot;
       }
       setState(() {
         _genres = genres;
         _logoUrl = logo;
+        _logoMeta = logoMeta;
         _plot = plot;
         _enriched = true;
         if (_backdrop.isEmpty && fanart.isNotEmpty) _backdrop = fanart;
@@ -246,23 +261,14 @@ class _DesktopHeroState extends State<DesktopHero>
                   crossAxisAlignment: CrossAxisAlignment.start,
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    if (_logoUrl.isNotEmpty && !_logoUrl.endsWith('.svg'))
-                      ConstrainedBox(
-                        constraints:
-                            BoxConstraints(maxHeight: logoH, maxWidth: logoW),
-                        child: CachedNetworkImage(
-                          // Web-only, no-op on every other platform — see image_sizing.dart's
-                          // "ImageRenderMethodForWeb.HttpGet" section for why every
-                          // CachedNetworkImage call site in the app sets this.
-                          imageRenderMethodForWeb:
-                              ImageRenderMethodForWeb.HttpGet,
-                          imageUrl: _logoUrl,
-                          memCacheWidth: cacheWidthFor(context, logoW),
-                          fit: BoxFit.contain,
-                          alignment: Alignment.centerLeft,
-                          errorWidget: (_, __, ___) => _TitleText(it.title,
-                              size: widget.bp.heroTitleSize),
-                        ),
+                    if (_logoUrl.isNotEmpty)
+                      SmartLogo(
+                        url: _logoUrl,
+                        meta: _logoMeta,
+                        maxWidth: logoW,
+                        maxHeight: logoH,
+                        fallback: _TitleText(it.title,
+                            size: widget.bp.heroTitleSize),
                       )
                     else if (_enriched)
                       _TitleText(it.title, size: widget.bp.heroTitleSize),

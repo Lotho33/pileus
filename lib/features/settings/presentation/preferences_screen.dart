@@ -152,8 +152,12 @@ class _PreferencesBodyState extends State<_PreferencesBody> {
           const _OverscanPrefRow(),
         ],
         SizedBox(height: AppScale.space(context, 12)),
-        const SettingsSectionHeader('Avanzate'),
-        const _DiagnosticsPrefRow(),
+        // The perf log goes to adb logcat — nothing to read it with on a TV
+        // browser.
+        if (!kIsWeb) ...[
+          const SettingsSectionHeader('Avanzate'),
+          const _DiagnosticsPrefRow(),
+        ],
         const SizedBox(height: 16),
       ],
     );

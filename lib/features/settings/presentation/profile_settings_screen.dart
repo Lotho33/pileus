@@ -7,6 +7,7 @@ import '../../../core/di/injection.dart';
 import '../../../core/theme/app_scale.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../shared/widgets/ambient_glow_background.dart';
+import '../../../shared/widgets/avatar_picker_dialog.dart';
 import '../../../shared/widgets/default_avatars.dart';
 import '../../../shared/widgets/pileus_spinner.dart';
 import '../../../shared/widgets/settings/dialog_action_button.dart';
@@ -336,172 +337,12 @@ Future<void> _confirmForgetDevice(
 
 // Avatars are picked from the bundled default set (see default_avatars.dart)
 // instead of a pasted image URL — there's no comfortable way to type a URL
-// on a remote, and a self-hosted app shouldn't need external image hosting
-// just to set a profile picture.
+// on a remote. A photo is set from mycelium's dashboard.
 Future<void> _showAvatarPickerDialog(BuildContext context,
     ProfileManagementCubit cubit, String currentAvatarUrl) async {
-  final initialIndex = isDefaultAvatarUrl(currentAvatarUrl)
-      ? defaultAvatarIndex(currentAvatarUrl)
-      : 0;
-  final index = await showDialog<int>(
-    context: context,
-    barrierColor: Colors.black54,
-    builder: (_) => _AvatarPickerDialog(initialIndex: initialIndex),
-  );
-  if (index != null) await cubit.updateAvatarUrl(defaultAvatarUrlFor(index));
-}
-
-class _AvatarPickerDialog extends StatefulWidget {
-  final int initialIndex;
-  const _AvatarPickerDialog({required this.initialIndex});
-
-  @override
-  State<_AvatarPickerDialog> createState() => _AvatarPickerDialogState();
-}
-
-class _AvatarPickerDialogState extends State<_AvatarPickerDialog> {
-  // Owned by the State, not disposed after `await showDialog` — the old
-  // shape disposed this FocusNode a frame before the exit transition
-  // finished, so a focus handoff still in flight against it
-  // (onDownFromLastRow) hit a disposed node. gridKey + cancelFn thread the
-  // Down/Up connection both ways between the grid and the "Annulla" button.
-  final _gridKey = GlobalKey<_AvatarPickerGridState>();
-  final _cancelFn = FocusNode();
-
-  @override
-  void dispose() {
-    _cancelFn.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return TvFocusable(
-      canRequestFocus: false,
-      onEsc: () => Navigator.of(context).pop(),
-      builder: (context, _) => AlertDialog(
-        backgroundColor: AppTheme.surface,
-        title: const Text('Scegli avatar'),
-        content: _AvatarPickerGrid(
-          key: _gridKey,
-          initialIndex: widget.initialIndex,
-          onSelected: (index) => Navigator.of(context).pop(index),
-          onDownFromLastRow: () => _cancelFn.requestFocus(),
-        ),
-        actions: [
-          DialogActionButton(
-            label: 'Annulla',
-            focusNode: _cancelFn,
-            onUp: () => _gridKey.currentState?.focusCurrent(),
-            onPressed: () => Navigator.of(context).pop(),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _AvatarPickerGrid extends StatefulWidget {
-  final int initialIndex;
-  final ValueChanged<int> onSelected;
-  final VoidCallback? onDownFromLastRow;
-  const _AvatarPickerGrid({
-    super.key,
-    required this.initialIndex,
-    required this.onSelected,
-    this.onDownFromLastRow,
-  });
-
-  @override
-  State<_AvatarPickerGrid> createState() => _AvatarPickerGridState();
-}
-
-class _AvatarPickerGridState extends State<_AvatarPickerGrid> {
-  static const _columns = 5;
-  late final _nodes = List.generate(kDefaultAvatars.length, (_) => FocusNode());
-  late int _focused = widget.initialIndex;
-
-  @override
-  void initState() {
-    super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted) _nodes[_focused].requestFocus();
-    });
-  }
-
-  @override
-  void dispose() {
-    for (final n in _nodes) {
-      n.dispose();
-    }
-    super.dispose();
-  }
-
-  /// Re-focuses wherever the grid was left — the "Annulla" button below
-  /// calls this on Up so leaving it lands back where the user actually was
-  /// instead of always resetting to the first tile.
-  void focusCurrent() {
-    if (_focused >= 0 && _focused < _nodes.length) {
-      _nodes[_focused].requestFocus();
-    }
-  }
-
-  void _moveFocus(int delta) {
-    final next = (_focused + delta).clamp(0, kDefaultAvatars.length - 1);
-    if (next == _focused) return;
-    setState(() => _focused = next);
-    _nodes[next].requestFocus();
-  }
-
-  void _moveDown() {
-    final next = _focused + _columns;
-    if (next >= kDefaultAvatars.length) {
-      widget.onDownFromLastRow?.call();
-      return;
-    }
-    setState(() => _focused = next);
-    _nodes[next].requestFocus();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final tileSize = AppScale.space(context, 84);
-    final gap = AppScale.space(context, 12);
-    return SizedBox(
-      width: _columns * tileSize + (_columns - 1) * gap,
-      child: Wrap(
-        spacing: gap,
-        runSpacing: gap,
-        children: [
-          for (var i = 0; i < kDefaultAvatars.length; i++)
-            TvFocusable(
-              focusNode: _nodes[i],
-              onActivate: () => widget.onSelected(i),
-              onLeft: () => _moveFocus(-1),
-              onRight: () => _moveFocus(1),
-              onUp: () => _moveFocus(-_columns),
-              onDown: _moveDown,
-              builder: (context, isFocused) => Container(
-                width: tileSize,
-                height: tileSize,
-                decoration: BoxDecoration(
-                  border: Border.all(
-                    color: isFocused ? AppTheme.primary : Colors.transparent,
-                    width: 3,
-                  ),
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                padding: const EdgeInsets.all(3),
-                child: ClipRRect(
-                  borderRadius: BorderRadius.circular(9),
-                  child: DefaultAvatarView(index: i, size: tileSize - 6),
-                ),
-              ),
-            ),
-        ],
-      ),
-    );
-  }
+  final url =
+      await showAvatarPicker(context, currentAvatarUrl: currentAvatarUrl);
+  if (url != null && url.isNotEmpty) await cubit.updateAvatarUrl(url);
 }
 
 // Shown when the user turns the "Profilo predefinito" toggle ON while
