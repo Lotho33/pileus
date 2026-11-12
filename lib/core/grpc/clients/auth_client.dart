@@ -23,7 +23,9 @@ export '../generated/auth.pbgrpc.dart'
         LockProfileRequest,
         LockProfileResponse,
         SetProfilePinRequest,
-        SetProfilePinResponse;
+        SetProfilePinResponse,
+        GetServerInfoRequest,
+        ServerInfoResponse;
 
 // Same rationale and value as MediaGrpcClient's (see media_client.dart):
 // without a per-RPC deadline, a hung call here left the calling
@@ -55,6 +57,13 @@ class AuthGrpcClient {
   Future<AuthorizeDeviceResponse> refreshToken() =>
       _stub.refreshToken(RefreshTokenRequest(),
           options: CallOptions(timeout: _defaultRpcTimeout));
+
+  /// Where else this server answers (today: its tailnet address when the
+  /// operator turned on "Accesso da fuori casa") — see
+  /// AuthRepository.syncRemoteHost. Short deadline: best-effort at start.
+  Future<ServerInfoResponse> getServerInfo() =>
+      _stub.getServerInfo(GetServerInfoRequest(),
+          options: CallOptions(timeout: const Duration(seconds: 8)));
 
   Future<ProfileResponse> createProfile(CreateProfileRequest request) =>
       _stub.createProfile(request,

@@ -135,6 +135,31 @@ class AuthRepository {
     _interceptor.setCredentials(session.deviceJwt, '');
   }
 
+  /// Asks the server for its tailnet address (mycelium "Accesso da fuori
+  /// casa", GetServerInfo) and keeps it as [DeviceSession.vpnHost], the
+  /// candidate resolveGrpcHost already races against the LAN ones: at home
+  /// UDP discovery / the saved LAN IP win as before; away from home, with
+  /// the Tailscale app on, the tailnet address does. An empty answer means
+  /// remote access is off on the server, so a stale address is dropped.
+  ///
+  /// Best-effort, never throws: an older server (UNIMPLEMENTED), an
+  /// unreachable one or any other error leaves the stored value alone. The
+  /// web build doesn't call it — it always talks to its own page origin.
+  Future<void> syncRemoteHost() async {
+    try {
+      final info = await _client.getServerInfo();
+      final session = DeviceSession.readFrom(_prefs);
+      if (session == null) return;
+      final host = info.remoteHost.trim();
+      final next = host.isEmpty ? null : host;
+      if (session.vpnHost == next) return;
+      session.vpnHost = next;
+      await DeviceSession.writeTo(_prefs, session);
+    } catch (_) {
+      // Ignored on purpose — see above.
+    }
+  }
+
   /// Clears the auth fields (JWT/authorized flag/last active profile),
   /// preserving grpcHost/vpnHost/tlsFingerprint — a session expiring
   /// mid-use (SessionExpiredEvent) is not a "forget this server" event.

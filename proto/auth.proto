@@ -180,6 +180,26 @@ message SetProfilePinResponse {
   bool pin_protected = 2;
 }
 
+// GetServerInfo tells a paired device how else it can reach this server.
+// Paired devices only (it carries the server's tailnet address, which isn't
+// handed to anyone on the LAN who asks /pileus/info). Call it on every
+// start: the address appears when remote access is turned on and changes if
+// the node is re-created.
+message GetServerInfoRequest {}
+message ServerInfoResponse {
+  // Address on the operator's tailnet (the Tailscale IPv4: it works with
+  // MagicDNS off too): mycelium's own node, or a Tailscale already running on
+  // the machine; "" when there is neither. The device reaches it only while
+  // its own Tailscale app is on; it serves the same gRPC port, HTTP port and
+  // pinned TLS certificate as the LAN.
+  string remote_host      = 1;
+  int32  remote_grpc_port = 2;
+  int32  remote_http_port = 3;
+  // The node's MagicDNS name, e.g. "mycelium.tail1234.ts.net" ("" as above).
+  // Informational: native clients dial remote_host.
+  string remote_fqdn      = 4;
+}
+
 service AuthService {
   rpc AuthorizeDevice       (AuthorizeDeviceRequest)       returns (AuthorizeDeviceResponse);
   rpc CreateProfile         (CreateProfileRequest)         returns (ProfileResponse);
@@ -194,4 +214,5 @@ service AuthService {
   rpc UnlockProfile         (UnlockProfileRequest)         returns (UnlockProfileResponse);
   rpc LockProfile           (LockProfileRequest)           returns (LockProfileResponse);
   rpc SetProfilePin         (SetProfilePinRequest)         returns (SetProfilePinResponse);
+  rpc GetServerInfo         (GetServerInfoRequest)         returns (ServerInfoResponse);
 }

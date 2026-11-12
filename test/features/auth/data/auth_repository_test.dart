@@ -1,6 +1,6 @@
 import 'package:fixnum/fixnum.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:grpc/grpc.dart' show ClientChannel;
+import 'package:grpc/grpc.dart' show ClientChannel, GrpcError;
 import 'package:pileus/core/db/models/device_session.dart';
 import 'package:pileus/core/grpc/auth_interceptor.dart';
 import 'package:pileus/core/grpc/clients/auth_client.dart';
@@ -16,6 +16,17 @@ class _ScriptedAuthGrpcClient extends AuthGrpcClient {
   _ScriptedAuthGrpcClient(super.channel, super.interceptor);
 
   final List<String> deviceIdsSent = [];
+
+  // GetServerInfo: the answer to return, or the error to throw.
+  ServerInfoResponse serverInfo = ServerInfoResponse();
+  Object? serverInfoError;
+
+  @override
+  Future<ServerInfoResponse> getServerInfo() async {
+    final err = serverInfoError;
+    if (err != null) throw err;
+    return serverInfo;
+  }
 
   @override
   Future<AuthorizeDeviceResponse> authorizeDevice(
@@ -98,6 +109,40 @@ void main() {
 
       await repo.authorizeDevice('NEWCODE');
       expect(client.deviceIdsSent, ['stable-device-id']);
+    });
+  });
+
+  group('AuthRepository.syncRemoteHost — tailnet address', () {
+    Future<void> seed({String? vpnHost}) => DeviceSession.writeTo(
+        prefs,
+        DeviceSession()
+          ..deviceId = 'dev'
+          ..grpcHost = '192.168.1.10'
+          ..vpnHost = vpnHost);
+
+    test('stores the server\'s tailnet address as vpnHost', () async {
+      await seed();
+      client.serverInfo = ServerInfoResponse(
+          remoteHost: '100.101.102.103', remoteGrpcPort: 50051);
+      await repo.syncRemoteHost();
+      final s = DeviceSession.readFrom(prefs)!;
+      expect(s.vpnHost, '100.101.102.103');
+      expect(s.grpcHost, '192.168.1.10', reason: 'LAN host untouched');
+    });
+
+    test('remote access turned off on the server drops the old address',
+        () async {
+      await seed(vpnHost: '100.101.102.103');
+      client.serverInfo = ServerInfoResponse();
+      await repo.syncRemoteHost();
+      expect(DeviceSession.readFrom(prefs)!.vpnHost, isNull);
+    });
+
+    test('an older server or an unreachable one leaves it alone', () async {
+      await seed(vpnHost: '100.101.102.103');
+      client.serverInfoError = const GrpcError.unimplemented('GetServerInfo');
+      await repo.syncRemoteHost();
+      expect(DeviceSession.readFrom(prefs)!.vpnHost, '100.101.102.103');
     });
   });
 }

@@ -81,6 +81,13 @@ class AuthServiceClient extends $grpc.Client {
     return $createUnaryCall(_$refreshToken, request, options: options);
   }
 
+  $grpc.ResponseFuture<$0.UnpairSelfResponse> unpairSelf(
+    $0.UnpairSelfRequest request, {
+    $grpc.CallOptions? options,
+  }) {
+    return $createUnaryCall(_$unpairSelf, request, options: options);
+  }
+
   $grpc.ResponseFuture<$0.ListDevicesResponse> listDevices(
     $0.ListDevicesRequest request, {
     $grpc.CallOptions? options,
@@ -93,13 +100,6 @@ class AuthServiceClient extends $grpc.Client {
     $grpc.CallOptions? options,
   }) {
     return $createUnaryCall(_$renameDevice, request, options: options);
-  }
-
-  $grpc.ResponseFuture<$0.UnpairSelfResponse> unpairSelf(
-    $0.UnpairSelfRequest request, {
-    $grpc.CallOptions? options,
-  }) {
-    return $createUnaryCall(_$unpairSelf, request, options: options);
   }
 
   $grpc.ResponseFuture<$0.UnlockProfileResponse> unlockProfile(
@@ -121,6 +121,13 @@ class AuthServiceClient extends $grpc.Client {
     $grpc.CallOptions? options,
   }) {
     return $createUnaryCall(_$setProfilePin, request, options: options);
+  }
+
+  $grpc.ResponseFuture<$0.ServerInfoResponse> getServerInfo(
+    $0.GetServerInfoRequest request, {
+    $grpc.CallOptions? options,
+  }) {
+    return $createUnaryCall(_$getServerInfo, request, options: options);
   }
 
   // method descriptors
@@ -160,6 +167,11 @@ class AuthServiceClient extends $grpc.Client {
           '/mycelium.AuthService/RefreshToken',
           ($0.RefreshTokenRequest value) => value.writeToBuffer(),
           $0.AuthorizeDeviceResponse.fromBuffer);
+  static final _$unpairSelf =
+      $grpc.ClientMethod<$0.UnpairSelfRequest, $0.UnpairSelfResponse>(
+          '/mycelium.AuthService/UnpairSelf',
+          ($0.UnpairSelfRequest value) => value.writeToBuffer(),
+          $0.UnpairSelfResponse.fromBuffer);
   static final _$listDevices =
       $grpc.ClientMethod<$0.ListDevicesRequest, $0.ListDevicesResponse>(
           '/mycelium.AuthService/ListDevices',
@@ -170,11 +182,6 @@ class AuthServiceClient extends $grpc.Client {
           '/mycelium.AuthService/RenameDevice',
           ($0.RenameDeviceRequest value) => value.writeToBuffer(),
           $0.RenameDeviceResponse.fromBuffer);
-  static final _$unpairSelf =
-      $grpc.ClientMethod<$0.UnpairSelfRequest, $0.UnpairSelfResponse>(
-          '/mycelium.AuthService/UnpairSelf',
-          ($0.UnpairSelfRequest value) => value.writeToBuffer(),
-          $0.UnpairSelfResponse.fromBuffer);
   static final _$unlockProfile =
       $grpc.ClientMethod<$0.UnlockProfileRequest, $0.UnlockProfileResponse>(
           '/mycelium.AuthService/UnlockProfile',
@@ -190,6 +197,11 @@ class AuthServiceClient extends $grpc.Client {
           '/mycelium.AuthService/SetProfilePin',
           ($0.SetProfilePinRequest value) => value.writeToBuffer(),
           $0.SetProfilePinResponse.fromBuffer);
+  static final _$getServerInfo =
+      $grpc.ClientMethod<$0.GetServerInfoRequest, $0.ServerInfoResponse>(
+          '/mycelium.AuthService/GetServerInfo',
+          ($0.GetServerInfoRequest value) => value.writeToBuffer(),
+          $0.ServerInfoResponse.fromBuffer);
 }
 
 @$pb.GrpcServiceName('mycelium.AuthService')
@@ -258,6 +270,13 @@ abstract class AuthServiceBase extends $grpc.Service {
             ($core.List<$core.int> value) =>
                 $0.RefreshTokenRequest.fromBuffer(value),
             ($0.AuthorizeDeviceResponse value) => value.writeToBuffer()));
+    $addMethod($grpc.ServiceMethod<$0.UnpairSelfRequest, $0.UnpairSelfResponse>(
+        'UnpairSelf',
+        unpairSelf_Pre,
+        false,
+        false,
+        ($core.List<$core.int> value) => $0.UnpairSelfRequest.fromBuffer(value),
+        ($0.UnpairSelfResponse value) => value.writeToBuffer()));
     $addMethod(
         $grpc.ServiceMethod<$0.ListDevicesRequest, $0.ListDevicesResponse>(
             'ListDevices',
@@ -276,22 +295,15 @@ abstract class AuthServiceBase extends $grpc.Service {
             ($core.List<$core.int> value) =>
                 $0.RenameDeviceRequest.fromBuffer(value),
             ($0.RenameDeviceResponse value) => value.writeToBuffer()));
-    $addMethod($grpc.ServiceMethod<$0.UnpairSelfRequest, $0.UnpairSelfResponse>(
-        'UnpairSelf',
-        unpairSelf_Pre,
-        false,
-        false,
-        ($core.List<$core.int> value) => $0.UnpairSelfRequest.fromBuffer(value),
-        ($0.UnpairSelfResponse value) => value.writeToBuffer()));
-    $addMethod($grpc.ServiceMethod<$0.UnlockProfileRequest,
-            $0.UnlockProfileResponse>(
-        'UnlockProfile',
-        unlockProfile_Pre,
-        false,
-        false,
-        ($core.List<$core.int> value) =>
-            $0.UnlockProfileRequest.fromBuffer(value),
-        ($0.UnlockProfileResponse value) => value.writeToBuffer()));
+    $addMethod(
+        $grpc.ServiceMethod<$0.UnlockProfileRequest, $0.UnlockProfileResponse>(
+            'UnlockProfile',
+            unlockProfile_Pre,
+            false,
+            false,
+            ($core.List<$core.int> value) =>
+                $0.UnlockProfileRequest.fromBuffer(value),
+            ($0.UnlockProfileResponse value) => value.writeToBuffer()));
     $addMethod(
         $grpc.ServiceMethod<$0.LockProfileRequest, $0.LockProfileResponse>(
             'LockProfile',
@@ -301,15 +313,24 @@ abstract class AuthServiceBase extends $grpc.Service {
             ($core.List<$core.int> value) =>
                 $0.LockProfileRequest.fromBuffer(value),
             ($0.LockProfileResponse value) => value.writeToBuffer()));
-    $addMethod($grpc.ServiceMethod<$0.SetProfilePinRequest,
-            $0.SetProfilePinResponse>(
-        'SetProfilePin',
-        setProfilePin_Pre,
-        false,
-        false,
-        ($core.List<$core.int> value) =>
-            $0.SetProfilePinRequest.fromBuffer(value),
-        ($0.SetProfilePinResponse value) => value.writeToBuffer()));
+    $addMethod(
+        $grpc.ServiceMethod<$0.SetProfilePinRequest, $0.SetProfilePinResponse>(
+            'SetProfilePin',
+            setProfilePin_Pre,
+            false,
+            false,
+            ($core.List<$core.int> value) =>
+                $0.SetProfilePinRequest.fromBuffer(value),
+            ($0.SetProfilePinResponse value) => value.writeToBuffer()));
+    $addMethod(
+        $grpc.ServiceMethod<$0.GetServerInfoRequest, $0.ServerInfoResponse>(
+            'GetServerInfo',
+            getServerInfo_Pre,
+            false,
+            false,
+            ($core.List<$core.int> value) =>
+                $0.GetServerInfoRequest.fromBuffer(value),
+            ($0.ServerInfoResponse value) => value.writeToBuffer()));
   }
 
   $async.Future<$0.AuthorizeDeviceResponse> authorizeDevice_Pre(
@@ -373,6 +394,14 @@ abstract class AuthServiceBase extends $grpc.Service {
   $async.Future<$0.AuthorizeDeviceResponse> refreshToken(
       $grpc.ServiceCall call, $0.RefreshTokenRequest request);
 
+  $async.Future<$0.UnpairSelfResponse> unpairSelf_Pre($grpc.ServiceCall $call,
+      $async.Future<$0.UnpairSelfRequest> $request) async {
+    return unpairSelf($call, await $request);
+  }
+
+  $async.Future<$0.UnpairSelfResponse> unpairSelf(
+      $grpc.ServiceCall call, $0.UnpairSelfRequest request);
+
   $async.Future<$0.ListDevicesResponse> listDevices_Pre($grpc.ServiceCall $call,
       $async.Future<$0.ListDevicesRequest> $request) async {
     return listDevices($call, await $request);
@@ -389,14 +418,6 @@ abstract class AuthServiceBase extends $grpc.Service {
 
   $async.Future<$0.RenameDeviceResponse> renameDevice(
       $grpc.ServiceCall call, $0.RenameDeviceRequest request);
-
-  $async.Future<$0.UnpairSelfResponse> unpairSelf_Pre($grpc.ServiceCall $call,
-      $async.Future<$0.UnpairSelfRequest> $request) async {
-    return unpairSelf($call, await $request);
-  }
-
-  $async.Future<$0.UnpairSelfResponse> unpairSelf(
-      $grpc.ServiceCall call, $0.UnpairSelfRequest request);
 
   $async.Future<$0.UnlockProfileResponse> unlockProfile_Pre(
       $grpc.ServiceCall $call,
@@ -423,4 +444,13 @@ abstract class AuthServiceBase extends $grpc.Service {
 
   $async.Future<$0.SetProfilePinResponse> setProfilePin(
       $grpc.ServiceCall call, $0.SetProfilePinRequest request);
+
+  $async.Future<$0.ServerInfoResponse> getServerInfo_Pre(
+      $grpc.ServiceCall $call,
+      $async.Future<$0.GetServerInfoRequest> $request) async {
+    return getServerInfo($call, await $request);
+  }
+
+  $async.Future<$0.ServerInfoResponse> getServerInfo(
+      $grpc.ServiceCall call, $0.GetServerInfoRequest request);
 }

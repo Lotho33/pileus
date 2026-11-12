@@ -22,7 +22,7 @@ class AuthorizeDeviceRequest extends $pb.GeneratedMessage {
     $core.String? deviceId,
     $core.String? pinHash,
   }) {
-    final result = create();
+    final result = AuthorizeDeviceRequest._();
     if (deviceId != null) result.deviceId = deviceId;
     if (pinHash != null) result.pinHash = pinHash;
     return result;
@@ -32,15 +32,15 @@ class AuthorizeDeviceRequest extends $pb.GeneratedMessage {
 
   factory AuthorizeDeviceRequest.fromBuffer($core.List<$core.int> data,
           [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
-      create()..mergeFromBuffer(data, registry);
+      AuthorizeDeviceRequest()..mergeFromBuffer(data, registry);
   factory AuthorizeDeviceRequest.fromJson($core.String json,
           [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
-      create()..mergeFromJson(json, registry);
+      AuthorizeDeviceRequest()..mergeFromJson(json, registry);
 
   static final $pb.BuilderInfo _i = $pb.BuilderInfo(
       _omitMessageNames ? '' : 'AuthorizeDeviceRequest',
       package: const $pb.PackageName(_omitMessageNames ? '' : 'mycelium'),
-      createEmptyInstance: create)
+      createEmptyInstance: AuthorizeDeviceRequest.$_createMessage)
     ..aOS(1, _omitFieldNames ? '' : 'deviceId')
     ..aOS(2, _omitFieldNames ? '' : 'pinHash')
     ..hasRequiredFields = false;
@@ -57,12 +57,16 @@ class AuthorizeDeviceRequest extends $pb.GeneratedMessage {
   $pb.BuilderInfo get info_ => _i;
 
   @$core.pragma('dart2js:noInline')
+  @$core.Deprecated(
+      'Use AuthorizeDeviceRequest() / AuthorizeDeviceRequest.new instead')
   static AuthorizeDeviceRequest create() => AuthorizeDeviceRequest._();
+  static $pb.GeneratedMessage $_createMessage() => AuthorizeDeviceRequest._();
   @$core.override
-  AuthorizeDeviceRequest createEmptyInstance() => create();
+  AuthorizeDeviceRequest createEmptyInstance() => AuthorizeDeviceRequest._();
   @$core.pragma('dart2js:noInline')
   static AuthorizeDeviceRequest getDefault() => _defaultInstance ??=
-      $pb.GeneratedMessage.$_defaultFor<AuthorizeDeviceRequest>(create);
+      $pb.GeneratedMessage.$_defaultFor<AuthorizeDeviceRequest>(
+          AuthorizeDeviceRequest.$_createMessage);
   static AuthorizeDeviceRequest? _defaultInstance;
 
   @$pb.TagNumber(1)
@@ -89,7 +93,7 @@ class AuthorizeDeviceResponse extends $pb.GeneratedMessage {
     $core.String? deviceJwt,
     $fixnum.Int64? expiresAt,
   }) {
-    final result = create();
+    final result = AuthorizeDeviceResponse._();
     if (deviceJwt != null) result.deviceJwt = deviceJwt;
     if (expiresAt != null) result.expiresAt = expiresAt;
     return result;
@@ -99,15 +103,15 @@ class AuthorizeDeviceResponse extends $pb.GeneratedMessage {
 
   factory AuthorizeDeviceResponse.fromBuffer($core.List<$core.int> data,
           [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
-      create()..mergeFromBuffer(data, registry);
+      AuthorizeDeviceResponse()..mergeFromBuffer(data, registry);
   factory AuthorizeDeviceResponse.fromJson($core.String json,
           [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
-      create()..mergeFromJson(json, registry);
+      AuthorizeDeviceResponse()..mergeFromJson(json, registry);
 
   static final $pb.BuilderInfo _i = $pb.BuilderInfo(
       _omitMessageNames ? '' : 'AuthorizeDeviceResponse',
       package: const $pb.PackageName(_omitMessageNames ? '' : 'mycelium'),
-      createEmptyInstance: create)
+      createEmptyInstance: AuthorizeDeviceResponse.$_createMessage)
     ..aOS(1, _omitFieldNames ? '' : 'deviceJwt')
     ..aInt64(2, _omitFieldNames ? '' : 'expiresAt')
     ..hasRequiredFields = false;
@@ -124,12 +128,16 @@ class AuthorizeDeviceResponse extends $pb.GeneratedMessage {
   $pb.BuilderInfo get info_ => _i;
 
   @$core.pragma('dart2js:noInline')
+  @$core.Deprecated(
+      'Use AuthorizeDeviceResponse() / AuthorizeDeviceResponse.new instead')
   static AuthorizeDeviceResponse create() => AuthorizeDeviceResponse._();
+  static $pb.GeneratedMessage $_createMessage() => AuthorizeDeviceResponse._();
   @$core.override
-  AuthorizeDeviceResponse createEmptyInstance() => create();
+  AuthorizeDeviceResponse createEmptyInstance() => AuthorizeDeviceResponse._();
   @$core.pragma('dart2js:noInline')
   static AuthorizeDeviceResponse getDefault() => _defaultInstance ??=
-      $pb.GeneratedMessage.$_defaultFor<AuthorizeDeviceResponse>(create);
+      $pb.GeneratedMessage.$_defaultFor<AuthorizeDeviceResponse>(
+          AuthorizeDeviceResponse.$_createMessage);
   static AuthorizeDeviceResponse? _defaultInstance;
 
   @$pb.TagNumber(1)
@@ -157,7 +165,7 @@ class CreateProfileRequest extends $pb.GeneratedMessage {
     $core.String? avatarUrl,
     $core.String? preferencesJson,
   }) {
-    final result = create();
+    final result = CreateProfileRequest._();
     if (name != null) result.name = name;
     if (avatarUrl != null) result.avatarUrl = avatarUrl;
     if (preferencesJson != null) result.preferencesJson = preferencesJson;
@@ -168,15 +176,15 @@ class CreateProfileRequest extends $pb.GeneratedMessage {
 
   factory CreateProfileRequest.fromBuffer($core.List<$core.int> data,
           [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
-      create()..mergeFromBuffer(data, registry);
+      CreateProfileRequest()..mergeFromBuffer(data, registry);
   factory CreateProfileRequest.fromJson($core.String json,
           [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
-      create()..mergeFromJson(json, registry);
+      CreateProfileRequest()..mergeFromJson(json, registry);
 
   static final $pb.BuilderInfo _i = $pb.BuilderInfo(
       _omitMessageNames ? '' : 'CreateProfileRequest',
       package: const $pb.PackageName(_omitMessageNames ? '' : 'mycelium'),
-      createEmptyInstance: create)
+      createEmptyInstance: CreateProfileRequest.$_createMessage)
     ..aOS(1, _omitFieldNames ? '' : 'name')
     ..aOS(2, _omitFieldNames ? '' : 'avatarUrl')
     ..aOS(5, _omitFieldNames ? '' : 'preferencesJson')
@@ -193,12 +201,16 @@ class CreateProfileRequest extends $pb.GeneratedMessage {
   $pb.BuilderInfo get info_ => _i;
 
   @$core.pragma('dart2js:noInline')
+  @$core.Deprecated(
+      'Use CreateProfileRequest() / CreateProfileRequest.new instead')
   static CreateProfileRequest create() => CreateProfileRequest._();
+  static $pb.GeneratedMessage $_createMessage() => CreateProfileRequest._();
   @$core.override
-  CreateProfileRequest createEmptyInstance() => create();
+  CreateProfileRequest createEmptyInstance() => CreateProfileRequest._();
   @$core.pragma('dart2js:noInline')
   static CreateProfileRequest getDefault() => _defaultInstance ??=
-      $pb.GeneratedMessage.$_defaultFor<CreateProfileRequest>(create);
+      $pb.GeneratedMessage.$_defaultFor<CreateProfileRequest>(
+          CreateProfileRequest.$_createMessage);
   static CreateProfileRequest? _defaultInstance;
 
   @$pb.TagNumber(1)
@@ -219,8 +231,8 @@ class CreateProfileRequest extends $pb.GeneratedMessage {
   @$pb.TagNumber(2)
   void clearAvatarUrl() => $_clearField(2);
 
-  /// Opaque JSON blob of person-scoped client preferences (subtitle
-  /// appearance). Optional; server stores "{}" when empty.
+  /// Opaque JSON blob of person-scoped client preferences (subtitle style, …).
+  /// Optional; the server stores "{}" when empty and never parses the contents.
   @$pb.TagNumber(5)
   $core.String get preferencesJson => $_getSZ(2);
   @$pb.TagNumber(5)
@@ -241,7 +253,7 @@ class ProfileResponse extends $pb.GeneratedMessage {
     $core.bool? unlocked,
     $core.bool? deviceTrusted,
   }) {
-    final result = create();
+    final result = ProfileResponse._();
     if (profileId != null) result.profileId = profileId;
     if (name != null) result.name = name;
     if (avatarUrl != null) result.avatarUrl = avatarUrl;
@@ -256,15 +268,15 @@ class ProfileResponse extends $pb.GeneratedMessage {
 
   factory ProfileResponse.fromBuffer($core.List<$core.int> data,
           [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
-      create()..mergeFromBuffer(data, registry);
+      ProfileResponse()..mergeFromBuffer(data, registry);
   factory ProfileResponse.fromJson($core.String json,
           [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
-      create()..mergeFromJson(json, registry);
+      ProfileResponse()..mergeFromJson(json, registry);
 
   static final $pb.BuilderInfo _i = $pb.BuilderInfo(
       _omitMessageNames ? '' : 'ProfileResponse',
       package: const $pb.PackageName(_omitMessageNames ? '' : 'mycelium'),
-      createEmptyInstance: create)
+      createEmptyInstance: ProfileResponse.$_createMessage)
     ..aOS(1, _omitFieldNames ? '' : 'profileId')
     ..aOS(2, _omitFieldNames ? '' : 'name')
     ..aOS(3, _omitFieldNames ? '' : 'avatarUrl')
@@ -285,12 +297,15 @@ class ProfileResponse extends $pb.GeneratedMessage {
   $pb.BuilderInfo get info_ => _i;
 
   @$core.pragma('dart2js:noInline')
+  @$core.Deprecated('Use ProfileResponse() / ProfileResponse.new instead')
   static ProfileResponse create() => ProfileResponse._();
+  static $pb.GeneratedMessage $_createMessage() => ProfileResponse._();
   @$core.override
-  ProfileResponse createEmptyInstance() => create();
+  ProfileResponse createEmptyInstance() => ProfileResponse._();
   @$core.pragma('dart2js:noInline')
-  static ProfileResponse getDefault() => _defaultInstance ??=
-      $pb.GeneratedMessage.$_defaultFor<ProfileResponse>(create);
+  static ProfileResponse getDefault() =>
+      _defaultInstance ??= $pb.GeneratedMessage.$_defaultFor<ProfileResponse>(
+          ProfileResponse.$_createMessage);
   static ProfileResponse? _defaultInstance;
 
   @$pb.TagNumber(1)
@@ -320,9 +335,9 @@ class ProfileResponse extends $pb.GeneratedMessage {
   @$pb.TagNumber(3)
   void clearAvatarUrl() => $_clearField(3);
 
-  /// Opaque JSON blob of person-scoped client preferences. The client owns
-  /// the schema; the server only stores and echoes it. Profiles are
-  /// server-wide, so this follows the person across every paired device.
+  /// Opaque JSON blob of person-scoped client preferences. The client owns the
+  /// schema; the server only stores and echoes it. Profiles are server-wide,
+  /// so this follows the person across every paired device.
   @$pb.TagNumber(6)
   $core.String get preferencesJson => $_getSZ(3);
   @$pb.TagNumber(6)
@@ -368,21 +383,21 @@ class ProfileResponse extends $pb.GeneratedMessage {
 }
 
 class ListProfilesRequest extends $pb.GeneratedMessage {
-  factory ListProfilesRequest() => create();
+  factory ListProfilesRequest() => ListProfilesRequest._();
 
   ListProfilesRequest._();
 
   factory ListProfilesRequest.fromBuffer($core.List<$core.int> data,
           [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
-      create()..mergeFromBuffer(data, registry);
+      ListProfilesRequest()..mergeFromBuffer(data, registry);
   factory ListProfilesRequest.fromJson($core.String json,
           [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
-      create()..mergeFromJson(json, registry);
+      ListProfilesRequest()..mergeFromJson(json, registry);
 
   static final $pb.BuilderInfo _i = $pb.BuilderInfo(
       _omitMessageNames ? '' : 'ListProfilesRequest',
       package: const $pb.PackageName(_omitMessageNames ? '' : 'mycelium'),
-      createEmptyInstance: create)
+      createEmptyInstance: ListProfilesRequest.$_createMessage)
     ..hasRequiredFields = false;
 
   @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
@@ -396,12 +411,16 @@ class ListProfilesRequest extends $pb.GeneratedMessage {
   $pb.BuilderInfo get info_ => _i;
 
   @$core.pragma('dart2js:noInline')
+  @$core
+      .Deprecated('Use ListProfilesRequest() / ListProfilesRequest.new instead')
   static ListProfilesRequest create() => ListProfilesRequest._();
+  static $pb.GeneratedMessage $_createMessage() => ListProfilesRequest._();
   @$core.override
-  ListProfilesRequest createEmptyInstance() => create();
+  ListProfilesRequest createEmptyInstance() => ListProfilesRequest._();
   @$core.pragma('dart2js:noInline')
   static ListProfilesRequest getDefault() => _defaultInstance ??=
-      $pb.GeneratedMessage.$_defaultFor<ListProfilesRequest>(create);
+      $pb.GeneratedMessage.$_defaultFor<ListProfilesRequest>(
+          ListProfilesRequest.$_createMessage);
   static ListProfilesRequest? _defaultInstance;
 }
 
@@ -409,7 +428,7 @@ class ListProfilesResponse extends $pb.GeneratedMessage {
   factory ListProfilesResponse({
     $core.Iterable<ProfileResponse>? profiles,
   }) {
-    final result = create();
+    final result = ListProfilesResponse._();
     if (profiles != null) result.profiles.addAll(profiles);
     return result;
   }
@@ -418,17 +437,17 @@ class ListProfilesResponse extends $pb.GeneratedMessage {
 
   factory ListProfilesResponse.fromBuffer($core.List<$core.int> data,
           [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
-      create()..mergeFromBuffer(data, registry);
+      ListProfilesResponse()..mergeFromBuffer(data, registry);
   factory ListProfilesResponse.fromJson($core.String json,
           [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
-      create()..mergeFromJson(json, registry);
+      ListProfilesResponse()..mergeFromJson(json, registry);
 
   static final $pb.BuilderInfo _i = $pb.BuilderInfo(
       _omitMessageNames ? '' : 'ListProfilesResponse',
       package: const $pb.PackageName(_omitMessageNames ? '' : 'mycelium'),
-      createEmptyInstance: create)
+      createEmptyInstance: ListProfilesResponse.$_createMessage)
     ..pPM<ProfileResponse>(1, _omitFieldNames ? '' : 'profiles',
-        subBuilder: ProfileResponse.create)
+        subBuilder: ProfileResponse.$_createMessage)
     ..hasRequiredFields = false;
 
   @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
@@ -442,12 +461,16 @@ class ListProfilesResponse extends $pb.GeneratedMessage {
   $pb.BuilderInfo get info_ => _i;
 
   @$core.pragma('dart2js:noInline')
+  @$core.Deprecated(
+      'Use ListProfilesResponse() / ListProfilesResponse.new instead')
   static ListProfilesResponse create() => ListProfilesResponse._();
+  static $pb.GeneratedMessage $_createMessage() => ListProfilesResponse._();
   @$core.override
-  ListProfilesResponse createEmptyInstance() => create();
+  ListProfilesResponse createEmptyInstance() => ListProfilesResponse._();
   @$core.pragma('dart2js:noInline')
   static ListProfilesResponse getDefault() => _defaultInstance ??=
-      $pb.GeneratedMessage.$_defaultFor<ListProfilesResponse>(create);
+      $pb.GeneratedMessage.$_defaultFor<ListProfilesResponse>(
+          ListProfilesResponse.$_createMessage);
   static ListProfilesResponse? _defaultInstance;
 
   @$pb.TagNumber(1)
@@ -458,7 +481,7 @@ class DeleteProfileRequest extends $pb.GeneratedMessage {
   factory DeleteProfileRequest({
     $core.String? profileId,
   }) {
-    final result = create();
+    final result = DeleteProfileRequest._();
     if (profileId != null) result.profileId = profileId;
     return result;
   }
@@ -467,15 +490,15 @@ class DeleteProfileRequest extends $pb.GeneratedMessage {
 
   factory DeleteProfileRequest.fromBuffer($core.List<$core.int> data,
           [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
-      create()..mergeFromBuffer(data, registry);
+      DeleteProfileRequest()..mergeFromBuffer(data, registry);
   factory DeleteProfileRequest.fromJson($core.String json,
           [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
-      create()..mergeFromJson(json, registry);
+      DeleteProfileRequest()..mergeFromJson(json, registry);
 
   static final $pb.BuilderInfo _i = $pb.BuilderInfo(
       _omitMessageNames ? '' : 'DeleteProfileRequest',
       package: const $pb.PackageName(_omitMessageNames ? '' : 'mycelium'),
-      createEmptyInstance: create)
+      createEmptyInstance: DeleteProfileRequest.$_createMessage)
     ..aOS(1, _omitFieldNames ? '' : 'profileId')
     ..hasRequiredFields = false;
 
@@ -490,12 +513,16 @@ class DeleteProfileRequest extends $pb.GeneratedMessage {
   $pb.BuilderInfo get info_ => _i;
 
   @$core.pragma('dart2js:noInline')
+  @$core.Deprecated(
+      'Use DeleteProfileRequest() / DeleteProfileRequest.new instead')
   static DeleteProfileRequest create() => DeleteProfileRequest._();
+  static $pb.GeneratedMessage $_createMessage() => DeleteProfileRequest._();
   @$core.override
-  DeleteProfileRequest createEmptyInstance() => create();
+  DeleteProfileRequest createEmptyInstance() => DeleteProfileRequest._();
   @$core.pragma('dart2js:noInline')
   static DeleteProfileRequest getDefault() => _defaultInstance ??=
-      $pb.GeneratedMessage.$_defaultFor<DeleteProfileRequest>(create);
+      $pb.GeneratedMessage.$_defaultFor<DeleteProfileRequest>(
+          DeleteProfileRequest.$_createMessage);
   static DeleteProfileRequest? _defaultInstance;
 
   @$pb.TagNumber(1)
@@ -512,7 +539,7 @@ class DeleteProfileResponse extends $pb.GeneratedMessage {
   factory DeleteProfileResponse({
     $core.bool? ok,
   }) {
-    final result = create();
+    final result = DeleteProfileResponse._();
     if (ok != null) result.ok = ok;
     return result;
   }
@@ -521,15 +548,15 @@ class DeleteProfileResponse extends $pb.GeneratedMessage {
 
   factory DeleteProfileResponse.fromBuffer($core.List<$core.int> data,
           [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
-      create()..mergeFromBuffer(data, registry);
+      DeleteProfileResponse()..mergeFromBuffer(data, registry);
   factory DeleteProfileResponse.fromJson($core.String json,
           [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
-      create()..mergeFromJson(json, registry);
+      DeleteProfileResponse()..mergeFromJson(json, registry);
 
   static final $pb.BuilderInfo _i = $pb.BuilderInfo(
       _omitMessageNames ? '' : 'DeleteProfileResponse',
       package: const $pb.PackageName(_omitMessageNames ? '' : 'mycelium'),
-      createEmptyInstance: create)
+      createEmptyInstance: DeleteProfileResponse.$_createMessage)
     ..aOB(1, _omitFieldNames ? '' : 'ok')
     ..hasRequiredFields = false;
 
@@ -545,12 +572,16 @@ class DeleteProfileResponse extends $pb.GeneratedMessage {
   $pb.BuilderInfo get info_ => _i;
 
   @$core.pragma('dart2js:noInline')
+  @$core.Deprecated(
+      'Use DeleteProfileResponse() / DeleteProfileResponse.new instead')
   static DeleteProfileResponse create() => DeleteProfileResponse._();
+  static $pb.GeneratedMessage $_createMessage() => DeleteProfileResponse._();
   @$core.override
-  DeleteProfileResponse createEmptyInstance() => create();
+  DeleteProfileResponse createEmptyInstance() => DeleteProfileResponse._();
   @$core.pragma('dart2js:noInline')
   static DeleteProfileResponse getDefault() => _defaultInstance ??=
-      $pb.GeneratedMessage.$_defaultFor<DeleteProfileResponse>(create);
+      $pb.GeneratedMessage.$_defaultFor<DeleteProfileResponse>(
+          DeleteProfileResponse.$_createMessage);
   static DeleteProfileResponse? _defaultInstance;
 
   @$pb.TagNumber(1)
@@ -569,7 +600,7 @@ class UpdateProfileRequest extends $pb.GeneratedMessage {
     $core.String? name,
     $core.String? avatarUrl,
   }) {
-    final result = create();
+    final result = UpdateProfileRequest._();
     if (profileId != null) result.profileId = profileId;
     if (name != null) result.name = name;
     if (avatarUrl != null) result.avatarUrl = avatarUrl;
@@ -580,15 +611,15 @@ class UpdateProfileRequest extends $pb.GeneratedMessage {
 
   factory UpdateProfileRequest.fromBuffer($core.List<$core.int> data,
           [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
-      create()..mergeFromBuffer(data, registry);
+      UpdateProfileRequest()..mergeFromBuffer(data, registry);
   factory UpdateProfileRequest.fromJson($core.String json,
           [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
-      create()..mergeFromJson(json, registry);
+      UpdateProfileRequest()..mergeFromJson(json, registry);
 
   static final $pb.BuilderInfo _i = $pb.BuilderInfo(
       _omitMessageNames ? '' : 'UpdateProfileRequest',
       package: const $pb.PackageName(_omitMessageNames ? '' : 'mycelium'),
-      createEmptyInstance: create)
+      createEmptyInstance: UpdateProfileRequest.$_createMessage)
     ..aOS(1, _omitFieldNames ? '' : 'profileId')
     ..aOS(2, _omitFieldNames ? '' : 'name')
     ..aOS(3, _omitFieldNames ? '' : 'avatarUrl')
@@ -605,12 +636,16 @@ class UpdateProfileRequest extends $pb.GeneratedMessage {
   $pb.BuilderInfo get info_ => _i;
 
   @$core.pragma('dart2js:noInline')
+  @$core.Deprecated(
+      'Use UpdateProfileRequest() / UpdateProfileRequest.new instead')
   static UpdateProfileRequest create() => UpdateProfileRequest._();
+  static $pb.GeneratedMessage $_createMessage() => UpdateProfileRequest._();
   @$core.override
-  UpdateProfileRequest createEmptyInstance() => create();
+  UpdateProfileRequest createEmptyInstance() => UpdateProfileRequest._();
   @$core.pragma('dart2js:noInline')
   static UpdateProfileRequest getDefault() => _defaultInstance ??=
-      $pb.GeneratedMessage.$_defaultFor<UpdateProfileRequest>(create);
+      $pb.GeneratedMessage.$_defaultFor<UpdateProfileRequest>(
+          UpdateProfileRequest.$_createMessage);
   static UpdateProfileRequest? _defaultInstance;
 
   @$pb.TagNumber(1)
@@ -643,13 +678,13 @@ class UpdateProfileRequest extends $pb.GeneratedMessage {
 
 /// SetProfilePreferences replaces only the preferences blob — a separate call
 /// so the client doesn't have to round-trip name/avatar just to save a
-/// subtitle setting. preferences_json is stored verbatim ("{}" to clear).
+/// setting. preferences_json is stored verbatim ("{}" to clear).
 class SetProfilePreferencesRequest extends $pb.GeneratedMessage {
   factory SetProfilePreferencesRequest({
     $core.String? profileId,
     $core.String? preferencesJson,
   }) {
-    final result = create();
+    final result = SetProfilePreferencesRequest._();
     if (profileId != null) result.profileId = profileId;
     if (preferencesJson != null) result.preferencesJson = preferencesJson;
     return result;
@@ -659,15 +694,15 @@ class SetProfilePreferencesRequest extends $pb.GeneratedMessage {
 
   factory SetProfilePreferencesRequest.fromBuffer($core.List<$core.int> data,
           [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
-      create()..mergeFromBuffer(data, registry);
+      SetProfilePreferencesRequest()..mergeFromBuffer(data, registry);
   factory SetProfilePreferencesRequest.fromJson($core.String json,
           [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
-      create()..mergeFromJson(json, registry);
+      SetProfilePreferencesRequest()..mergeFromJson(json, registry);
 
   static final $pb.BuilderInfo _i = $pb.BuilderInfo(
       _omitMessageNames ? '' : 'SetProfilePreferencesRequest',
       package: const $pb.PackageName(_omitMessageNames ? '' : 'mycelium'),
-      createEmptyInstance: create)
+      createEmptyInstance: SetProfilePreferencesRequest.$_createMessage)
     ..aOS(1, _omitFieldNames ? '' : 'profileId')
     ..aOS(2, _omitFieldNames ? '' : 'preferencesJson')
     ..hasRequiredFields = false;
@@ -685,13 +720,19 @@ class SetProfilePreferencesRequest extends $pb.GeneratedMessage {
   $pb.BuilderInfo get info_ => _i;
 
   @$core.pragma('dart2js:noInline')
+  @$core.Deprecated(
+      'Use SetProfilePreferencesRequest() / SetProfilePreferencesRequest.new instead')
   static SetProfilePreferencesRequest create() =>
       SetProfilePreferencesRequest._();
+  static $pb.GeneratedMessage $_createMessage() =>
+      SetProfilePreferencesRequest._();
   @$core.override
-  SetProfilePreferencesRequest createEmptyInstance() => create();
+  SetProfilePreferencesRequest createEmptyInstance() =>
+      SetProfilePreferencesRequest._();
   @$core.pragma('dart2js:noInline')
   static SetProfilePreferencesRequest getDefault() => _defaultInstance ??=
-      $pb.GeneratedMessage.$_defaultFor<SetProfilePreferencesRequest>(create);
+      $pb.GeneratedMessage.$_defaultFor<SetProfilePreferencesRequest>(
+          SetProfilePreferencesRequest.$_createMessage);
   static SetProfilePreferencesRequest? _defaultInstance;
 
   @$pb.TagNumber(1)
@@ -714,21 +755,21 @@ class SetProfilePreferencesRequest extends $pb.GeneratedMessage {
 }
 
 class RefreshTokenRequest extends $pb.GeneratedMessage {
-  factory RefreshTokenRequest() => create();
+  factory RefreshTokenRequest() => RefreshTokenRequest._();
 
   RefreshTokenRequest._();
 
   factory RefreshTokenRequest.fromBuffer($core.List<$core.int> data,
           [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
-      create()..mergeFromBuffer(data, registry);
+      RefreshTokenRequest()..mergeFromBuffer(data, registry);
   factory RefreshTokenRequest.fromJson($core.String json,
           [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
-      create()..mergeFromJson(json, registry);
+      RefreshTokenRequest()..mergeFromJson(json, registry);
 
   static final $pb.BuilderInfo _i = $pb.BuilderInfo(
       _omitMessageNames ? '' : 'RefreshTokenRequest',
       package: const $pb.PackageName(_omitMessageNames ? '' : 'mycelium'),
-      createEmptyInstance: create)
+      createEmptyInstance: RefreshTokenRequest.$_createMessage)
     ..hasRequiredFields = false;
 
   @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
@@ -742,12 +783,16 @@ class RefreshTokenRequest extends $pb.GeneratedMessage {
   $pb.BuilderInfo get info_ => _i;
 
   @$core.pragma('dart2js:noInline')
+  @$core
+      .Deprecated('Use RefreshTokenRequest() / RefreshTokenRequest.new instead')
   static RefreshTokenRequest create() => RefreshTokenRequest._();
+  static $pb.GeneratedMessage $_createMessage() => RefreshTokenRequest._();
   @$core.override
-  RefreshTokenRequest createEmptyInstance() => create();
+  RefreshTokenRequest createEmptyInstance() => RefreshTokenRequest._();
   @$core.pragma('dart2js:noInline')
   static RefreshTokenRequest getDefault() => _defaultInstance ??=
-      $pb.GeneratedMessage.$_defaultFor<RefreshTokenRequest>(create);
+      $pb.GeneratedMessage.$_defaultFor<RefreshTokenRequest>(
+          RefreshTokenRequest.$_createMessage);
   static RefreshTokenRequest? _defaultInstance;
 }
 
@@ -758,7 +803,7 @@ class DeviceInfo extends $pb.GeneratedMessage {
     $fixnum.Int64? createdAt,
     $fixnum.Int64? lastSeenAt,
   }) {
-    final result = create();
+    final result = DeviceInfo._();
     if (deviceId != null) result.deviceId = deviceId;
     if (label != null) result.label = label;
     if (createdAt != null) result.createdAt = createdAt;
@@ -770,15 +815,15 @@ class DeviceInfo extends $pb.GeneratedMessage {
 
   factory DeviceInfo.fromBuffer($core.List<$core.int> data,
           [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
-      create()..mergeFromBuffer(data, registry);
+      DeviceInfo()..mergeFromBuffer(data, registry);
   factory DeviceInfo.fromJson($core.String json,
           [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
-      create()..mergeFromJson(json, registry);
+      DeviceInfo()..mergeFromJson(json, registry);
 
   static final $pb.BuilderInfo _i = $pb.BuilderInfo(
       _omitMessageNames ? '' : 'DeviceInfo',
       package: const $pb.PackageName(_omitMessageNames ? '' : 'mycelium'),
-      createEmptyInstance: create)
+      createEmptyInstance: DeviceInfo.$_createMessage)
     ..aOS(1, _omitFieldNames ? '' : 'deviceId')
     ..aOS(2, _omitFieldNames ? '' : 'label')
     ..aInt64(3, _omitFieldNames ? '' : 'createdAt')
@@ -795,12 +840,14 @@ class DeviceInfo extends $pb.GeneratedMessage {
   $pb.BuilderInfo get info_ => _i;
 
   @$core.pragma('dart2js:noInline')
+  @$core.Deprecated('Use DeviceInfo() / DeviceInfo.new instead')
   static DeviceInfo create() => DeviceInfo._();
+  static $pb.GeneratedMessage $_createMessage() => DeviceInfo._();
   @$core.override
-  DeviceInfo createEmptyInstance() => create();
+  DeviceInfo createEmptyInstance() => DeviceInfo._();
   @$core.pragma('dart2js:noInline')
   static DeviceInfo getDefault() => _defaultInstance ??=
-      $pb.GeneratedMessage.$_defaultFor<DeviceInfo>(create);
+      $pb.GeneratedMessage.$_defaultFor<DeviceInfo>(DeviceInfo.$_createMessage);
   static DeviceInfo? _defaultInstance;
 
   @$pb.TagNumber(1)
@@ -841,21 +888,21 @@ class DeviceInfo extends $pb.GeneratedMessage {
 }
 
 class ListDevicesRequest extends $pb.GeneratedMessage {
-  factory ListDevicesRequest() => create();
+  factory ListDevicesRequest() => ListDevicesRequest._();
 
   ListDevicesRequest._();
 
   factory ListDevicesRequest.fromBuffer($core.List<$core.int> data,
           [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
-      create()..mergeFromBuffer(data, registry);
+      ListDevicesRequest()..mergeFromBuffer(data, registry);
   factory ListDevicesRequest.fromJson($core.String json,
           [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
-      create()..mergeFromJson(json, registry);
+      ListDevicesRequest()..mergeFromJson(json, registry);
 
   static final $pb.BuilderInfo _i = $pb.BuilderInfo(
       _omitMessageNames ? '' : 'ListDevicesRequest',
       package: const $pb.PackageName(_omitMessageNames ? '' : 'mycelium'),
-      createEmptyInstance: create)
+      createEmptyInstance: ListDevicesRequest.$_createMessage)
     ..hasRequiredFields = false;
 
   @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
@@ -869,12 +916,15 @@ class ListDevicesRequest extends $pb.GeneratedMessage {
   $pb.BuilderInfo get info_ => _i;
 
   @$core.pragma('dart2js:noInline')
+  @$core.Deprecated('Use ListDevicesRequest() / ListDevicesRequest.new instead')
   static ListDevicesRequest create() => ListDevicesRequest._();
+  static $pb.GeneratedMessage $_createMessage() => ListDevicesRequest._();
   @$core.override
-  ListDevicesRequest createEmptyInstance() => create();
+  ListDevicesRequest createEmptyInstance() => ListDevicesRequest._();
   @$core.pragma('dart2js:noInline')
   static ListDevicesRequest getDefault() => _defaultInstance ??=
-      $pb.GeneratedMessage.$_defaultFor<ListDevicesRequest>(create);
+      $pb.GeneratedMessage.$_defaultFor<ListDevicesRequest>(
+          ListDevicesRequest.$_createMessage);
   static ListDevicesRequest? _defaultInstance;
 }
 
@@ -882,7 +932,7 @@ class ListDevicesResponse extends $pb.GeneratedMessage {
   factory ListDevicesResponse({
     $core.Iterable<DeviceInfo>? devices,
   }) {
-    final result = create();
+    final result = ListDevicesResponse._();
     if (devices != null) result.devices.addAll(devices);
     return result;
   }
@@ -891,17 +941,17 @@ class ListDevicesResponse extends $pb.GeneratedMessage {
 
   factory ListDevicesResponse.fromBuffer($core.List<$core.int> data,
           [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
-      create()..mergeFromBuffer(data, registry);
+      ListDevicesResponse()..mergeFromBuffer(data, registry);
   factory ListDevicesResponse.fromJson($core.String json,
           [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
-      create()..mergeFromJson(json, registry);
+      ListDevicesResponse()..mergeFromJson(json, registry);
 
   static final $pb.BuilderInfo _i = $pb.BuilderInfo(
       _omitMessageNames ? '' : 'ListDevicesResponse',
       package: const $pb.PackageName(_omitMessageNames ? '' : 'mycelium'),
-      createEmptyInstance: create)
+      createEmptyInstance: ListDevicesResponse.$_createMessage)
     ..pPM<DeviceInfo>(1, _omitFieldNames ? '' : 'devices',
-        subBuilder: DeviceInfo.create)
+        subBuilder: DeviceInfo.$_createMessage)
     ..hasRequiredFields = false;
 
   @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
@@ -915,12 +965,16 @@ class ListDevicesResponse extends $pb.GeneratedMessage {
   $pb.BuilderInfo get info_ => _i;
 
   @$core.pragma('dart2js:noInline')
+  @$core
+      .Deprecated('Use ListDevicesResponse() / ListDevicesResponse.new instead')
   static ListDevicesResponse create() => ListDevicesResponse._();
+  static $pb.GeneratedMessage $_createMessage() => ListDevicesResponse._();
   @$core.override
-  ListDevicesResponse createEmptyInstance() => create();
+  ListDevicesResponse createEmptyInstance() => ListDevicesResponse._();
   @$core.pragma('dart2js:noInline')
   static ListDevicesResponse getDefault() => _defaultInstance ??=
-      $pb.GeneratedMessage.$_defaultFor<ListDevicesResponse>(create);
+      $pb.GeneratedMessage.$_defaultFor<ListDevicesResponse>(
+          ListDevicesResponse.$_createMessage);
   static ListDevicesResponse? _defaultInstance;
 
   @$pb.TagNumber(1)
@@ -932,7 +986,7 @@ class RenameDeviceRequest extends $pb.GeneratedMessage {
     $core.String? deviceId,
     $core.String? label,
   }) {
-    final result = create();
+    final result = RenameDeviceRequest._();
     if (deviceId != null) result.deviceId = deviceId;
     if (label != null) result.label = label;
     return result;
@@ -942,15 +996,15 @@ class RenameDeviceRequest extends $pb.GeneratedMessage {
 
   factory RenameDeviceRequest.fromBuffer($core.List<$core.int> data,
           [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
-      create()..mergeFromBuffer(data, registry);
+      RenameDeviceRequest()..mergeFromBuffer(data, registry);
   factory RenameDeviceRequest.fromJson($core.String json,
           [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
-      create()..mergeFromJson(json, registry);
+      RenameDeviceRequest()..mergeFromJson(json, registry);
 
   static final $pb.BuilderInfo _i = $pb.BuilderInfo(
       _omitMessageNames ? '' : 'RenameDeviceRequest',
       package: const $pb.PackageName(_omitMessageNames ? '' : 'mycelium'),
-      createEmptyInstance: create)
+      createEmptyInstance: RenameDeviceRequest.$_createMessage)
     ..aOS(1, _omitFieldNames ? '' : 'deviceId')
     ..aOS(2, _omitFieldNames ? '' : 'label')
     ..hasRequiredFields = false;
@@ -966,12 +1020,16 @@ class RenameDeviceRequest extends $pb.GeneratedMessage {
   $pb.BuilderInfo get info_ => _i;
 
   @$core.pragma('dart2js:noInline')
+  @$core
+      .Deprecated('Use RenameDeviceRequest() / RenameDeviceRequest.new instead')
   static RenameDeviceRequest create() => RenameDeviceRequest._();
+  static $pb.GeneratedMessage $_createMessage() => RenameDeviceRequest._();
   @$core.override
-  RenameDeviceRequest createEmptyInstance() => create();
+  RenameDeviceRequest createEmptyInstance() => RenameDeviceRequest._();
   @$core.pragma('dart2js:noInline')
   static RenameDeviceRequest getDefault() => _defaultInstance ??=
-      $pb.GeneratedMessage.$_defaultFor<RenameDeviceRequest>(create);
+      $pb.GeneratedMessage.$_defaultFor<RenameDeviceRequest>(
+          RenameDeviceRequest.$_createMessage);
   static RenameDeviceRequest? _defaultInstance;
 
   @$pb.TagNumber(1)
@@ -997,7 +1055,7 @@ class RenameDeviceResponse extends $pb.GeneratedMessage {
   factory RenameDeviceResponse({
     $core.bool? ok,
   }) {
-    final result = create();
+    final result = RenameDeviceResponse._();
     if (ok != null) result.ok = ok;
     return result;
   }
@@ -1006,15 +1064,15 @@ class RenameDeviceResponse extends $pb.GeneratedMessage {
 
   factory RenameDeviceResponse.fromBuffer($core.List<$core.int> data,
           [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
-      create()..mergeFromBuffer(data, registry);
+      RenameDeviceResponse()..mergeFromBuffer(data, registry);
   factory RenameDeviceResponse.fromJson($core.String json,
           [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
-      create()..mergeFromJson(json, registry);
+      RenameDeviceResponse()..mergeFromJson(json, registry);
 
   static final $pb.BuilderInfo _i = $pb.BuilderInfo(
       _omitMessageNames ? '' : 'RenameDeviceResponse',
       package: const $pb.PackageName(_omitMessageNames ? '' : 'mycelium'),
-      createEmptyInstance: create)
+      createEmptyInstance: RenameDeviceResponse.$_createMessage)
     ..aOB(1, _omitFieldNames ? '' : 'ok')
     ..hasRequiredFields = false;
 
@@ -1029,12 +1087,16 @@ class RenameDeviceResponse extends $pb.GeneratedMessage {
   $pb.BuilderInfo get info_ => _i;
 
   @$core.pragma('dart2js:noInline')
+  @$core.Deprecated(
+      'Use RenameDeviceResponse() / RenameDeviceResponse.new instead')
   static RenameDeviceResponse create() => RenameDeviceResponse._();
+  static $pb.GeneratedMessage $_createMessage() => RenameDeviceResponse._();
   @$core.override
-  RenameDeviceResponse createEmptyInstance() => create();
+  RenameDeviceResponse createEmptyInstance() => RenameDeviceResponse._();
   @$core.pragma('dart2js:noInline')
   static RenameDeviceResponse getDefault() => _defaultInstance ??=
-      $pb.GeneratedMessage.$_defaultFor<RenameDeviceResponse>(create);
+      $pb.GeneratedMessage.$_defaultFor<RenameDeviceResponse>(
+          RenameDeviceResponse.$_createMessage);
   static RenameDeviceResponse? _defaultInstance;
 
   @$pb.TagNumber(1)
@@ -1047,22 +1109,29 @@ class RenameDeviceResponse extends $pb.GeneratedMessage {
   void clearOk() => $_clearField(1);
 }
 
+/// UnpairSelf lets a device deregister itself (e.g. "Cambia server" in
+/// Pileus) instead of lingering forever in mycelium's device list until an
+/// admin removes it by hand. No device_id field on purpose - like
+/// RenameDevice, this always acts on the caller's own JWT-derived identity,
+/// never an id supplied in the request, so a device can never unpair another
+/// one. Profiles are untouched (device_id there is audit-only); if the
+/// device ever comes back with a valid pairing code it just re-registers.
 class UnpairSelfRequest extends $pb.GeneratedMessage {
-  factory UnpairSelfRequest() => create();
+  factory UnpairSelfRequest() => UnpairSelfRequest._();
 
   UnpairSelfRequest._();
 
   factory UnpairSelfRequest.fromBuffer($core.List<$core.int> data,
           [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
-      create()..mergeFromBuffer(data, registry);
+      UnpairSelfRequest()..mergeFromBuffer(data, registry);
   factory UnpairSelfRequest.fromJson($core.String json,
           [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
-      create()..mergeFromJson(json, registry);
+      UnpairSelfRequest()..mergeFromJson(json, registry);
 
   static final $pb.BuilderInfo _i = $pb.BuilderInfo(
       _omitMessageNames ? '' : 'UnpairSelfRequest',
       package: const $pb.PackageName(_omitMessageNames ? '' : 'mycelium'),
-      createEmptyInstance: create)
+      createEmptyInstance: UnpairSelfRequest.$_createMessage)
     ..hasRequiredFields = false;
 
   @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
@@ -1076,12 +1145,15 @@ class UnpairSelfRequest extends $pb.GeneratedMessage {
   $pb.BuilderInfo get info_ => _i;
 
   @$core.pragma('dart2js:noInline')
+  @$core.Deprecated('Use UnpairSelfRequest() / UnpairSelfRequest.new instead')
   static UnpairSelfRequest create() => UnpairSelfRequest._();
+  static $pb.GeneratedMessage $_createMessage() => UnpairSelfRequest._();
   @$core.override
-  UnpairSelfRequest createEmptyInstance() => create();
+  UnpairSelfRequest createEmptyInstance() => UnpairSelfRequest._();
   @$core.pragma('dart2js:noInline')
-  static UnpairSelfRequest getDefault() => _defaultInstance ??=
-      $pb.GeneratedMessage.$_defaultFor<UnpairSelfRequest>(create);
+  static UnpairSelfRequest getDefault() =>
+      _defaultInstance ??= $pb.GeneratedMessage.$_defaultFor<UnpairSelfRequest>(
+          UnpairSelfRequest.$_createMessage);
   static UnpairSelfRequest? _defaultInstance;
 }
 
@@ -1089,7 +1161,7 @@ class UnpairSelfResponse extends $pb.GeneratedMessage {
   factory UnpairSelfResponse({
     $core.bool? ok,
   }) {
-    final result = create();
+    final result = UnpairSelfResponse._();
     if (ok != null) result.ok = ok;
     return result;
   }
@@ -1098,15 +1170,15 @@ class UnpairSelfResponse extends $pb.GeneratedMessage {
 
   factory UnpairSelfResponse.fromBuffer($core.List<$core.int> data,
           [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
-      create()..mergeFromBuffer(data, registry);
+      UnpairSelfResponse()..mergeFromBuffer(data, registry);
   factory UnpairSelfResponse.fromJson($core.String json,
           [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
-      create()..mergeFromJson(json, registry);
+      UnpairSelfResponse()..mergeFromJson(json, registry);
 
   static final $pb.BuilderInfo _i = $pb.BuilderInfo(
       _omitMessageNames ? '' : 'UnpairSelfResponse',
       package: const $pb.PackageName(_omitMessageNames ? '' : 'mycelium'),
-      createEmptyInstance: create)
+      createEmptyInstance: UnpairSelfResponse.$_createMessage)
     ..aOB(1, _omitFieldNames ? '' : 'ok')
     ..hasRequiredFields = false;
 
@@ -1121,12 +1193,15 @@ class UnpairSelfResponse extends $pb.GeneratedMessage {
   $pb.BuilderInfo get info_ => _i;
 
   @$core.pragma('dart2js:noInline')
+  @$core.Deprecated('Use UnpairSelfResponse() / UnpairSelfResponse.new instead')
   static UnpairSelfResponse create() => UnpairSelfResponse._();
+  static $pb.GeneratedMessage $_createMessage() => UnpairSelfResponse._();
   @$core.override
-  UnpairSelfResponse createEmptyInstance() => create();
+  UnpairSelfResponse createEmptyInstance() => UnpairSelfResponse._();
   @$core.pragma('dart2js:noInline')
   static UnpairSelfResponse getDefault() => _defaultInstance ??=
-      $pb.GeneratedMessage.$_defaultFor<UnpairSelfResponse>(create);
+      $pb.GeneratedMessage.$_defaultFor<UnpairSelfResponse>(
+          UnpairSelfResponse.$_createMessage);
   static UnpairSelfResponse? _defaultInstance;
 
   @$pb.TagNumber(1)
@@ -1145,7 +1220,7 @@ class UnlockProfileRequest extends $pb.GeneratedMessage {
     $core.String? pin,
     $core.bool? rememberDevice,
   }) {
-    final result = create();
+    final result = UnlockProfileRequest._();
     if (profileId != null) result.profileId = profileId;
     if (pin != null) result.pin = pin;
     if (rememberDevice != null) result.rememberDevice = rememberDevice;
@@ -1156,15 +1231,15 @@ class UnlockProfileRequest extends $pb.GeneratedMessage {
 
   factory UnlockProfileRequest.fromBuffer($core.List<$core.int> data,
           [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
-      create()..mergeFromBuffer(data, registry);
+      UnlockProfileRequest()..mergeFromBuffer(data, registry);
   factory UnlockProfileRequest.fromJson($core.String json,
           [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
-      create()..mergeFromJson(json, registry);
+      UnlockProfileRequest()..mergeFromJson(json, registry);
 
   static final $pb.BuilderInfo _i = $pb.BuilderInfo(
       _omitMessageNames ? '' : 'UnlockProfileRequest',
       package: const $pb.PackageName(_omitMessageNames ? '' : 'mycelium'),
-      createEmptyInstance: create)
+      createEmptyInstance: UnlockProfileRequest.$_createMessage)
     ..aOS(1, _omitFieldNames ? '' : 'profileId')
     ..aOS(2, _omitFieldNames ? '' : 'pin')
     ..aOB(3, _omitFieldNames ? '' : 'rememberDevice')
@@ -1181,12 +1256,16 @@ class UnlockProfileRequest extends $pb.GeneratedMessage {
   $pb.BuilderInfo get info_ => _i;
 
   @$core.pragma('dart2js:noInline')
+  @$core.Deprecated(
+      'Use UnlockProfileRequest() / UnlockProfileRequest.new instead')
   static UnlockProfileRequest create() => UnlockProfileRequest._();
+  static $pb.GeneratedMessage $_createMessage() => UnlockProfileRequest._();
   @$core.override
-  UnlockProfileRequest createEmptyInstance() => create();
+  UnlockProfileRequest createEmptyInstance() => UnlockProfileRequest._();
   @$core.pragma('dart2js:noInline')
   static UnlockProfileRequest getDefault() => _defaultInstance ??=
-      $pb.GeneratedMessage.$_defaultFor<UnlockProfileRequest>(create);
+      $pb.GeneratedMessage.$_defaultFor<UnlockProfileRequest>(
+          UnlockProfileRequest.$_createMessage);
   static UnlockProfileRequest? _defaultInstance;
 
   @$pb.TagNumber(1)
@@ -1224,7 +1303,7 @@ class UnlockProfileResponse extends $pb.GeneratedMessage {
     $fixnum.Int64? sessionExpiresAt,
     $core.bool? deviceTrusted,
   }) {
-    final result = create();
+    final result = UnlockProfileResponse._();
     if (ok != null) result.ok = ok;
     if (sessionToken != null) result.sessionToken = sessionToken;
     if (sessionExpiresAt != null) result.sessionExpiresAt = sessionExpiresAt;
@@ -1236,15 +1315,15 @@ class UnlockProfileResponse extends $pb.GeneratedMessage {
 
   factory UnlockProfileResponse.fromBuffer($core.List<$core.int> data,
           [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
-      create()..mergeFromBuffer(data, registry);
+      UnlockProfileResponse()..mergeFromBuffer(data, registry);
   factory UnlockProfileResponse.fromJson($core.String json,
           [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
-      create()..mergeFromJson(json, registry);
+      UnlockProfileResponse()..mergeFromJson(json, registry);
 
   static final $pb.BuilderInfo _i = $pb.BuilderInfo(
       _omitMessageNames ? '' : 'UnlockProfileResponse',
       package: const $pb.PackageName(_omitMessageNames ? '' : 'mycelium'),
-      createEmptyInstance: create)
+      createEmptyInstance: UnlockProfileResponse.$_createMessage)
     ..aOB(1, _omitFieldNames ? '' : 'ok')
     ..aOS(2, _omitFieldNames ? '' : 'sessionToken')
     ..aInt64(3, _omitFieldNames ? '' : 'sessionExpiresAt')
@@ -1263,12 +1342,16 @@ class UnlockProfileResponse extends $pb.GeneratedMessage {
   $pb.BuilderInfo get info_ => _i;
 
   @$core.pragma('dart2js:noInline')
+  @$core.Deprecated(
+      'Use UnlockProfileResponse() / UnlockProfileResponse.new instead')
   static UnlockProfileResponse create() => UnlockProfileResponse._();
+  static $pb.GeneratedMessage $_createMessage() => UnlockProfileResponse._();
   @$core.override
-  UnlockProfileResponse createEmptyInstance() => create();
+  UnlockProfileResponse createEmptyInstance() => UnlockProfileResponse._();
   @$core.pragma('dart2js:noInline')
   static UnlockProfileResponse getDefault() => _defaultInstance ??=
-      $pb.GeneratedMessage.$_defaultFor<UnlockProfileResponse>(create);
+      $pb.GeneratedMessage.$_defaultFor<UnlockProfileResponse>(
+          UnlockProfileResponse.$_createMessage);
   static UnlockProfileResponse? _defaultInstance;
 
   @$pb.TagNumber(1)
@@ -1310,12 +1393,14 @@ class UnlockProfileResponse extends $pb.GeneratedMessage {
   void clearDeviceTrusted() => $_clearField(4);
 }
 
+/// LockProfile ends the caller's session(s) on a profile (call it on "exit
+/// profile"); forget_device also drops this device's persistent trust.
 class LockProfileRequest extends $pb.GeneratedMessage {
   factory LockProfileRequest({
     $core.String? profileId,
     $core.bool? forgetDevice,
   }) {
-    final result = create();
+    final result = LockProfileRequest._();
     if (profileId != null) result.profileId = profileId;
     if (forgetDevice != null) result.forgetDevice = forgetDevice;
     return result;
@@ -1325,15 +1410,15 @@ class LockProfileRequest extends $pb.GeneratedMessage {
 
   factory LockProfileRequest.fromBuffer($core.List<$core.int> data,
           [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
-      create()..mergeFromBuffer(data, registry);
+      LockProfileRequest()..mergeFromBuffer(data, registry);
   factory LockProfileRequest.fromJson($core.String json,
           [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
-      create()..mergeFromJson(json, registry);
+      LockProfileRequest()..mergeFromJson(json, registry);
 
   static final $pb.BuilderInfo _i = $pb.BuilderInfo(
       _omitMessageNames ? '' : 'LockProfileRequest',
       package: const $pb.PackageName(_omitMessageNames ? '' : 'mycelium'),
-      createEmptyInstance: create)
+      createEmptyInstance: LockProfileRequest.$_createMessage)
     ..aOS(1, _omitFieldNames ? '' : 'profileId')
     ..aOB(2, _omitFieldNames ? '' : 'forgetDevice')
     ..hasRequiredFields = false;
@@ -1349,12 +1434,15 @@ class LockProfileRequest extends $pb.GeneratedMessage {
   $pb.BuilderInfo get info_ => _i;
 
   @$core.pragma('dart2js:noInline')
+  @$core.Deprecated('Use LockProfileRequest() / LockProfileRequest.new instead')
   static LockProfileRequest create() => LockProfileRequest._();
+  static $pb.GeneratedMessage $_createMessage() => LockProfileRequest._();
   @$core.override
-  LockProfileRequest createEmptyInstance() => create();
+  LockProfileRequest createEmptyInstance() => LockProfileRequest._();
   @$core.pragma('dart2js:noInline')
   static LockProfileRequest getDefault() => _defaultInstance ??=
-      $pb.GeneratedMessage.$_defaultFor<LockProfileRequest>(create);
+      $pb.GeneratedMessage.$_defaultFor<LockProfileRequest>(
+          LockProfileRequest.$_createMessage);
   static LockProfileRequest? _defaultInstance;
 
   @$pb.TagNumber(1)
@@ -1380,7 +1468,7 @@ class LockProfileResponse extends $pb.GeneratedMessage {
   factory LockProfileResponse({
     $core.bool? ok,
   }) {
-    final result = create();
+    final result = LockProfileResponse._();
     if (ok != null) result.ok = ok;
     return result;
   }
@@ -1389,15 +1477,15 @@ class LockProfileResponse extends $pb.GeneratedMessage {
 
   factory LockProfileResponse.fromBuffer($core.List<$core.int> data,
           [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
-      create()..mergeFromBuffer(data, registry);
+      LockProfileResponse()..mergeFromBuffer(data, registry);
   factory LockProfileResponse.fromJson($core.String json,
           [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
-      create()..mergeFromJson(json, registry);
+      LockProfileResponse()..mergeFromJson(json, registry);
 
   static final $pb.BuilderInfo _i = $pb.BuilderInfo(
       _omitMessageNames ? '' : 'LockProfileResponse',
       package: const $pb.PackageName(_omitMessageNames ? '' : 'mycelium'),
-      createEmptyInstance: create)
+      createEmptyInstance: LockProfileResponse.$_createMessage)
     ..aOB(1, _omitFieldNames ? '' : 'ok')
     ..hasRequiredFields = false;
 
@@ -1412,12 +1500,16 @@ class LockProfileResponse extends $pb.GeneratedMessage {
   $pb.BuilderInfo get info_ => _i;
 
   @$core.pragma('dart2js:noInline')
+  @$core
+      .Deprecated('Use LockProfileResponse() / LockProfileResponse.new instead')
   static LockProfileResponse create() => LockProfileResponse._();
+  static $pb.GeneratedMessage $_createMessage() => LockProfileResponse._();
   @$core.override
-  LockProfileResponse createEmptyInstance() => create();
+  LockProfileResponse createEmptyInstance() => LockProfileResponse._();
   @$core.pragma('dart2js:noInline')
   static LockProfileResponse getDefault() => _defaultInstance ??=
-      $pb.GeneratedMessage.$_defaultFor<LockProfileResponse>(create);
+      $pb.GeneratedMessage.$_defaultFor<LockProfileResponse>(
+          LockProfileResponse.$_createMessage);
   static LockProfileResponse? _defaultInstance;
 
   @$pb.TagNumber(1)
@@ -1430,13 +1522,17 @@ class LockProfileResponse extends $pb.GeneratedMessage {
   void clearOk() => $_clearField(1);
 }
 
+/// SetProfilePin sets, changes or (new_pin empty) removes a profile's PIN.
+/// current_pin is required when the profile already has one. Any change
+/// revokes every trusted device and session of the profile: each device has
+/// to unlock again with the new PIN.
 class SetProfilePinRequest extends $pb.GeneratedMessage {
   factory SetProfilePinRequest({
     $core.String? profileId,
     $core.String? currentPin,
     $core.String? newPin,
   }) {
-    final result = create();
+    final result = SetProfilePinRequest._();
     if (profileId != null) result.profileId = profileId;
     if (currentPin != null) result.currentPin = currentPin;
     if (newPin != null) result.newPin = newPin;
@@ -1447,15 +1543,15 @@ class SetProfilePinRequest extends $pb.GeneratedMessage {
 
   factory SetProfilePinRequest.fromBuffer($core.List<$core.int> data,
           [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
-      create()..mergeFromBuffer(data, registry);
+      SetProfilePinRequest()..mergeFromBuffer(data, registry);
   factory SetProfilePinRequest.fromJson($core.String json,
           [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
-      create()..mergeFromJson(json, registry);
+      SetProfilePinRequest()..mergeFromJson(json, registry);
 
   static final $pb.BuilderInfo _i = $pb.BuilderInfo(
       _omitMessageNames ? '' : 'SetProfilePinRequest',
       package: const $pb.PackageName(_omitMessageNames ? '' : 'mycelium'),
-      createEmptyInstance: create)
+      createEmptyInstance: SetProfilePinRequest.$_createMessage)
     ..aOS(1, _omitFieldNames ? '' : 'profileId')
     ..aOS(2, _omitFieldNames ? '' : 'currentPin')
     ..aOS(3, _omitFieldNames ? '' : 'newPin')
@@ -1472,12 +1568,16 @@ class SetProfilePinRequest extends $pb.GeneratedMessage {
   $pb.BuilderInfo get info_ => _i;
 
   @$core.pragma('dart2js:noInline')
+  @$core.Deprecated(
+      'Use SetProfilePinRequest() / SetProfilePinRequest.new instead')
   static SetProfilePinRequest create() => SetProfilePinRequest._();
+  static $pb.GeneratedMessage $_createMessage() => SetProfilePinRequest._();
   @$core.override
-  SetProfilePinRequest createEmptyInstance() => create();
+  SetProfilePinRequest createEmptyInstance() => SetProfilePinRequest._();
   @$core.pragma('dart2js:noInline')
   static SetProfilePinRequest getDefault() => _defaultInstance ??=
-      $pb.GeneratedMessage.$_defaultFor<SetProfilePinRequest>(create);
+      $pb.GeneratedMessage.$_defaultFor<SetProfilePinRequest>(
+          SetProfilePinRequest.$_createMessage);
   static SetProfilePinRequest? _defaultInstance;
 
   @$pb.TagNumber(1)
@@ -1513,7 +1613,7 @@ class SetProfilePinResponse extends $pb.GeneratedMessage {
     $core.bool? ok,
     $core.bool? pinProtected,
   }) {
-    final result = create();
+    final result = SetProfilePinResponse._();
     if (ok != null) result.ok = ok;
     if (pinProtected != null) result.pinProtected = pinProtected;
     return result;
@@ -1523,15 +1623,15 @@ class SetProfilePinResponse extends $pb.GeneratedMessage {
 
   factory SetProfilePinResponse.fromBuffer($core.List<$core.int> data,
           [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
-      create()..mergeFromBuffer(data, registry);
+      SetProfilePinResponse()..mergeFromBuffer(data, registry);
   factory SetProfilePinResponse.fromJson($core.String json,
           [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
-      create()..mergeFromJson(json, registry);
+      SetProfilePinResponse()..mergeFromJson(json, registry);
 
   static final $pb.BuilderInfo _i = $pb.BuilderInfo(
       _omitMessageNames ? '' : 'SetProfilePinResponse',
       package: const $pb.PackageName(_omitMessageNames ? '' : 'mycelium'),
-      createEmptyInstance: create)
+      createEmptyInstance: SetProfilePinResponse.$_createMessage)
     ..aOB(1, _omitFieldNames ? '' : 'ok')
     ..aOB(2, _omitFieldNames ? '' : 'pinProtected')
     ..hasRequiredFields = false;
@@ -1548,12 +1648,16 @@ class SetProfilePinResponse extends $pb.GeneratedMessage {
   $pb.BuilderInfo get info_ => _i;
 
   @$core.pragma('dart2js:noInline')
+  @$core.Deprecated(
+      'Use SetProfilePinResponse() / SetProfilePinResponse.new instead')
   static SetProfilePinResponse create() => SetProfilePinResponse._();
+  static $pb.GeneratedMessage $_createMessage() => SetProfilePinResponse._();
   @$core.override
-  SetProfilePinResponse createEmptyInstance() => create();
+  SetProfilePinResponse createEmptyInstance() => SetProfilePinResponse._();
   @$core.pragma('dart2js:noInline')
   static SetProfilePinResponse getDefault() => _defaultInstance ??=
-      $pb.GeneratedMessage.$_defaultFor<SetProfilePinResponse>(create);
+      $pb.GeneratedMessage.$_defaultFor<SetProfilePinResponse>(
+          SetProfilePinResponse.$_createMessage);
   static SetProfilePinResponse? _defaultInstance;
 
   @$pb.TagNumber(1)
@@ -1573,6 +1677,153 @@ class SetProfilePinResponse extends $pb.GeneratedMessage {
   $core.bool hasPinProtected() => $_has(1);
   @$pb.TagNumber(2)
   void clearPinProtected() => $_clearField(2);
+}
+
+/// GetServerInfo tells a paired device how else it can reach this server.
+/// Paired devices only (it carries the server's tailnet address, which isn't
+/// handed to anyone on the LAN who asks /pileus/info). Call it on every
+/// start: the address appears when remote access is turned on and changes if
+/// the node is re-created.
+class GetServerInfoRequest extends $pb.GeneratedMessage {
+  factory GetServerInfoRequest() => GetServerInfoRequest._();
+
+  GetServerInfoRequest._();
+
+  factory GetServerInfoRequest.fromBuffer($core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      GetServerInfoRequest()..mergeFromBuffer(data, registry);
+  factory GetServerInfoRequest.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      GetServerInfoRequest()..mergeFromJson(json, registry);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'GetServerInfoRequest',
+      package: const $pb.PackageName(_omitMessageNames ? '' : 'mycelium'),
+      createEmptyInstance: GetServerInfoRequest.$_createMessage)
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  GetServerInfoRequest clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  GetServerInfoRequest copyWith(void Function(GetServerInfoRequest) updates) =>
+      super.copyWith((message) => updates(message as GetServerInfoRequest))
+          as GetServerInfoRequest;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  @$core.Deprecated(
+      'Use GetServerInfoRequest() / GetServerInfoRequest.new instead')
+  static GetServerInfoRequest create() => GetServerInfoRequest._();
+  static $pb.GeneratedMessage $_createMessage() => GetServerInfoRequest._();
+  @$core.override
+  GetServerInfoRequest createEmptyInstance() => GetServerInfoRequest._();
+  @$core.pragma('dart2js:noInline')
+  static GetServerInfoRequest getDefault() => _defaultInstance ??=
+      $pb.GeneratedMessage.$_defaultFor<GetServerInfoRequest>(
+          GetServerInfoRequest.$_createMessage);
+  static GetServerInfoRequest? _defaultInstance;
+}
+
+class ServerInfoResponse extends $pb.GeneratedMessage {
+  factory ServerInfoResponse({
+    $core.String? remoteHost,
+    $core.int? remoteGrpcPort,
+    $core.int? remoteHttpPort,
+    $core.String? remoteFqdn,
+  }) {
+    final result = ServerInfoResponse._();
+    if (remoteHost != null) result.remoteHost = remoteHost;
+    if (remoteGrpcPort != null) result.remoteGrpcPort = remoteGrpcPort;
+    if (remoteHttpPort != null) result.remoteHttpPort = remoteHttpPort;
+    if (remoteFqdn != null) result.remoteFqdn = remoteFqdn;
+    return result;
+  }
+
+  ServerInfoResponse._();
+
+  factory ServerInfoResponse.fromBuffer($core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      ServerInfoResponse()..mergeFromBuffer(data, registry);
+  factory ServerInfoResponse.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      ServerInfoResponse()..mergeFromJson(json, registry);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'ServerInfoResponse',
+      package: const $pb.PackageName(_omitMessageNames ? '' : 'mycelium'),
+      createEmptyInstance: ServerInfoResponse.$_createMessage)
+    ..aOS(1, _omitFieldNames ? '' : 'remoteHost')
+    ..aI(2, _omitFieldNames ? '' : 'remoteGrpcPort')
+    ..aI(3, _omitFieldNames ? '' : 'remoteHttpPort')
+    ..aOS(4, _omitFieldNames ? '' : 'remoteFqdn')
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  ServerInfoResponse clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  ServerInfoResponse copyWith(void Function(ServerInfoResponse) updates) =>
+      super.copyWith((message) => updates(message as ServerInfoResponse))
+          as ServerInfoResponse;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  @$core.Deprecated('Use ServerInfoResponse() / ServerInfoResponse.new instead')
+  static ServerInfoResponse create() => ServerInfoResponse._();
+  static $pb.GeneratedMessage $_createMessage() => ServerInfoResponse._();
+  @$core.override
+  ServerInfoResponse createEmptyInstance() => ServerInfoResponse._();
+  @$core.pragma('dart2js:noInline')
+  static ServerInfoResponse getDefault() => _defaultInstance ??=
+      $pb.GeneratedMessage.$_defaultFor<ServerInfoResponse>(
+          ServerInfoResponse.$_createMessage);
+  static ServerInfoResponse? _defaultInstance;
+
+  /// Address on the operator's tailnet (the Tailscale IPv4: it works with
+  /// MagicDNS off too): mycelium's own node, or a Tailscale already running on
+  /// the machine; "" when there is neither. The device reaches it only while
+  /// its own Tailscale app is on; it serves the same gRPC port, HTTP port and
+  /// pinned TLS certificate as the LAN.
+  @$pb.TagNumber(1)
+  $core.String get remoteHost => $_getSZ(0);
+  @$pb.TagNumber(1)
+  set remoteHost($core.String value) => $_setString(0, value);
+  @$pb.TagNumber(1)
+  $core.bool hasRemoteHost() => $_has(0);
+  @$pb.TagNumber(1)
+  void clearRemoteHost() => $_clearField(1);
+
+  @$pb.TagNumber(2)
+  $core.int get remoteGrpcPort => $_getIZ(1);
+  @$pb.TagNumber(2)
+  set remoteGrpcPort($core.int value) => $_setSignedInt32(1, value);
+  @$pb.TagNumber(2)
+  $core.bool hasRemoteGrpcPort() => $_has(1);
+  @$pb.TagNumber(2)
+  void clearRemoteGrpcPort() => $_clearField(2);
+
+  @$pb.TagNumber(3)
+  $core.int get remoteHttpPort => $_getIZ(2);
+  @$pb.TagNumber(3)
+  set remoteHttpPort($core.int value) => $_setSignedInt32(2, value);
+  @$pb.TagNumber(3)
+  $core.bool hasRemoteHttpPort() => $_has(2);
+  @$pb.TagNumber(3)
+  void clearRemoteHttpPort() => $_clearField(3);
+
+  /// The node's MagicDNS name, e.g. "mycelium.tail1234.ts.net" ("" as above).
+  /// Informational: native clients dial remote_host.
+  @$pb.TagNumber(4)
+  $core.String get remoteFqdn => $_getSZ(3);
+  @$pb.TagNumber(4)
+  set remoteFqdn($core.String value) => $_setString(3, value);
+  @$pb.TagNumber(4)
+  $core.bool hasRemoteFqdn() => $_has(3);
+  @$pb.TagNumber(4)
+  void clearRemoteFqdn() => $_clearField(4);
 }
 
 const $core.bool _omitFieldNames =

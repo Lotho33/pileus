@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter_bloc/flutter_bloc.dart';
 
 import '../../../core/db/models/device_session.dart';
@@ -277,6 +278,10 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
       // auto-login.
       _startRefreshTimer();
       unawaited(_refreshIfDue(session));
+      // Tailnet address for "away from home" (best-effort, see
+      // AuthRepository.syncRemoteHost). Native only: the web build always
+      // uses its page origin.
+      if (!kIsWeb) unawaited(_repo.syncRemoteHost());
       var profiles = await _repo.getLocalProfiles();
       // Skip the picker straight to the remembered profile (set on every
       // successful pick / first-ever creation, see setLastActiveProfile).
@@ -368,6 +373,7 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
       // start call — this is the only other place a device becomes
       // authorized, so it starts the refresh timer too.
       _startRefreshTimer();
+      if (!kIsWeb) unawaited(_repo.syncRemoteHost());
       // Fetch profiles from server and sync to the local cache.
       final profiles = await _repo.syncProfilesFromServer();
       emit(ProfileSelectionRequired(profiles));

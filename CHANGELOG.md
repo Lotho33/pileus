@@ -5,6 +5,15 @@ All notable changes to Pileus are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and the project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+- Away from home over Tailscale: when the mycelium server has "Accesso da
+  fuori casa" on, Pileus learns its tailnet address at every start
+  (`GetServerInfo`) and tries it alongside the LAN addresses, so a native
+  device with the Tailscale app on keeps working outside the home network.
+  Older servers are unaffected.
+
 ## [1.5.3]
 
 ### Fixed

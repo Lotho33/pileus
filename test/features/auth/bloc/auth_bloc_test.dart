@@ -70,6 +70,13 @@ class _ScriptedAuthRepository extends AuthRepository {
   @override
   Future<void> forgetDevice(String profileId) async => forgotten.add(profileId);
 
+  // Tailnet address sync (GetServerInfo): scripted so no test reaches a
+  // real channel.
+  int syncRemoteHostCalls = 0;
+
+  @override
+  Future<void> syncRemoteHost() async => syncRemoteHostCalls++;
+
   @override
   Future<void> refreshToken() async {
     refreshTokenCalls++;
