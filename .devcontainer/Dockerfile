@@ -21,7 +21,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # pulse plugin (from libasound2-plugins above) instead of a hardware card.
 RUN printf 'pcm.!default {\n  type pulse\n}\nctl.!default {\n  type pulse\n}\n' > /etc/asound.conf
 
-RUN git clone -b stable --depth 1 https://github.com/flutter/flutter.git /opt/flutter
+RUN git clone -b 3.47.1 --depth 1 https://github.com/flutter/flutter.git /opt/flutter
 
 ENV PATH="/opt/flutter/bin:${PATH}"
 ENV FLUTTER_ROOT="/opt/flutter"

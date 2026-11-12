@@ -19,6 +19,10 @@ jobs:
       - uses: subosito/flutter-action@v2
         with:
           channel: stable
+          # Pinned: what the devcontainer builds with. 3.50 needs Gradle 9.3 and
+          # deprecates package:flutter/material.dart (analyze fails) — a migration
+          # of its own, not something to pick up silently on a release tag.
+          flutter-version: 3.47.1
           cache: true
 
       - run: flutter --version
