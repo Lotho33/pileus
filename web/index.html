@@ -6,11 +6,21 @@
   <meta charset="UTF-8">
   <meta content="IE=Edge" http-equiv="X-UA-Compatible">
   <meta name="description" content="Client per il tuo server multimediale Mycelium.">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <!-- Flutter's full-page embedding removes this tag at startup and inserts
+       its own (width=device-width, initial-scale=1, maximum-scale=5): a
+       viewport-fit=cover here never reached the page, so it's not set. -->
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-capable" content="yes">
-  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <!-- "black", not "black-translucent": translucent lets the page run under
+       the iOS status bar, which only lines up with viewport-fit=cover (lost,
+       see above) plus safe-area padding — and Flutter web reports no safe
+       area at all (viewPadding is always zero). Without them an installed
+       iPhone PWA drew and hit-tested on different rectangles: taps landed a
+       status bar's height off. iOS reads this tag when the app is added to
+       the Home Screen: an existing install must be removed and re-added. -->
+  <meta name="apple-mobile-web-app-status-bar-style" content="black">
   <meta name="apple-mobile-web-app-title" content="Pileus">
   <link rel="apple-touch-icon" href="icons/Icon-192.png">
   <meta name="theme-color" content="#0D0D1A">
@@ -126,6 +136,30 @@
             return nativeCanPlay.call(this, type);
           };
         }
+      } catch (_) {}
+
+      // iOS scrolls the whole page to bring a focused text field above the
+      // keyboard and, in a Home Screen web app, often leaves it scrolled
+      // once the keyboard closes (WebKit bugs 218983 / 232239). Flutter's
+      // body is position:fixed, so the picture snaps back while touches stay
+      // offset by that scroll. Put the page back once nothing is being
+      // edited. A no-op everywhere the page never scrolls.
+      try {
+        var resetScroll = function () {
+          setTimeout(function () {
+            var a = document.activeElement;
+            var editing = a && (a.tagName === 'INPUT' ||
+                a.tagName === 'TEXTAREA' || a.isContentEditable);
+            if (!editing && (window.scrollX || window.scrollY)) {
+              window.scrollTo(0, 0);
+            }
+          }, 100);
+        };
+        window.addEventListener('focusout', resetScroll, true);
+        if (window.visualViewport) {
+          window.visualViewport.addEventListener('resize', resetScroll);
+        }
+        window.addEventListener('orientationchange', resetScroll);
       } catch (_) {}
 
       // Called by lib/core/utils/app_exit_web.dart — SystemNavigator.pop()

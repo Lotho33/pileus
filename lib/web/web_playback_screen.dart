@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:js_interop';
+import 'dart:js_interop_unsafe';
 
 import 'package:flutter/foundation.dart' show kDebugMode;
 import 'package:flutter/material.dart';
@@ -1215,7 +1216,11 @@ class _ViewState extends State<_View> {
     _video.playbackRate = v;
   }
 
+  // Bumped by every _attachSource — see the 'loadedmetadata' listener there.
+  int _attachGen = 0;
+
   void _attachSource(String url, {Duration? startPosition}) {
+    final gen = ++_attachGen;
     _liveSyncTimer?.cancel();
     final rate = widget.args.isLive ? 1.0 : _speed;
     _video.defaultPlaybackRate = rate;
@@ -1350,16 +1355,27 @@ class _ViewState extends State<_View> {
         // fall through to a plain src assignment
       }
     }
+    // An hls.js instance left from the previous stream (an HLS episode, then
+    // an MP4/MKV one, or a language switch onto a progressive source) would
+    // stay attached: replacing its MediaSource below makes it raise a fatal
+    // media error, i.e. "Riproduzione interrotta" on a stream that's fine.
+    _hls?.destroy();
+    _hls = null;
     _video.src = url;
     if (widget.args.isLive) {
       _liveSync.reset();
       _liveSyncTimer = Timer.periodic(LiveSync.checkEvery, (_) => _syncLive());
     }
     if (startPosition != null && startPosition > Duration.zero) {
+      // Only for this source: a listener still pending when the next one
+      // attaches (episode switch before metadata) must not seek that one.
       _video.addEventListener(
         'loadedmetadata',
-        ((web.Event _) =>
-            _video.currentTime = startPosition.inSeconds.toDouble()).toJS,
+        ((web.Event _) {
+          if (gen == _attachGen) {
+            _video.currentTime = startPosition.inSeconds.toDouble();
+          }
+        }).toJS,
         web.AddEventListenerOptions(once: true),
       );
     }
@@ -1535,7 +1551,7 @@ class _ViewState extends State<_View> {
     final title = widget.args.showTitle.isNotEmpty
         ? '${widget.args.showTitle}  ·  $_curTitle'
         : _curTitle;
-    return Scaffold(
+    final page = Scaffold(
       backgroundColor: Colors.black,
       body: BlocListener<PlaybackBloc, PlaybackState>(
         listener: (context, s) {
@@ -1631,9 +1647,16 @@ class _ViewState extends State<_View> {
                                 color: Colors.white),
                             onPressed: _exit,
                           ),
-                          Text(title,
-                              style: const TextStyle(
-                                  color: Colors.white70, fontSize: 13)),
+                          // Flexible: on a phone the title plus up to six
+                          // buttons overflowed the row and pushed the
+                          // episode buttons off-screen.
+                          Flexible(
+                            child: Text(title,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: const TextStyle(
+                                    color: Colors.white70, fontSize: 13)),
+                          ),
                           if (_languageOptions.isNotEmpty)
                             PopupMenuButton<StreamSource>(
                               tooltip: 'Lingua',
@@ -1811,18 +1834,53 @@ class _ViewState extends State<_View> {
         ),
       ),
     );
+    // The same tree shape whether rotated or not — swapping in a RotatedBox
+    // only when needed would re-create the HtmlElementView, i.e. a new
+    // <video> with nothing attached. The nested Navigator gives the
+    // "Lingua"/"Tracce"/"Velocità" menus an overlay inside the rotation:
+    // on the app's root one they'd open sideways.
+    return ValueListenableBuilder<bool>(
+      valueListenable: _phoneLandscape.rotateUi,
+      builder: (context, rotateUi, child) {
+        final mq = MediaQuery.of(context);
+        final rotate = rotateUi && mq.size.height > mq.size.width;
+        return RotatedBox(
+          quarterTurns: rotate ? 1 : 0,
+          child: MediaQuery(
+            data: rotate ? mq.copyWith(size: mq.size.flipped) : mq,
+            child: child!,
+          ),
+        );
+      },
+      child: Navigator(
+        pages: [MaterialPage<void>(key: const ValueKey('player'), child: page)],
+        onDidRemovePage: (_) {},
+      ),
+    );
   }
 }
 
 // ── Phone browsers: landscape while the player is open ─────────────────────
 // A page may only lock the screen orientation while it is fullscreen
-// (Chrome/Firefox on Android); iOS Safari supports neither for a page, and
-// there this stays a no-op. The player is opened by a tap, so the
-// fullscreen request still has the user activation it needs. Leaving the
-// player exits fullscreen, which drops the lock: the phone goes back to
-// following the sensor (portrait when held upright).
+// (Chrome/Firefox on Android). The player is opened by a tap, so the
+// fullscreen request normally still has the user activation it needs; if it
+// was lost on the way (a slow source pick), the next tap on the player tries
+// again. Leaving the player exits fullscreen, which drops the lock: the
+// phone goes back to following the sensor.
+//
+// iPhone Safari (browser tab and home-screen PWA alike) has no fullscreen
+// for a page and no orientation lock at all — only the <video>'s own native
+// fullscreen, which needs a fresh tap and the metadata loaded. There, and
+// wherever the lock failed, [rotateUi] turns the player itself 90° while the
+// viewport is portrait: turning the phone sideways (rotation lock on or off)
+// then shows it the right way up, as a native app would.
 class _PhoneLandscape {
   bool _entered = false;
+  bool _disposed = false;
+  JSFunction? _retryOnTap;
+
+  /// True while the player should be drawn rotated in a portrait viewport.
+  final rotateUi = ValueNotifier<bool>(false);
 
   static bool get _isPhone {
     try {
@@ -1834,18 +1892,58 @@ class _PhoneLandscape {
     }
   }
 
+  static bool get _canFullscreen {
+    try {
+      return (web.document.documentElement! as JSObject)
+          .has('requestFullscreen');
+    } catch (_) {
+      return false;
+    }
+  }
+
   Future<void> enter() async {
-    if (!_isPhone || web.document.fullscreenElement != null) return;
+    if (_disposed || !_isPhone) return;
+    if (!_canFullscreen) {
+      rotateUi.value = true;
+      return;
+    }
+    if (web.document.fullscreenElement != null) return;
     try {
       await web.document.documentElement!.requestFullscreen().toDart;
       _entered = true;
       await web.window.screen.orientation.lock('landscape').toDart;
+      if (_disposed) return;
+      rotateUi.value = false;
+      _cancelRetry();
     } catch (_) {
-      // Not allowed or not supported: the player just stays as it is.
+      if (_disposed) return;
+      rotateUi.value = true;
+      if (!_entered) _armRetry();
     }
   }
 
+  // Capture phase on window: sees the tap before Flutter (or the <video>'s
+  // own controls) handle it, while it still carries user activation.
+  void _armRetry() {
+    if (_retryOnTap != null) return;
+    _retryOnTap = ((web.Event _) {
+      _cancelRetry();
+      enter();
+    }).toJS;
+    web.window.addEventListener('pointerup', _retryOnTap, true.toJS);
+  }
+
+  void _cancelRetry() {
+    final f = _retryOnTap;
+    if (f == null) return;
+    _retryOnTap = null;
+    web.window.removeEventListener('pointerup', f, true.toJS);
+  }
+
   void exit() {
+    _disposed = true;
+    _cancelRetry();
+    rotateUi.dispose();
     if (!_entered) return;
     _entered = false;
     try {
