@@ -1,3 +1,4 @@
+// ignore: deprecated_member_use, material_ui migration pending (docs/FLUTTER_UPGRADE.md)
 import 'package:flutter/material.dart';
 
 /// Whether a catalog/details item's `extra['is_live']` flag says it's on air

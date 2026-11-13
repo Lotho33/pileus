@@ -51,8 +51,12 @@ android {
     sourceSets["main"].java.srcDirs("src/main/kotlin")
 }
 
-if (agpMajor < 9) {
-    project.extensions.configure(org.jetbrains.kotlin.gradle.dsl.KotlinAndroidProjectExtension::class.java) {
+// Whoever applies Kotlin (this file on AGP < 9, AGP 9's built-in Kotlin, or
+// kotlin-android when the host app sets android.builtInKotlin=false), pin its
+// JVM target to the Java one above: otherwise it follows the build JDK (21 for
+// AGP 9's lint) and fails "Inconsistent JVM-target compatibility".
+afterEvaluate {
+    extensions.findByType(org.jetbrains.kotlin.gradle.dsl.KotlinAndroidProjectExtension::class.java)?.apply {
         compilerOptions {
             jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17)
         }

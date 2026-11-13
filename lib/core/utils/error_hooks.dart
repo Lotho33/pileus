@@ -1,4 +1,5 @@
 import 'package:flutter/foundation.dart';
+// ignore: deprecated_member_use, material_ui migration pending (docs/FLUTTER_UPGRADE.md)
 import 'package:flutter/material.dart';
 
 /// Last-resort error handling for the store builds (TV + mobile + desktop).

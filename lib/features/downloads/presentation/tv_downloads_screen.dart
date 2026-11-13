@@ -5,6 +5,7 @@
 // touch, so this is the one interaction path for every action instead of
 // splitting "tap = play" from "long-press = manage" the way the mobile CW
 // card does.
+// ignore: deprecated_member_use, material_ui migration pending (docs/FLUTTER_UPGRADE.md)
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';

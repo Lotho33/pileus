@@ -107,9 +107,11 @@ android {
         // instead of replacing it: a different signature on the same id
         // would force an uninstall (and a re-pairing) on every device used
         // for profiling. The type itself is created by the Flutter plugin.
+        // Id/version suffixes are set per variant (androidComponents below),
+        // not here: Flutter copies the app's build types into every plugin
+        // project (initWith), and AGP 9 rejects applicationIdSuffix on a
+        // library.
         getByName("profile") {
-            applicationIdSuffix = ".profile"
-            versionNameSuffix = "-profile"
             manifestPlaceholders["appLabel"] = "Pileus Profile"
         }
         release {
@@ -171,6 +173,15 @@ android {
 kotlin {
     compilerOptions {
         jvmTarget = JvmTarget.JVM_17
+    }
+}
+
+androidComponents {
+    onVariants(selector().withBuildType("profile")) { variant ->
+        variant.applicationId.set(variant.applicationId.get() + ".profile")
+        variant.outputs.forEach { output ->
+            output.versionName.set(output.versionName.get() + "-profile")
+        }
     }
 }
 

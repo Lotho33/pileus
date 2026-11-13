@@ -14,6 +14,21 @@ and the project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
   device with the Tailscale app on keeps working outside the home network.
   Older servers are unaffected.
 
+### Fixed
+- Web on iPhone: the player turns sideways by itself (iOS gives a web page
+  no fullscreen or orientation lock), so it fills the screen once the phone
+  is rotated. Android browsers retry the landscape lock on the next tap if
+  the first attempt was refused.
+- iPhone home-screen app: taps no longer land a status bar's height off.
+  Re-add Pileus to the Home Screen to pick this up.
+- Web: going from an HLS stream to an MP4/MKV one (next episode, other
+  language) no longer stops with "Riproduzione interrotta".
+- Web player: a long title no longer pushes the episode buttons off screen.
+
+### Changed
+- Built with Flutter 3.50, Gradle 9.5, Android Gradle Plugin 9.3 and
+  Kotlin 2.4 (JDK 21 for the build) — see `docs/FLUTTER_UPGRADE.md`.
+
 ## [1.5.3]
 
 ### Fixed

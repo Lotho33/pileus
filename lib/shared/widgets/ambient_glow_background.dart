@@ -1,3 +1,4 @@
+// ignore: deprecated_member_use, material_ui migration pending (docs/FLUTTER_UPGRADE.md)
 import 'package:flutter/material.dart';
 
 /// Soft radial accent glow behind a screen's content — the auth flow

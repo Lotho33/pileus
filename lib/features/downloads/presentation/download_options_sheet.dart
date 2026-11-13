@@ -4,6 +4,7 @@
 // pointer-driven and Material's ModalBottomSheet already adapts reasonably
 // to a mouse on desktop/web (same reasoning mobile_item_sheet.dart's bottom
 // sheet already relies on).
+// ignore: deprecated_member_use, material_ui migration pending (docs/FLUTTER_UPGRADE.md)
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 

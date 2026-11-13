@@ -5,6 +5,7 @@
 // lazy self-check pattern mobile_details_screen.dart's own _PlayButton
 // already uses for its resume lookup, so no capability plumbing has to be
 // threaded through the whole details-screen call chain for this.
+// ignore: deprecated_member_use, material_ui migration pending (docs/FLUTTER_UPGRADE.md)
 import 'package:flutter/material.dart';
 
 import '../../../core/di/injection.dart';

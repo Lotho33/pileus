@@ -5,6 +5,7 @@
 // other TV settings screen in the app already uses, does). Drives the exact
 // same DownloadOptionsCubit as the other three platforms — only the
 // presentation differs.
+// ignore: deprecated_member_use, material_ui migration pending (docs/FLUTTER_UPGRADE.md)
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';

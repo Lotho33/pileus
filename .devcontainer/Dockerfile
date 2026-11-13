@@ -21,7 +21,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # pulse plugin (from libasound2-plugins above) instead of a hardware card.
 RUN printf 'pcm.!default {\n  type pulse\n}\nctl.!default {\n  type pulse\n}\n' > /etc/asound.conf
 
-RUN git clone -b 3.47.1 --depth 1 https://github.com/flutter/flutter.git /opt/flutter
+RUN git clone -b 3.50.0 --depth 1 https://github.com/flutter/flutter.git /opt/flutter
 
 ENV PATH="/opt/flutter/bin:${PATH}"
 ENV FLUTTER_ROOT="/opt/flutter"
@@ -30,10 +30,10 @@ RUN git config --global --add safe.directory /opt/flutter \
     && flutter config --no-analytics
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    openjdk-17-jdk \
+    openjdk-21-jdk \
     && rm -rf /var/lib/apt/lists/*
 
-ENV JAVA_HOME="/usr/lib/jvm/java-17-openjdk-amd64"
+ENV JAVA_HOME="/usr/lib/jvm/java-21-openjdk-amd64"
 ENV ANDROID_HOME="/opt/android-sdk"
 ENV ANDROID_SDK_ROOT="/opt/android-sdk"
 ENV PATH="${PATH}:${ANDROID_HOME}/platform-tools:${ANDROID_HOME}/cmdline-tools/latest/bin"

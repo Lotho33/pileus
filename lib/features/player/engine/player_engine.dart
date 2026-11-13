@@ -3,6 +3,7 @@ import 'dart:io' show Platform;
 
 import 'package:better_player_plus/better_player_plus.dart';
 import 'package:flutter/foundation.dart';
+// ignore: deprecated_member_use, material_ui migration pending (docs/FLUTTER_UPGRADE.md)
 import 'package:flutter/material.dart';
 import 'package:media_kit/media_kit.dart' as mk;
 import 'package:media_kit_video/media_kit_video.dart' as mkv;

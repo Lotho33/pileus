@@ -93,13 +93,19 @@ jobs:
         with:
           ref: ${{ github.event.inputs.tag || github.ref }}
 
+      # AGP 9's lint calls Java 21 APIs (List.removeLast): on 17 it crashes
+      # in lintVitalAnalyzeRelease. Pinned, not the runner's default JDK.
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+
       - uses: subosito/flutter-action@v2
         with:
           channel: stable
-          # Pinned: what the devcontainer builds with. 3.50 needs Gradle 9.3 and
-          # deprecates package:flutter/material.dart (analyze fails) — a migration
-          # of its own, not something to pick up silently on a release tag.
-          flutter-version: 3.47.1
+          # Pinned: what the devcontainer builds with — a new stable is picked up
+          # on purpose (docs/FLUTTER_UPGRADE.md), never silently on a release tag.
+          flutter-version: 3.50.0
           cache: true
 
       - name: Derive version
@@ -237,10 +243,9 @@ jobs:
       - uses: subosito/flutter-action@v2
         with:
           channel: stable
-          # Pinned: what the devcontainer builds with. 3.50 needs Gradle 9.3 and
-          # deprecates package:flutter/material.dart (analyze fails) — a migration
-          # of its own, not something to pick up silently on a release tag.
-          flutter-version: 3.47.1
+          # Pinned: what the devcontainer builds with — a new stable is picked up
+          # on purpose (docs/FLUTTER_UPGRADE.md), never silently on a release tag.
+          flutter-version: 3.50.0
           cache: true
 
       - name: Derive version
@@ -300,13 +305,19 @@ jobs:
         with:
           ref: ${{ github.event.inputs.tag || github.ref }}
 
+      # AGP 9's lint calls Java 21 APIs (List.removeLast): on 17 it crashes
+      # in lintVitalAnalyzeRelease. Pinned, not the runner's default JDK.
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+
       - uses: subosito/flutter-action@v2
         with:
           channel: stable
-          # Pinned: what the devcontainer builds with. 3.50 needs Gradle 9.3 and
-          # deprecates package:flutter/material.dart (analyze fails) — a migration
-          # of its own, not something to pick up silently on a release tag.
-          flutter-version: 3.47.1
+          # Pinned: what the devcontainer builds with — a new stable is picked up
+          # on purpose (docs/FLUTTER_UPGRADE.md), never silently on a release tag.
+          flutter-version: 3.50.0
           cache: true
 
       - name: Derive version
@@ -416,14 +427,21 @@ jobs:
         with:
           ref: ${{ github.event.inputs.tag || github.ref }}
 
+      # AGP 9's lint calls Java 21 APIs (List.removeLast): on 17 it crashes
+      # in lintVitalAnalyzeRelease. Pinned, not the runner's default JDK.
+      - uses: actions/setup-java@v4
+        if: steps.sa.outputs.ok == 'true'
+        with:
+          distribution: temurin
+          java-version: '21'
+
       - uses: subosito/flutter-action@v2
         if: steps.sa.outputs.ok == 'true'
         with:
           channel: stable
-          # Pinned: what the devcontainer builds with. 3.50 needs Gradle 9.3 and
-          # deprecates package:flutter/material.dart (analyze fails) — a migration
-          # of its own, not something to pick up silently on a release tag.
-          flutter-version: 3.47.1
+          # Pinned: what the devcontainer builds with — a new stable is picked up
+          # on purpose (docs/FLUTTER_UPGRADE.md), never silently on a release tag.
+          flutter-version: 3.50.0
           cache: true
 
       - name: Derive version
@@ -509,10 +527,9 @@ jobs:
       - uses: subosito/flutter-action@v2
         with:
           channel: stable
-          # Pinned: what the devcontainer builds with. 3.50 needs Gradle 9.3 and
-          # deprecates package:flutter/material.dart (analyze fails) — a migration
-          # of its own, not something to pick up silently on a release tag.
-          flutter-version: 3.47.1
+          # Pinned: what the devcontainer builds with — a new stable is picked up
+          # on purpose (docs/FLUTTER_UPGRADE.md), never silently on a release tag.
+          flutter-version: 3.50.0
           cache: true
 
       - uses: actions/setup-node@v4

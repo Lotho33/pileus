@@ -1,3 +1,4 @@
+// ignore: deprecated_member_use, material_ui migration pending (docs/FLUTTER_UPGRADE.md)
 import 'package:flutter/material.dart';
 
 // Standard, bundled-in-the-app avatar set — replaces what used to be a
