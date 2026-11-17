@@ -7,7 +7,8 @@ class AuthInterceptor extends ClientInterceptor {
   String? _jwt;
   String? _profileId;
   String? _grpcHost;
-  final int _httpPort = ServerPorts.http;
+  // LAN HTTP port (DeviceSession.httpPort) — 8000 unless typed explicitly.
+  int _httpPort = ServerPorts.http;
 
   // Remote server mode — see server_address.dart's own doc.
   // Set alongside _grpcHost by setGrpcHost(); drives _httpHostHeader/
@@ -28,10 +29,13 @@ class AuthInterceptor extends ClientInterceptor {
   // different profile's calls.
   String? _profileSessionToken;
 
-  void setGrpcHost(String host, {bool remote = false, int? remotePort}) {
+  void setGrpcHost(String host,
+      {bool remote = false, int? remotePort, int? httpPort}) {
     _grpcHost = host;
     _remote = remote;
     _remotePort = remotePort;
+    _httpPort =
+        (httpPort != null && httpPort > 0) ? httpPort : ServerPorts.http;
   }
 
   void setCredentials(String jwt, String profileId) {

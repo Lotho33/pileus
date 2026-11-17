@@ -4,6 +4,7 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 
+import '../core/grpc/server_address.dart';
 import '../core/config/server_config.dart';
 import '../core/di/injection.dart';
 import '../features/auth/bloc/auth_bloc.dart';
@@ -42,8 +43,12 @@ class _WebDiscoveryScreenState extends State<WebDiscoveryScreen> {
   }
 
   Future<void> _connect({bool auto = false}) async {
-    final host = _ctrl.text.trim();
-    if (host.isEmpty) return;
+    final input = _ctrl.text.trim();
+    if (input.isEmpty) return;
+    // "host:port" — the port of mycelium's HTTP side when it isn't 8000.
+    final parsed = parseServerAddressInput(input);
+    final host = parsed.host;
+    final httpPort = parsed.port;
     setState(() {
       _busy = true;
       _error = null;
@@ -54,7 +59,7 @@ class _WebDiscoveryScreenState extends State<WebDiscoveryScreen> {
       final base = host == Uri.base.host
           ? '${Uri.base.scheme}://${Uri.base.host}'
               '${Uri.base.hasPort ? ":${Uri.base.port}" : ""}'
-          : 'http://$host:${ServerPorts.http}';
+          : 'http://$host:${httpPort ?? ServerPorts.http}';
       final res = await http
           .get(Uri.parse('$base/pileus/info'))
           .timeout(const Duration(seconds: 6));
@@ -64,8 +69,9 @@ class _WebDiscoveryScreenState extends State<WebDiscoveryScreen> {
       final info = jsonDecode(res.body) as Map<String, dynamic>;
       if (info['name'] != 'Mycelium') throw 'Non è un server Mycelium.';
 
-      await getIt<AuthRepository>().saveHostInfo(host, null);
-      await rebuildGrpcClients(host, tlsFingerprint: null);
+      await getIt<AuthRepository>()
+          .saveHostInfo(host, null, httpPort: httpPort);
+      await rebuildGrpcClients(host, tlsFingerprint: null, httpPort: httpPort);
       if (!mounted) return;
       getIt<AuthBloc>().add(const AppStartedEvent(splashFloor: false));
     } catch (e) {
