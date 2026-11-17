@@ -339,7 +339,9 @@ class _HeroImage extends StatelessWidget {
               // "ImageRenderMethodForWeb.HttpGet" section for why every
               // CachedNetworkImage call site in the app sets this.
               imageRenderMethodForWeb: ImageRenderMethodForWeb.HttpGet,
-              imageUrl: poster,
+              // Through backdropSrc like every other plugin image: on web
+              // that means mycelium's /img (a bare third-party URL fails CORS).
+              imageUrl: backdropSrc(poster, cacheWidthFor(context, 640)),
               fit: BoxFit.cover,
               memCacheWidth: cacheWidthFor(context, 640),
               fadeInDuration: Duration.zero,
