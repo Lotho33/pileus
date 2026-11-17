@@ -114,6 +114,12 @@ class _PlaybackViewState extends State<_PlaybackView> {
   // collapse into a single 10s step.
   Duration? _optimisticSeekTarget;
   Timer? _optimisticSeekClearTimer;
+  // ←/→ with the controls hidden (see RemoteSeek): the target while a key is
+  // held, shown in a small chip; committed on key up — or by this timer, for
+  // remotes (HDMI-CEC) that lose the key up.
+  final _remoteSeek = RemoteSeek();
+  Timer? _remoteSeekCommit;
+  Duration? _remoteSeekPreview;
   // Diff state for _onEngineChanged (the engine notifies on every value
   // change; we only act on the transitions the screen cares about).
   Duration _lastEnginePos = Duration.zero;
@@ -874,6 +880,7 @@ class _PlaybackViewState extends State<_PlaybackView> {
     _errorGraceTimer?.cancel();
     _stallWatchdog?.cancel();
     _optimisticSeekClearTimer?.cancel();
+    _remoteSeekCommit?.cancel();
     _resumeCoverSafetyTimer?.cancel();
     AppLifecycleReactor.instance.state.removeListener(_onAppLifecycle);
     _engine.removeListener(_onEngineChanged);
@@ -1779,14 +1786,103 @@ class _PlaybackViewState extends State<_PlaybackView> {
     }
   }
 
+  static final _seekKeys = {
+    LogicalKeyboardKey.arrowLeft,
+    LogicalKeyboardKey.arrowRight,
+    LogicalKeyboardKey.mediaRewind,
+    LogicalKeyboardKey.mediaFastForward,
+  };
+  static final _okKeys = {
+    LogicalKeyboardKey.select,
+    LogicalKeyboardKey.enter,
+    LogicalKeyboardKey.numpadEnter,
+    LogicalKeyboardKey.gameButtonA,
+  };
+
+  void _commitRemoteSeek() {
+    _remoteSeekCommit?.cancel();
+    _remoteSeekCommit = null;
+    final target = _remoteSeek.release();
+    if (target == null) return;
+    _engine.seek(target);
+    _optimisticSeekTarget = target;
+    _optimisticSeekClearTimer?.cancel();
+    _optimisticSeekClearTimer = Timer(const Duration(milliseconds: 1200), () {
+      _optimisticSeekTarget = null;
+    });
+    if (mounted) setState(() => _remoteSeekPreview = null);
+  }
+
+  // Revealing the controls puts focus on play/pause (or the live overlay's
+  // first button), after the frame that mounts them.
+  void _revealOverlay() {
+    final wasHidden = !_uiCubit.state.overlayVisible;
+    _uiCubit.showOverlay();
+    if (!wasHidden) return;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      if (widget.args.isLive) {
+        _liveOverlayKey.currentState?.requestInitialFocus();
+      } else {
+        _overlayKey.currentState?.requestInitialFocus();
+      }
+    });
+  }
+
+  // The remote, as on the Vega OS player (pileus-vega PlayerScreen) and most
+  // TV players:
+  // - controls hidden: OK pauses/resumes (and shows them), ←/→ seek ±10 s
+  //   at once — held, a preview moves on (30 s steps after six) and the seek
+  //   happens on release — any other key just shows the controls;
+  // - controls shown: the focused control takes the keys;
+  // - Back: closes the settings, then hides the controls while the video
+  //   plays, then leaves.
+  // A skip-intro button or the next-episode countdown holds focus while the
+  // controls are hidden: its own buttons take OK/←/→ then, not this.
   KeyEventResult _onKey(FocusNode node, KeyEvent event) {
+    final key = event.logicalKey;
+
+    // The end of a hidden-controls seek: key up, wherever focus went.
+    if (event is KeyUpEvent) {
+      if (_seekKeys.contains(key) && _remoteSeek.active) {
+        _commitRemoteSeek();
+        return KeyEventResult.handled;
+      }
+      return KeyEventResult.ignored;
+    }
+
+    // A skip button or the countdown on screen holds focus (its own buttons
+    // take ←/→/OK); otherwise the hidden-controls keys are ours. Not
+    // node.hasPrimaryFocus: once the overlay is excluded, focus settles on
+    // the route's scope rather than back on this node.
+    final promptUp = (_activeSkip != null && !_skipDismissed && _videoStarted) ||
+        _uiCubit.state.nextEpisodeSecs != null;
+    final hiddenAndOurs = !_uiCubit.state.overlayVisible && !promptUp;
+    final loading = !widget.args.isLive &&
+        _isLoadingFor(context.read<PlaybackBloc>().state, _uiCubit.state);
+    final blocked = _uiCubit.state.settingsOpen ||
+        _playbackError != null ||
+        _takeoverPrompt != null;
+
+    // Held ←/→ with the controls hidden: the repeats move the preview.
+    if (event is KeyRepeatEvent) {
+      if (_seekKeys.contains(key) && _remoteSeek.active && !blocked) {
+        _stepRemoteSeek(key);
+        return KeyEventResult.handled;
+      }
+      return KeyEventResult.ignored;
+    }
     if (event is! KeyDownEvent) return KeyEventResult.ignored;
 
-    if (event.logicalKey == LogicalKeyboardKey.escape ||
-        event.logicalKey == LogicalKeyboardKey.goBack) {
+    if (key == LogicalKeyboardKey.escape || key == LogicalKeyboardKey.goBack) {
       if (!consumeBackEvent()) return KeyEventResult.handled;
       if (_uiCubit.state.settingsOpen) {
         _closeSettings();
+        return KeyEventResult.handled;
+      }
+      final playing = _engine.playing && _videoStarted;
+      if (_uiCubit.state.overlayVisible && playing && !blocked && !loading) {
+        _uiCubit.hideOverlay();
         return KeyEventResult.handled;
       }
       _exitPlayer();
@@ -1799,36 +1895,32 @@ class _PlaybackViewState extends State<_PlaybackView> {
     // (error_overlay.dart): those already claim arrow keys before this root
     // handler ever sees them once focus is actually on one of the overlay's
     // buttons, but a key pressed in the brief window before that focus
-    // lands (the WidgetsBinding.instance.addPostFrameCallback in the
-    // PlaybackFailed/PlaybackPlayingElsewhere listeners, or
-    // _onPlaybackTakenOver) must not fall through to a seek/play-pause on a
-    // stream that already errored/stopped instead.
-    if (_playbackError != null || _takeoverPrompt != null) {
-      return KeyEventResult.ignored;
+    // lands must not fall through to a seek/play-pause on a stream that
+    // already errored/stopped instead.
+    if (blocked) return KeyEventResult.ignored;
+
+    if (hiddenAndOurs && !widget.args.isLive && _videoStarted) {
+      if (_seekKeys.contains(key)) {
+        if (!loading) _stepRemoteSeek(key);
+        return KeyEventResult.handled;
+      }
+      if (_okKeys.contains(key) ||
+          key == LogicalKeyboardKey.space ||
+          key == LogicalKeyboardKey.mediaPlayPause) {
+        if (!loading) _engine.playOrPause();
+        _revealOverlay();
+        return KeyEventResult.handled;
+      }
     }
 
-    final wasHidden = !_uiCubit.state.overlayVisible;
-    _uiCubit.showOverlay();
-    if (wasHidden) {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (!mounted) return;
-        if (widget.args.isLive) {
-          _liveOverlayKey.currentState?.requestInitialFocus();
-        } else {
-          _overlayKey.currentState?.requestInitialFocus();
-        }
-      });
-      // The press that wakes a hidden overlay is just that — "show me the
-      // controls" — not also an implicit seek/play-pause. Without this, an
-      // arrow key pressed only to reveal a hidden overlay also jumped the
-      // video ±10s in the same press.
+    if (!_uiCubit.state.overlayVisible) {
+      // Any other key (↑/↓, or anything on a live) brings up the controls.
+      _revealOverlay();
       return KeyEventResult.handled;
     }
+    _uiCubit.showOverlay();
 
-    final loading = !widget.args.isLive &&
-        _isLoadingFor(context.read<PlaybackBloc>().state, _uiCubit.state);
-
-    switch (event.logicalKey) {
+    switch (key) {
       case LogicalKeyboardKey.space:
       case LogicalKeyboardKey.mediaPlayPause:
         if (!widget.args.isLive && !loading) _engine.playOrPause();
@@ -1851,6 +1943,21 @@ class _PlaybackViewState extends State<_PlaybackView> {
         return KeyEventResult.handled;
     }
     return KeyEventResult.ignored;
+  }
+
+  void _stepRemoteSeek(LogicalKeyboardKey key) {
+    final dir = key == LogicalKeyboardKey.arrowRight ||
+            key == LogicalKeyboardKey.mediaFastForward
+        ? 1
+        : -1;
+    final base = _optimisticSeekTarget ?? _engine.position;
+    if (!_remoteSeek.press(dir, base, _engine.duration)) return;
+    setState(() => _remoteSeekPreview = _remoteSeek.target);
+    // A lost key up (seen on HDMI-CEC remotes) must not leave the preview up
+    // forever: no new step for this long counts as released.
+    _remoteSeekCommit?.cancel();
+    _remoteSeekCommit =
+        Timer(const Duration(milliseconds: 900), _commitRemoteSeek);
   }
 
   // ── Build ──────────────────────────────────────────────────────────────────
@@ -2105,6 +2212,39 @@ class _PlaybackViewState extends State<_PlaybackView> {
                       },
                     ),
                   ),
+
+                  // ── ←/→ seek preview (controls hidden) ────────────────
+                  // Where a held ←/→ will land, "mm:ss / mm:ss" bottom
+                  // centre, as on the Vega player (_onKey / RemoteSeek).
+                  if (_remoteSeekPreview != null)
+                    Positioned(
+                      left: 0,
+                      right: 0,
+                      bottom: sz.height * (64 / 1080),
+                      child: IgnorePointer(
+                        child: Center(
+                          child: Container(
+                            padding: EdgeInsets.symmetric(
+                                horizontal: sz.height * (24 / 1080),
+                                vertical: sz.height * (12 / 1080)),
+                            decoration: BoxDecoration(
+                              color: Colors.black.withValues(alpha: 0.7),
+                              borderRadius: BorderRadius.circular(
+                                  sz.height * (12 / 1080)),
+                            ),
+                            child: Text(
+                              '${formatPlaybackDuration(_remoteSeekPreview!)}'
+                              ' / ${formatPlaybackDuration(_engine.duration)}',
+                              style: TextStyle(
+                                color: AppTheme.textHigh,
+                                fontSize: sz.height * (28 / 1080),
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
 
                   // ── Skip button ───────────────────────────────────────
                   if (_activeSkip != null &&

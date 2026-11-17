@@ -29,6 +29,14 @@ class PlayerUiCubit extends Cubit<PlayerUiState> {
     _scheduleHide();
   }
 
+  /// Back with the controls up while the video plays: they go away first
+  /// (the Vega player, and most TV players, do the same) — a second Back
+  /// leaves.
+  void hideOverlay() {
+    _hideTimer?.cancel();
+    if (state.overlayVisible) emit(state.copyWith(overlayVisible: false));
+  }
+
   void _scheduleHide() {
     _hideTimer?.cancel();
     _hideTimer = Timer(const Duration(seconds: 5), () {
