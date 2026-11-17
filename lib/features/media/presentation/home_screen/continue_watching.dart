@@ -798,9 +798,9 @@ class _CwContextMenuState extends State<_CwContextMenu> {
                 children: [
                   Text(
                     widget.title,
-                    style: TextStyle(
+                    style: const TextStyle(
                       color: AppTheme.textHigh,
-                      fontSize: AppScale.space(context, 18),
+                      fontSize: 18,
                       fontWeight: FontWeight.w700,
                     ),
                     maxLines: 2,
