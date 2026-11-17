@@ -9,6 +9,9 @@ part of '../player_overlay.dart';
 
 class PlayerLiveOverlay extends StatefulWidget {
   final String? title;
+
+  /// The source playing now ("Diretta", a channel name) — under the title.
+  final String sourceLabel;
   final List<String> liveSources;
   final List<String> liveSourceLabels;
   final String livePluginId;
@@ -36,6 +39,7 @@ class PlayerLiveOverlay extends StatefulWidget {
     required this.onSwitchSource,
     required this.onRestart,
     this.title,
+    this.sourceLabel = '',
     this.liveSources = const [],
     this.liveSourceLabels = const [],
     this.livePluginId = '',
@@ -55,7 +59,6 @@ class PlayerLiveOverlayState extends State<PlayerLiveOverlay> {
   bool _showSources = false;
   int _focusedSource = 0;
 
-  final _backFn = FocusNode();
   FocusNode? _swapFn;
   final _restartFn = FocusNode();
   final _settingsFn = FocusNode();
@@ -81,7 +84,7 @@ class PlayerLiveOverlayState extends State<PlayerLiveOverlay> {
       // focused node doesn't hand focus anywhere else, so the D-pad goes
       // dead if the user was sitting on the swap-source button when the
       // source list shrank to ≤1 (e.g. a background source-list refresh).
-      if (_swapFn!.hasFocus) _backFn.requestFocus();
+      if (_swapFn!.hasFocus) _restartFn.requestFocus();
       _swapFn!.dispose();
       _swapFn = null;
     }
@@ -89,7 +92,6 @@ class PlayerLiveOverlayState extends State<PlayerLiveOverlay> {
 
   @override
   void dispose() {
-    _backFn.dispose();
     _swapFn?.dispose();
     _restartFn.dispose();
     _settingsFn.dispose();
@@ -97,11 +99,14 @@ class PlayerLiveOverlayState extends State<PlayerLiveOverlay> {
   }
 
   /// Mirrors PlayerOverlayState.requestInitialFocus — called by
-  /// PlaybackScreen when this overlay is revealed via D-pad.
-  void requestInitialFocus() => _backFn.requestFocus();
+  /// PlaybackScreen when this overlay is revealed via D-pad. A live has no
+  /// pause: focus lands on "Riavvia", as on the Vega OS player.
+  void requestInitialFocus() => _restartFn.requestFocus();
 
+  // The bottom row, left to right: source switch (more than one source),
+  // then "Riavvia" and settings at the far right.
   List<FocusNode> get _chain =>
-      [_backFn, if (_swapFn != null) _swapFn!, _restartFn, _settingsFn];
+      [if (_swapFn != null) _swapFn!, _restartFn, _settingsFn];
 
   void _moveIn(FocusNode self, int dir) {
     final chain = _chain;
@@ -109,133 +114,155 @@ class PlayerLiveOverlayState extends State<PlayerLiveOverlay> {
     if (next >= 0 && next < chain.length) chain[next].requestFocus();
   }
 
+  // Layout of the Vega OS player on a live (pileus-vega PlayerScreen), like
+  // PlayerOverlay's on a film: title and source top left; at the bottom the
+  // IN DIRETTA badge and under it the row of round buttons. Sizes in 1080p
+  // pixels of the screen height. Spinner and resolve status in the middle
+  // while loading.
   @override
   Widget build(BuildContext context) {
+    final sh = MediaQuery.sizeOf(context).height;
+    final u = sh / 1080;
+    final hPad = 64 * u;
+    // Row height (72) + its top margin (28) + bottom padding (48), so the
+    // source list opens just above the row.
+    final rowTop = 48 * u + 72 * u;
+
+    Widget rowButton(FocusNode fn,
+        {IconData? icon,
+        String? label,
+        required String semantic,
+        VoidCallback? onPressed}) {
+      return _ShakaButton(
+        icon: icon,
+        label: label,
+        semanticLabel: semantic,
+        onPressed: onPressed,
+        focusNode: fn,
+        onLeft: () => _moveIn(fn, -1),
+        onRight: () => _moveIn(fn, 1),
+      );
+    }
+
     return Stack(
       children: [
-        Container(
-          decoration: const BoxDecoration(
-            gradient: LinearGradient(
-              begin: Alignment.topCenter,
-              end: Alignment.bottomCenter,
-              colors: [Color(0xCC000000), Colors.transparent],
-              stops: [0.0, 0.4],
+        Positioned.fill(
+          child: Container(
+            decoration: const BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topCenter,
+                end: Alignment.bottomCenter,
+                colors: [
+                  Color(0xCC000000),
+                  Colors.transparent,
+                  Color(0xDD000000)
+                ],
+                stops: [0.0, 0.45, 1.0],
+              ),
             ),
           ),
-          // Usa stessa logica responsive del VOD overlay
-          child: Builder(builder: (context) {
-            final h = MediaQuery.sizeOf(context).height;
-            final iconSz = (h * 0.037).clamp(28.0, 48.0);
-            final titleFs = (h * 0.024).clamp(18.0, 30.0);
-            final hPad = AppScale.screenHPad(context);
-            return Column(
-              children: [
-                Padding(
-                  padding: EdgeInsets.fromLTRB(hPad, hPad, hPad, 0),
-                  child: Row(
-                    children: [
-                      _FocusableIconButton(
-                        icon: Icons.arrow_back_ios_new,
-                        size: iconSz,
-                        onPressed: widget.onBack,
-                        focusNode: _backFn,
-                        onLeft: () => _moveIn(_backFn, -1),
-                        onRight: () => _moveIn(_backFn, 1),
-                      ),
-                      const SizedBox(width: 4),
-                      if (widget.title != null)
-                        Expanded(
-                          child: Text(
-                            widget.title!,
-                            style: TextStyle(
-                              color: Colors.white,
-                              fontSize: titleFs,
-                              fontWeight: FontWeight.w600,
-                              shadows: const [Shadow(blurRadius: 8)],
-                            ),
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                        )
-                      else
-                        const Spacer(),
-                      // Badge LIVE
-                      Container(
-                        margin:
-                            EdgeInsets.only(right: AppScale.space(context, 8)),
-                        padding: EdgeInsets.symmetric(
-                            horizontal: AppScale.space(context, 10),
-                            vertical: AppScale.space(context, 4)),
-                        decoration: BoxDecoration(
-                          color: Colors.red,
-                          borderRadius: BorderRadius.circular(4),
-                        ),
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Icon(Icons.circle,
-                                color: Colors.white,
-                                size: AppScale.space(context, 8)),
-                            SizedBox(width: AppScale.space(context, 5)),
-                            Text('LIVE',
-                                style: TextStyle(
-                                    color: Colors.white,
-                                    fontSize: AppScale.caption(context),
-                                    fontWeight: FontWeight.w700,
-                                    letterSpacing: 1)),
-                          ],
-                        ),
-                      ),
-                      if (_swapFn != null)
-                        _FocusableIconButton(
-                          icon: Icons.swap_horiz_rounded,
-                          size: iconSz,
-                          focusNode: _swapFn!,
-                          onLeft: () => _moveIn(_swapFn!, -1),
-                          onRight: () => _moveIn(_swapFn!, 1),
-                          onPressed: () => setState(() {
-                            _showSources = !_showSources;
-                            _focusedSource = 0;
-                          }),
-                        ),
-                      _FocusableIconButton(
-                        icon: Icons.restart_alt_rounded,
-                        size: iconSz,
-                        onPressed: widget.onRestart,
-                        focusNode: _restartFn,
-                        onLeft: () => _moveIn(_restartFn, -1),
-                        onRight: () => _moveIn(_restartFn, 1),
-                      ),
-                      _FocusableIconButton(
-                        icon: Icons.settings_rounded,
-                        size: iconSz,
-                        onPressed: widget.onOpenSettings,
-                        focusNode: _settingsFn,
-                        onLeft: () => _moveIn(_settingsFn, -1),
-                        onRight: () => _moveIn(_settingsFn, 1),
-                      ),
-                    ],
-                  ),
-                ),
-                Expanded(
-                  child: Center(
-                    child: widget.loading
-                        ? _LiveLoadingCenter(
-                            statusMessage: widget.statusMessage,
-                            statusKind: widget.statusKind,
-                            buffering: widget.buffering,
-                            bufferingPercent: widget.bufferingPercent,
-                          )
-                        : const SizedBox.shrink(),
-                  ),
-                ),
-              ],
-            );
-          }),
         ),
+
+        // ── Top: title, source ────────────────────────────────────────────
+        Positioned(
+          left: hPad,
+          right: hPad,
+          top: 48 * u,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              if (widget.title != null)
+                Text(
+                  widget.title!,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    color: AppTheme.textHigh,
+                    fontSize: 40 * u,
+                    fontWeight: FontWeight.w800,
+                    shadows: const [Shadow(blurRadius: 8)],
+                  ),
+                ),
+              if (widget.sourceLabel.isNotEmpty)
+                Padding(
+                  padding: EdgeInsets.only(top: 6 * u),
+                  child: Text(
+                    widget.sourceLabel,
+                    style: TextStyle(color: AppTheme.textMid, fontSize: 24 * u),
+                  ),
+                ),
+            ],
+          ),
+        ),
+
+        // ── Middle: loading ───────────────────────────────────────────────
+        if (widget.loading)
+          Center(
+            child: _LiveLoadingCenter(
+              statusMessage: widget.statusMessage,
+              statusKind: widget.statusKind,
+              buffering: widget.buffering,
+              bufferingPercent: widget.bufferingPercent,
+            ),
+          ),
+
+        // ── Bottom: badge, buttons ────────────────────────────────────────
+        Positioned(
+          left: hPad,
+          right: hPad,
+          bottom: 48 * u,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Container(
+                padding:
+                    EdgeInsets.symmetric(horizontal: 14 * u, vertical: 6 * u),
+                decoration: BoxDecoration(
+                  color: const Color(0xE6E53935),
+                  borderRadius: BorderRadius.circular(6 * u),
+                ),
+                child: Text('IN DIRETTA',
+                    style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 20 * u,
+                        fontWeight: FontWeight.w800,
+                        letterSpacing: 1)),
+              ),
+              SizedBox(height: 28 * u),
+              Row(
+                children: [
+                  if (_swapFn != null)
+                    rowButton(_swapFn!,
+                        icon: Icons.swap_horiz_rounded,
+                        label: 'Sorgente',
+                        semantic: 'Cambia sorgente',
+                        onPressed: () => setState(() {
+                              _showSources = !_showSources;
+                              _focusedSource = 0;
+                            })),
+                  const Spacer(),
+                  rowButton(_restartFn,
+                      icon: Icons.refresh_rounded,
+                      label: 'Riavvia',
+                      semantic: 'Riavvia la diretta',
+                      onPressed: widget.onRestart),
+                  SizedBox(width: 16 * u),
+                  rowButton(_settingsFn,
+                      icon: Icons.settings_rounded,
+                      semantic: 'Impostazioni di riproduzione',
+                      onPressed: widget.onOpenSettings),
+                ],
+              ),
+            ],
+          ),
+        ),
+
         if (_showSources)
           Positioned(
-            top: 72,
-            right: 16,
+            left: hPad,
+            bottom: rowTop + 16 * u,
             child: _LiveSourcePanel(
               sources: widget.liveSources,
               labels: widget.liveSourceLabels,

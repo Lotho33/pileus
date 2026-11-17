@@ -3,81 +3,11 @@
 // private identifiers are shared across all parts.
 part of '../player_overlay.dart';
 
-// What a screen reader says for the icon-only player buttons below.
-final _iconLabels = <IconData, String>{
-  Icons.arrow_back_ios_new: 'Indietro',
-  Icons.settings_rounded: 'Impostazioni di riproduzione',
-  Icons.skip_previous_rounded: 'Episodio precedente',
-  Icons.skip_next_rounded: 'Episodio successivo',
-  Icons.replay_10: 'Indietro di 10 secondi',
-  Icons.forward_10: 'Avanti di 10 secondi',
-  Icons.swap_horiz_rounded: 'Cambia sorgente',
-  Icons.restart_alt_rounded: 'Riavvia la diretta',
-};
-
 // ─────────────────────────────────────────────────────────────────────────────
 // Control buttons — all D-pad focusable: a FocusNode, select/enter activates,
 // arrow keys delegate to the caller's onKey (row/chain navigation, see
-// PlayerOverlayState/PlayerLiveOverlayState above), AppScale focus glow.
+// PlayerOverlayState/PlayerLiveOverlayState).
 // ─────────────────────────────────────────────────────────────────────────────
-
-/// Shared focus/activation chrome for a plain icon button (back/settings/
-/// swap-source) — used by both PlayerOverlay and PlayerLiveOverlay.
-class _FocusableIconButton extends StatelessWidget {
-  final IconData icon;
-  final double size;
-  final VoidCallback onPressed;
-  final FocusNode focusNode;
-  final VoidCallback? onLeft;
-  final VoidCallback? onRight;
-
-  const _FocusableIconButton({
-    required this.icon,
-    required this.size,
-    required this.onPressed,
-    required this.focusNode,
-    this.onLeft,
-    this.onRight,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return TvFocusable(
-      semanticLabel: _iconLabels[icon],
-      focusNode: focusNode,
-      onActivate: onPressed,
-      onLeft: onLeft,
-      onRight: onRight,
-      builder: (context, focused) => AnimatedScale(
-        scale: focused ? AppScale.focusScaleIcon : 1.0,
-        duration: AppScale.focusDuration,
-        curve: AppScale.focusCurve,
-        child: AnimatedContainer(
-          duration: AppScale.focusDuration,
-          curve: AppScale.focusCurve,
-          padding: const EdgeInsets.all(9),
-          decoration: BoxDecoration(
-            shape: BoxShape.circle,
-            // Back/settings only had a scale + faint glow — hard to see over
-            // bright video. A filled disc + ring makes the focused one
-            // unmistakable, matching the play/pause button's treatment.
-            color: focused
-                ? AppTheme.primary.withValues(alpha: 0.28)
-                : Colors.transparent,
-            border: Border.all(
-              color: focused ? AppTheme.primary : Colors.transparent,
-              width: 2,
-            ),
-            boxShadow: focused
-                ? AppScale.focusGlow(AppTheme.primary, alpha: 0.5, blur: 18)
-                : null,
-          ),
-          child: Icon(icon, color: Colors.white, size: size),
-        ),
-      ),
-    );
-  }
-}
 
 /// A round control in the bottom row — the Vega OS player's ControlButton
 /// (pileus-vega PlayerScreen): 72/1080 of the screen tall, a light 12% disc;
