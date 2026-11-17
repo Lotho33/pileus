@@ -54,7 +54,7 @@ class _MobileDiscoveryScreenState extends State<MobileDiscoveryScreen> {
       await _connectRemote(parsed);
       return;
     }
-    await _connectTo(parsed.host);
+    await _connectTo(parsed.host, httpPort: parsed.port);
   }
 
   Future<void> _connectRemote(ParsedServerAddress parsed) async {
@@ -105,7 +105,10 @@ class _MobileDiscoveryScreenState extends State<MobileDiscoveryScreen> {
     await _connectTo(host);
   }
 
-  Future<void> _connectTo(String host) async {
+  /// [httpPort]: typed as "ip:port" in the manual address; the fixed
+  /// ServerPorts.http otherwise (auto-discovery).
+  Future<void> _connectTo(String host, {int? httpPort}) async {
+    final port = httpPort ?? ServerPorts.http;
     setState(() {
       _busy = true;
       _error = null;
@@ -115,22 +118,20 @@ class _MobileDiscoveryScreenState extends State<MobileDiscoveryScreen> {
       //    pinning fingerprint (trust-on-first-use; the gRPC cert is
       //    self-signed, so a matching SHA-256 IS the trust check).
       final res = await http
-          .get(Uri.http('$host:${ServerPorts.http}', '/pileus/info'))
+          .get(Uri.http('$host:$port', '/pileus/info'))
           .timeout(const Duration(seconds: 6));
       if (res.statusCode != 200) {
         throw _DiscoveryError('Il server a "$host" ha risposto HTTP '
-            '${res.statusCode} su :${ServerPorts.http}.');
+            '${res.statusCode} su :$port.');
       }
       Map<String, dynamic> info;
       try {
         info = jsonDecode(res.body) as Map<String, dynamic>;
       } catch (_) {
-        throw _DiscoveryError(
-            'Risposta non valida da "$host:${ServerPorts.http}".');
+        throw _DiscoveryError('Risposta non valida da "$host:$port".');
       }
       if (info['name'] != 'Mycelium') {
-        throw _DiscoveryError(
-            '"$host:${ServerPorts.http}" non è un server Mycelium.');
+        throw _DiscoveryError('"$host:$port" non è un server Mycelium.');
       }
       final fpRaw = info['grpc_tls_fingerprint'] as String?;
       final tlsFingerprint = (fpRaw != null && fpRaw.isNotEmpty) ? fpRaw : null;
@@ -138,8 +139,9 @@ class _MobileDiscoveryScreenState extends State<MobileDiscoveryScreen> {
       // always be reported as the fixed default regardless of what mycelium
       // actually listened on. Missing (older server) falls back to it.
       final rawGrpcPort = (info['grpc_port'] as num?)?.toInt();
-      final grpcPort =
-          (rawGrpcPort != null && rawGrpcPort > 0) ? rawGrpcPort : ServerPorts.grpc;
+      final grpcPort = (rawGrpcPort != null && rawGrpcPort > 0)
+          ? rawGrpcPort
+          : ServerPorts.grpc;
 
       // 2. gRPC side — pairing and every catalog call go here, and it's
       //    often bound/published separately from :8000. Fail loudly now
@@ -150,15 +152,16 @@ class _MobileDiscoveryScreenState extends State<MobileDiscoveryScreen> {
             timeout: const Duration(seconds: 4));
         sock.destroy();
       } catch (_) {
-        throw _DiscoveryError(
-            'Il server risponde su :${ServerPorts.http} ma non su '
+        throw _DiscoveryError('Il server risponde su :$port ma non su '
             ':$grpcPort (gRPC). Apri/pubblica quella porta e '
             'assicurati che Mycelium sia in ascolto su 0.0.0.0.');
       }
-      await getIt<AuthRepository>()
-          .saveHostInfo(host, tlsFingerprint, grpcPort: rawGrpcPort);
+      await getIt<AuthRepository>().saveHostInfo(host, tlsFingerprint,
+          grpcPort: rawGrpcPort, httpPort: httpPort);
       await rebuildGrpcClients(host,
-          tlsFingerprint: tlsFingerprint, grpcPort: rawGrpcPort);
+          tlsFingerprint: tlsFingerprint,
+          grpcPort: rawGrpcPort,
+          httpPort: httpPort);
       if (!mounted) return;
       getIt<AuthBloc>().add(const AppStartedEvent(splashFloor: false));
     } on _DiscoveryError catch (e) {

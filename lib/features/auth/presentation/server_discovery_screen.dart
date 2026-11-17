@@ -95,14 +95,17 @@ class _ServerDiscoveryScreenState extends State<ServerDiscoveryScreen> {
   /// is empty when the server reports TLS off (grpc_tls: false) — and the
   /// real gRPC port (`grpc_port`; null on an older server that
   /// doesn't report it, in which case ServerPorts.grpc is the fallback).
-  Future<_ProbeResult?> _probe(String host, {Duration? timeout}) async {
+  /// [port]: the HTTP port typed as "ip:port" in the manual address; the
+  /// fixed one otherwise (auto-discovery).
+  Future<_ProbeResult?> _probe(String host,
+      {Duration? timeout, int? port}) async {
     // Own client, closed in `finally`: closing is what actually aborts a
     // request the timeout gave up on. On web a dangling XHR per dead sweep
     // address would otherwise pile up against the browser's socket cap.
     final client = http.Client();
     try {
       final res = await client
-          .get(Uri.http('$host:$_port', '/pileus/info'))
+          .get(Uri.http('$host:${port ?? _port}', '/pileus/info'))
           .timeout(timeout ?? _timeout);
       if (res.statusCode != 200) return null;
       final json = jsonDecode(res.body) as Map<String, dynamic>;
@@ -296,10 +299,10 @@ class _ServerDiscoveryScreenState extends State<ServerDiscoveryScreen> {
       }
       return;
     }
-    final result = await _probe(parsed.host);
+    final result = await _probe(parsed.host, port: parsed.port);
     if (!mounted) return;
     if (result != null) {
-      await _saveHost(parsed.host, result);
+      await _saveHost(parsed.host, result, httpPort: parsed.port);
       setState(() {
         _scanState = _ScanState.found;
         _foundHost = parsed.host;
@@ -308,7 +311,7 @@ class _ServerDiscoveryScreenState extends State<ServerDiscoveryScreen> {
     } else {
       setState(() {
         _connecting = false;
-        _error = 'Server non trovato su ${parsed.host}:$_port';
+        _error = 'Server non trovato su ${parsed.host}:${parsed.port ?? _port}';
       });
     }
   }
@@ -334,11 +337,14 @@ class _ServerDiscoveryScreenState extends State<ServerDiscoveryScreen> {
     });
   }
 
-  Future<void> _saveHost(String host, _ProbeResult result) async {
-    await getIt<AuthRepository>()
-        .saveHostInfo(host, result.tlsFingerprint, grpcPort: result.grpcPort);
+  Future<void> _saveHost(String host, _ProbeResult result,
+      {int? httpPort}) async {
+    await getIt<AuthRepository>().saveHostInfo(host, result.tlsFingerprint,
+        grpcPort: result.grpcPort, httpPort: httpPort);
     await rebuildGrpcClients(host,
-        tlsFingerprint: result.tlsFingerprint, grpcPort: result.grpcPort);
+        tlsFingerprint: result.tlsFingerprint,
+        grpcPort: result.grpcPort,
+        httpPort: httpPort);
   }
 
   @override

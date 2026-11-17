@@ -134,6 +134,7 @@ Future<String> resolveGrpcHost({int port = ServerPorts.grpc}) async {
   String? savedHost;
   String? vpnHost;
   int? savedPort;
+  var savedHttpPort = ServerPorts.http;
   try {
     final prefs = getIt<SharedPreferences>();
     final session = DeviceSession.readFrom(prefs);
@@ -145,6 +146,7 @@ Future<String> resolveGrpcHost({int port = ServerPorts.grpc}) async {
         vpnHost = session.vpnHost;
       }
       savedPort = session.grpcPort;
+      savedHttpPort = session.lanHttpPort;
     }
   } catch (_) {}
 
@@ -186,14 +188,14 @@ Future<String> resolveGrpcHost({int port = ServerPorts.grpc}) async {
   var pending = candidates.length;
   for (final host in candidates) {
     final isSaved = host == savedHost;
-    final probePort = (isSaved && savedPort != null && savedPort > 0)
-        ? savedPort
-        : port;
+    final probePort =
+        (isSaved && savedPort != null && savedPort > 0) ? savedPort : port;
     // gRPC port open AND /pileus/info says Mycelium — see
     // answersAsMycelium for why the port alone isn't enough.
     Future.wait([
       canReach(host, probePort, timeout),
-      answersAsMycelium(host, ServerPorts.http, timeout),
+      answersAsMycelium(
+          host, isSaved ? savedHttpPort : ServerPorts.http, timeout),
     ]).then((r) => r[0] && r[1]).then((ok) {
       if (ok) {
         if (isSaved) discoveredGrpcPort = savedPort;
@@ -222,7 +224,8 @@ Future<String> resolveGrpcHost({int port = ServerPorts.grpc}) async {
         session.grpcHost = resolved;
         changed = true;
       }
-      if (discoveredGrpcPort != null && session.grpcPort != discoveredGrpcPort) {
+      if (discoveredGrpcPort != null &&
+          session.grpcPort != discoveredGrpcPort) {
         session.grpcPort = discoveredGrpcPort;
         changed = true;
       }
@@ -263,7 +266,7 @@ String? myceliumHttpBase() {
           final suffix = port == ServerPorts.remoteHttps ? '' : ':$port';
           return 'https://$saved$suffix';
         }
-        return 'http://$saved:$_myceliumHttpPort';
+        return 'http://$saved:${session?.lanHttpPort ?? _myceliumHttpPort}';
       }
       final port = u.hasPort ? ':${u.port}' : '';
       return '${u.scheme}://${u.host}$port';
@@ -276,7 +279,7 @@ String? myceliumHttpBase() {
       final suffix = port == ServerPorts.remoteHttps ? '' : ':$port';
       return 'https://$host$suffix';
     }
-    return 'http://$host:$_myceliumHttpPort';
+    return 'http://$host:${session?.lanHttpPort ?? _myceliumHttpPort}';
   } catch (_) {
     return null;
   }

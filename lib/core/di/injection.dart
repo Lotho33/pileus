@@ -72,7 +72,9 @@ Future<void> _serverMoved(String host) async {
   perf('grpc: server moved → $host');
   final session = DeviceSession.readFrom(getIt<SharedPreferences>());
   await rebuildGrpcClients(host,
-      tlsFingerprint: session?.tlsFingerprint, grpcPort: session?.grpcPort);
+      tlsFingerprint: session?.tlsFingerprint,
+      grpcPort: session?.grpcPort,
+      httpPort: session?.httpPort);
   if (getIt.isRegistered<PluginBloc>()) {
     getIt<PluginBloc>().add(const RefreshPluginsEvent(force: true));
   }
@@ -119,6 +121,7 @@ Future<void> configureDependencies() async {
   // published on the public internet rather than found on the LAN.
   var remote = false;
   int? remotePort;
+  int? httpPort;
   try {
     final session = DeviceSession.readFrom(prefs);
     tlsFingerprint = session?.tlsFingerprint;
@@ -127,23 +130,24 @@ Future<void> configureDependencies() async {
     }
     remote = session?.remote ?? false;
     remotePort = session?.remotePort;
+    httpPort = session?.httpPort;
   } catch (_) {}
-  interceptor.setGrpcHost(host, remote: remote, remotePort: remotePort);
+  interceptor.setGrpcHost(host,
+      remote: remote, remotePort: remotePort, httpPort: httpPort);
   final channel = ReconnectableChannel(() => createGrpcChannel(
         host: host,
         grpcPort: remote ? (remotePort ?? ServerPorts.remoteHttps) : grpcPort,
+        httpPort: httpPort ?? ServerPorts.http,
         tlsFingerprint: remote ? null : tlsFingerprint,
         remote: remote,
       ));
   _currentChannel = channel;
 
   // 4. Client gRPC
-  getIt.registerLazySingleton<AuthGrpcClient>(
-      () => AuthGrpcClient(channel, interceptor,
-          connectionWatch: _connectionWatch));
-  getIt.registerLazySingleton<MediaGrpcClient>(
-      () => MediaGrpcClient(channel, interceptor,
-          connectionWatch: _connectionWatch));
+  getIt.registerLazySingleton<AuthGrpcClient>(() =>
+      AuthGrpcClient(channel, interceptor, connectionWatch: _connectionWatch));
+  getIt.registerLazySingleton<MediaGrpcClient>(() =>
+      MediaGrpcClient(channel, interceptor, connectionWatch: _connectionWatch));
 
   // 5. Repository
   getIt.registerLazySingleton<AuthRepository>(
@@ -152,7 +156,8 @@ Future<void> configureDependencies() async {
   );
   getIt.registerLazySingleton<MediaRepository>(() {
     final repo = MediaRepository(prefs, getIt<AuthInterceptor>());
-    repo.onSessionExpired = () => getIt<AuthBloc>().add(const SessionExpiredEvent());
+    repo.onSessionExpired =
+        () => getIt<AuthBloc>().add(const SessionExpiredEvent());
     repo.onProfileLocked = _dispatchProfileLocked;
     return repo;
   });
@@ -262,6 +267,7 @@ Future<void> rebuildGrpcClients(
   int? grpcPort,
   bool remote = false,
   int? remotePort,
+  int? httpPort,
 }) async {
   final interceptor = getIt<AuthInterceptor>();
   // `_grpcHost` is otherwise set once at startup (configureDependencies) and
@@ -271,7 +277,8 @@ Future<void> rebuildGrpcClients(
   // request still advertising the *old* host: posters/fanart from the new
   // server's responses pointed at a host that was no longer reachable,
   // until the app was restarted (2026-09 audit).
-  interceptor.setGrpcHost(host, remote: remote, remotePort: remotePort);
+  interceptor.setGrpcHost(host,
+      remote: remote, remotePort: remotePort, httpPort: httpPort);
   // The player's prev/next episode-list cache is keyed by plugin+parent id
   // only — those ids belong to the server we're leaving, so drop them.
   clearPlaybackEpisodeCache();
@@ -281,7 +288,10 @@ Future<void> rebuildGrpcClients(
         host: host,
         grpcPort: remote
             ? (remotePort ?? ServerPorts.remoteHttps)
-            : (grpcPort != null && grpcPort > 0) ? grpcPort : ServerPorts.grpc,
+            : (grpcPort != null && grpcPort > 0)
+                ? grpcPort
+                : ServerPorts.grpc,
+        httpPort: httpPort ?? ServerPorts.http,
         tlsFingerprint: remote ? null : tlsFingerprint,
         remote: remote,
       ));
@@ -309,19 +319,18 @@ Future<void> rebuildGrpcClients(
     await getIt.unregister<MediaRepository>();
   }
 
-  getIt.registerLazySingleton<AuthGrpcClient>(
-      () => AuthGrpcClient(channel, interceptor,
-          connectionWatch: _connectionWatch));
-  getIt.registerLazySingleton<MediaGrpcClient>(
-      () => MediaGrpcClient(channel, interceptor,
-          connectionWatch: _connectionWatch));
+  getIt.registerLazySingleton<AuthGrpcClient>(() =>
+      AuthGrpcClient(channel, interceptor, connectionWatch: _connectionWatch));
+  getIt.registerLazySingleton<MediaGrpcClient>(() =>
+      MediaGrpcClient(channel, interceptor, connectionWatch: _connectionWatch));
   getIt.registerLazySingleton<AuthRepository>(
     () => AuthRepository(
         prefs, getIt<AuthGrpcClient>(), getIt<AuthInterceptor>()),
   );
   getIt.registerLazySingleton<MediaRepository>(() {
     final repo = MediaRepository(prefs, getIt<AuthInterceptor>());
-    repo.onSessionExpired = () => getIt<AuthBloc>().add(const SessionExpiredEvent());
+    repo.onSessionExpired =
+        () => getIt<AuthBloc>().add(const SessionExpiredEvent());
     repo.onProfileLocked = _dispatchProfileLocked;
     return repo;
   });

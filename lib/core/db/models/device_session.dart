@@ -1,3 +1,4 @@
+import '../../config/server_config.dart';
 import 'dart:convert';
 
 import 'package:shared_preferences/shared_preferences.dart';
@@ -51,6 +52,15 @@ class DeviceSession {
   // mode keeps using [grpcPort] and the fixed ServerPorts.http instead.
   int? remotePort;
 
+  // LAN mode only: the HTTP port typed as "ip:port" in the manual address
+  // (REST, /img, /pileus/info and the x-http-host mycelium builds its URLs
+  // from). Null = the fixed ServerPorts.http (8000) — every auto-discovered
+  // server and every session saved before this existed.
+  int? httpPort;
+
+  int get lanHttpPort =>
+      (httpPort != null && httpPort! > 0) ? httpPort! : ServerPorts.http;
+
   factory DeviceSession.fromJson(Map<String, dynamic> json) => DeviceSession()
     ..deviceId = json['deviceId'] as String? ?? ''
     ..deviceJwt = json['deviceJwt'] as String? ?? ''
@@ -62,7 +72,8 @@ class DeviceSession {
     ..tlsFingerprint = json['tlsFingerprint'] as String?
     ..grpcPort = (json['grpcPort'] as num?)?.toInt()
     ..remote = json['remote'] as bool? ?? false
-    ..remotePort = (json['remotePort'] as num?)?.toInt();
+    ..remotePort = (json['remotePort'] as num?)?.toInt()
+    ..httpPort = (json['httpPort'] as num?)?.toInt();
 
   Map<String, dynamic> toJson() => {
         'deviceId': deviceId,
@@ -76,6 +87,7 @@ class DeviceSession {
         'grpcPort': grpcPort,
         'remote': remote,
         'remotePort': remotePort,
+        'httpPort': httpPort,
       };
 
   static const _prefsKey = 'device_session';

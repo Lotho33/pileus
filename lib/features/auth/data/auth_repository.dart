@@ -402,7 +402,8 @@ class AuthRepository {
   /// dispositivo"). Updates the local cache regardless of whether the RPC
   /// actually reached the server, so this device's own picker doesn't show
   /// itself as still unlocked a moment after deliberately locking it.
-  Future<void> lockProfile(String profileId, {bool forgetDevice = false}) async {
+  Future<void> lockProfile(String profileId,
+      {bool forgetDevice = false}) async {
     try {
       await _client.lockProfile(LockProfileRequest(
         profileId: profileId,
@@ -485,6 +486,7 @@ class AuthRepository {
     int? grpcPort,
     bool remote = false,
     int? remotePort,
+    int? httpPort,
   }) async {
     final session = DeviceSession.readFrom(_prefs) ?? DeviceSession();
     session
@@ -492,7 +494,8 @@ class AuthRepository {
       ..tlsFingerprint = tlsFingerprint
       ..grpcPort = grpcPort
       ..remote = remote
-      ..remotePort = remotePort;
+      ..remotePort = remotePort
+      ..httpPort = httpPort;
     await DeviceSession.writeTo(_prefs, session);
   }
 }
