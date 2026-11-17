@@ -81,7 +81,7 @@ class MediaRepository {
   // Sentinel: cacheTtlSeconds = -1 means "bypass cache entirely" (live/dynamic).
   static const int _noCache = -1;
   // Bump this when the cache schema or field names change to force a full wipe.
-  static const int _cacheVersion = 13;
+  static const int _cacheVersion = 14;
   static const String _cacheVersionKey = '__cache_version__';
 
   // Every LayoutCache row lives under 'layoutcache:$screenEndpoint' — this
@@ -1326,6 +1326,10 @@ class MediaRepository {
               'subs': i.extra['subs'] ?? '',
               'subtype': i.extra['subtype'] ?? '',
               'logo_url': i.logoUrl,
+              // Every extra key, not just the ones above: a live row read
+              // back from here had lost is_live/sport_cat/the start time —
+              // no LIVE badge and no "starts in" until the network answered.
+              'extra': Map<String, String>.of(i.extra),
               if (i.hasLogoMeta())
                 'logo_meta': base64Encode(i.logoMeta.writeToBuffer()),
             })
@@ -1385,6 +1389,10 @@ class MediaRepository {
             'lang': lang,
             'subs': subs,
             'subtype': subtype,
+            // The full map (cache version 14+) wins over the picked keys.
+            if (m['extra'] is Map)
+              for (final e in (m['extra'] as Map).entries)
+                if (e.value is String) e.key as String: e.value as String,
           }.entries,
         );
       }).toList();
