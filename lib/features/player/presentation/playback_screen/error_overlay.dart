@@ -166,6 +166,18 @@ class _TakeoverOverlayState extends State<_TakeoverOverlay> {
   // explicit push once mounted.
   void requestInitialFocus() => _actionFn.requestFocus();
 
+  // The screen's own post-frame request isn't always enough (from the live
+  // popup it never ran): take focus once mounted, with a frame scheduled so
+  // the callback really fires (addPostFrameCallback alone waits for one).
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _actionFn.requestFocus();
+    });
+    WidgetsBinding.instance.scheduleFrame();
+  }
+
   @override
   void dispose() {
     _actionFn.dispose();

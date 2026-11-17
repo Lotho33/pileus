@@ -1901,7 +1901,21 @@ class _PlaybackViewState extends State<_PlaybackView> {
     // buttons, but a key pressed in the brief window before that focus
     // lands must not fall through to a seek/play-pause on a stream that
     // already errored/stopped instead.
-    if (blocked) return KeyEventResult.ignored;
+    if (blocked) {
+      // Focus still on this root node under a prompt/error overlay (its own
+      // post-frame focus request can be lost — seen from the live popup):
+      // the first key puts focus on the overlay's button instead of doing
+      // nothing, which left the remote with Back as the only way out.
+      if (!_uiCubit.state.settingsOpen && node.hasPrimaryFocus) {
+        if (_takeoverPrompt != null) {
+          _takeoverOverlayKey.currentState?.requestInitialFocus();
+        } else {
+          _errorOverlayKey.currentState?.requestInitialFocus();
+        }
+        return KeyEventResult.handled;
+      }
+      return KeyEventResult.ignored;
+    }
 
     if (hiddenAndOurs && !widget.args.isLive && _videoStarted) {
       if (_seekKeys.contains(key)) {
