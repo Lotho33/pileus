@@ -70,6 +70,9 @@ class PlayerSeekBar extends StatefulWidget {
   // happening, so all interaction here (tap, drag, D-pad step-and-hold) is
   // suspended until it clears.
   final bool disabled;
+  // Elapsed and remaining on the bar's own line, left and right of it (the
+  // Vega OS player's layout), instead of in a small row underneath.
+  final bool inlineTimes;
 
   const PlayerSeekBar({
     super.key,
@@ -78,6 +81,7 @@ class PlayerSeekBar extends StatefulWidget {
     required this.skipIntervals,
     required this.onSeek,
     required this.focusNode,
+    this.inlineTimes = false,
     this.onScrubStart,
     this.onScrubEnd,
     this.onNavigateUp,
@@ -324,74 +328,103 @@ class _PlayerSeekBarState extends State<PlayerSeekBar> {
         if (!v) _cancelHold(commit: true);
       },
       onKeyEvent: (node, event) => _onKeyEvent(node, event, dur),
-      child: Builder(
-        builder: (context) => LayoutBuilder(
-          builder: (context, constraints) {
-            final barWidth = constraints.maxWidth;
-            final thumbFrac = pos / dur;
+      child: widget.inlineTimes
+          ? Row(
+              children: [
+                _inlineTime(context, _fmt(pos)),
+                Expanded(child: _bar(context, pos, dur, focused)),
+                _inlineTime(context, '-${_fmt(dur - pos)}'),
+              ],
+            )
+          : _bar(context, pos, dur, focused),
+    );
+  }
 
-            return AnimatedOpacity(
-              opacity: widget.disabled ? 0.45 : 1.0,
-              duration: const Duration(milliseconds: 150),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  SizedBox(
-                    height: 48,
-                    child: GestureDetector(
-                      behavior: HitTestBehavior.opaque,
-                      onHorizontalDragStart:
-                          widget.disabled ? null : (_) => _beginScrub(),
-                      onHorizontalDragUpdate: widget.disabled
-                          ? null
-                          : (d) {
-                              final frac = (d.localPosition.dx / barWidth)
-                                  .clamp(0.0, 1.0);
-                              setState(() => _dragPos = frac * dur);
-                            },
-                      onHorizontalDragEnd: widget.disabled
-                          ? null
-                          : (_) {
-                              if (_dragPos != null) widget.onSeek(_dragPos!);
-                              setState(() => _dragPos = null);
-                              _endScrub(resume: true);
-                            },
-                      onTapUp: widget.disabled
-                          ? null
-                          : (d) {
-                              final frac = (d.localPosition.dx / barWidth)
-                                  .clamp(0.0, 1.0);
-                              widget.onSeek(frac * dur);
-                            },
-                      child: Container(
-                        height: 48,
-                        alignment: Alignment.center,
-                        decoration: BoxDecoration(
-                          borderRadius: BorderRadius.circular(8),
-                          boxShadow: focused && !widget.disabled
-                              ? AppScale.focusGlow(AppTheme.primary)
-                              : null,
-                        ),
-                        child: CustomPaint(
-                          size: Size(barWidth, 8),
-                          painter: _SeekBarPainter(
-                            posFrac: thumbFrac,
-                            skipIntervals: widget.skipIntervals,
-                            durSec: dur,
-                            colorForType: _colorForType,
-                            focused: focused,
-                          ),
+  // 22/1080 type, at least 110/1080 wide, centred (Vega's time labels).
+  Widget _inlineTime(BuildContext context, String text) {
+    final sh = MediaQuery.sizeOf(context).height;
+    return ConstrainedBox(
+      constraints: BoxConstraints(minWidth: sh * (110 / 1080)),
+      child: Padding(
+        padding: EdgeInsets.symmetric(horizontal: sh * (10 / 1080)),
+        child: Text(text,
+            textAlign: TextAlign.center,
+            style: TextStyle(
+                color: AppTheme.textHigh, fontSize: sh * (22 / 1080))),
+      ),
+    );
+  }
+
+  Widget _bar(BuildContext context, double pos, double dur, bool focused) {
+    return Builder(
+      builder: (context) => LayoutBuilder(
+        builder: (context, constraints) {
+          final barWidth = constraints.maxWidth;
+          final thumbFrac = pos / dur;
+
+          return AnimatedOpacity(
+            opacity: widget.disabled ? 0.45 : 1.0,
+            duration: const Duration(milliseconds: 150),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                SizedBox(
+                  height: 48,
+                  child: GestureDetector(
+                    behavior: HitTestBehavior.opaque,
+                    onHorizontalDragStart:
+                        widget.disabled ? null : (_) => _beginScrub(),
+                    onHorizontalDragUpdate: widget.disabled
+                        ? null
+                        : (d) {
+                            final frac =
+                                (d.localPosition.dx / barWidth).clamp(0.0, 1.0);
+                            setState(() => _dragPos = frac * dur);
+                          },
+                    onHorizontalDragEnd: widget.disabled
+                        ? null
+                        : (_) {
+                            if (_dragPos != null) widget.onSeek(_dragPos!);
+                            setState(() => _dragPos = null);
+                            _endScrub(resume: true);
+                          },
+                    onTapUp: widget.disabled
+                        ? null
+                        : (d) {
+                            final frac =
+                                (d.localPosition.dx / barWidth).clamp(0.0, 1.0);
+                            widget.onSeek(frac * dur);
+                          },
+                    child: Container(
+                      height: 48,
+                      alignment: Alignment.center,
+                      decoration: BoxDecoration(
+                        borderRadius: BorderRadius.circular(8),
+                        boxShadow: focused && !widget.disabled
+                            ? AppScale.focusGlow(AppTheme.primary)
+                            : null,
+                      ),
+                      child: CustomPaint(
+                        size: Size(barWidth, 8),
+                        painter: _SeekBarPainter(
+                          posFrac: thumbFrac,
+                          skipIntervals: widget.skipIntervals,
+                          durSec: dur,
+                          colorForType: _colorForType,
+                          focused: focused,
                         ),
                       ),
                     ),
                   ),
-                  // Elapsed / remaining — tracks _dragPos (the same optimistic
-                  // target the thumb itself follows) while scrubbing, not just
-                  // the raw engine position, so this keeps moving smoothly
-                  // during a hold even though the real seek() only commits
-                  // once, on release (see _previewStepBy above). A separate
-                  // floating tooltip above the thumb used to duplicate this
-                  // same number — redundant once it's shown right here.
+                ),
+                // Elapsed / remaining — tracks _dragPos (the same optimistic
+                // target the thumb itself follows) while scrubbing, not just
+                // the raw engine position, so this keeps moving smoothly
+                // during a hold even though the real seek() only commits
+                // once, on release (see _previewStepBy above). A separate
+                // floating tooltip above the thumb used to duplicate this
+                // same number — redundant once it's shown right here.
+                if (!widget.inlineTimes)
                   Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 4),
                     child: Row(
@@ -406,11 +439,10 @@ class _PlayerSeekBarState extends State<PlayerSeekBar> {
                       ],
                     ),
                   ),
-                ],
-              ),
-            );
-          },
-        ),
+              ],
+            ),
+          );
+        },
       ),
     );
   }

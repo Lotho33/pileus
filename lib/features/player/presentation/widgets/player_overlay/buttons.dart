@@ -30,7 +30,6 @@ class _FocusableIconButton extends StatelessWidget {
   final FocusNode focusNode;
   final VoidCallback? onLeft;
   final VoidCallback? onRight;
-  final VoidCallback? onDown;
 
   const _FocusableIconButton({
     required this.icon,
@@ -39,7 +38,6 @@ class _FocusableIconButton extends StatelessWidget {
     required this.focusNode,
     this.onLeft,
     this.onRight,
-    this.onDown,
   });
 
   @override
@@ -50,7 +48,6 @@ class _FocusableIconButton extends StatelessWidget {
       onActivate: onPressed,
       onLeft: onLeft,
       onRight: onRight,
-      onDown: onDown,
       builder: (context, focused) => AnimatedScale(
         scale: focused ? AppScale.focusScaleIcon : 1.0,
         duration: AppScale.focusDuration,
@@ -82,155 +79,28 @@ class _FocusableIconButton extends StatelessWidget {
   }
 }
 
-class _PlayPauseButton extends StatelessWidget {
-  final bool playing;
-  final bool loading;
+/// A round control in the bottom row — the Vega OS player's ControlButton
+/// (pileus-vega PlayerScreen): 72/1080 of the screen tall, a light 12% disc;
+/// focused, a solid off-white disc with a dark glyph and a 1.08 scale. An
+/// icon, a short label ("−10"), or both. Disabled (no previous/next episode):
+/// dimmed and skipped by focus.
+class _ShakaButton extends StatelessWidget {
+  final IconData? icon;
+  final String? label;
+  final String semanticLabel;
   final VoidCallback? onPressed;
   final FocusNode focusNode;
   final VoidCallback? onLeft;
   final VoidCallback? onRight;
   final VoidCallback? onUp;
   final VoidCallback? onDown;
-  // 0..1 buffer fill; when set (and loading) the centre spinner becomes a
-  // determinate ring at this value instead of the indeterminate spin.
-  final double? bufferProgress;
-  const _PlayPauseButton({
-    required this.playing,
+
+  const _ShakaButton({
+    this.icon,
+    this.label,
+    required this.semanticLabel,
     required this.onPressed,
     required this.focusNode,
-    this.loading = false,
-    this.bufferProgress,
-    this.onLeft,
-    this.onRight,
-    this.onUp,
-    this.onDown,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final h = MediaQuery.sizeOf(context).height;
-    final sz = (h * 0.096).clamp(72.0, 120.0);
-    return TvFocusable(
-      semanticLabel: playing ? 'Pausa' : 'Riproduci',
-      focusNode: focusNode,
-      onActivate: onPressed,
-      onLeft: onLeft,
-      onRight: onRight,
-      onUp: onUp,
-      onDown: onDown,
-      builder: (context, focused) => AnimatedScale(
-        scale: focused ? AppScale.focusScaleIcon : 1.0,
-        duration: AppScale.focusDuration,
-        curve: AppScale.focusCurve,
-        child: Container(
-          width: sz,
-          height: sz,
-          decoration: BoxDecoration(
-            color: Colors.white.withValues(alpha: loading ? 0.08 : 0.15),
-            shape: BoxShape.circle,
-            border: Border.all(
-                color: focused ? AppTheme.primary : Colors.white30, width: 2),
-            boxShadow: focused ? AppScale.focusGlow(AppTheme.primary) : null,
-          ),
-          // Loading is one of this button's own states, not a separate
-          // overlay on top of it — swapping the icon for a spinner here
-          // (instead of just disabling onActivate) is what actually tells
-          // the user *why* pressing it right now won't do anything.
-          child: loading
-              ? Padding(
-                  padding: EdgeInsets.all(sz * 0.28),
-                  // Fills exactly what the padding above leaves inside this
-                  // button's own sz×sz footprint — not AppScale.spinnerS/L,
-                  // which are sized off screen height, not this specific
-                  // button.
-                  child: PileusSpinner(
-                      size: sz * 0.44,
-                      color: Colors.white70,
-                      value: bufferProgress),
-                )
-              : Icon(
-                  playing ? Icons.pause_rounded : Icons.play_arrow_rounded,
-                  color: Colors.white,
-                  size: sz * 0.62,
-                ),
-        ),
-      ),
-    );
-  }
-}
-
-class _SkipButton extends StatelessWidget {
-  final IconData icon;
-  final VoidCallback? onPressed;
-  final FocusNode focusNode;
-  final VoidCallback? onLeft;
-  final VoidCallback? onRight;
-  final VoidCallback? onUp;
-  final VoidCallback? onDown;
-  const _SkipButton({
-    required this.icon,
-    required this.onPressed,
-    required this.focusNode,
-    this.onLeft,
-    this.onRight,
-    this.onUp,
-    this.onDown,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final h = MediaQuery.sizeOf(context).height;
-    final sz = (h * 0.074).clamp(56.0, 96.0);
-    final disabled = onPressed == null;
-    return TvFocusable(
-      semanticLabel: _iconLabels[icon],
-      focusNode: focusNode,
-      onActivate: onPressed,
-      onLeft: onLeft,
-      onRight: onRight,
-      onUp: onUp,
-      onDown: onDown,
-      builder: (context, focused) => AnimatedScale(
-        scale: focused ? AppScale.focusScaleIcon : 1.0,
-        duration: AppScale.focusDuration,
-        curve: AppScale.focusCurve,
-        child: Container(
-          width: sz,
-          height: sz,
-          decoration: BoxDecoration(
-            color: Colors.white
-                .withValues(alpha: disabled ? 0.06 : (focused ? 0.2 : 0.1)),
-            shape: BoxShape.circle,
-            border: Border.all(
-              color:
-                  focused && !disabled ? AppTheme.primary : Colors.transparent,
-              width: 2,
-            ),
-            boxShadow: focused && !disabled
-                ? AppScale.focusGlow(AppTheme.primary)
-                : null,
-          ),
-          child: Icon(icon,
-              color: Colors.white.withValues(alpha: disabled ? 0.35 : 1),
-              size: sz * 0.60),
-        ),
-      ),
-    );
-  }
-}
-
-class _NavEpisodeButton extends StatelessWidget {
-  final IconData icon;
-  final VoidCallback? onPressed;
-  final FocusNode focusNode;
-  final VoidCallback? onLeft;
-  final VoidCallback? onRight;
-  final VoidCallback? onUp;
-  final VoidCallback? onDown;
-  const _NavEpisodeButton({
-    required this.icon,
-    required this.focusNode,
-    this.onPressed,
     this.onLeft,
     this.onRight,
     this.onUp,
@@ -240,41 +110,61 @@ class _NavEpisodeButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final enabled = onPressed != null;
-    final h = MediaQuery.sizeOf(context).height;
-    final sz = (h * 0.063).clamp(48.0, 80.0);
+    final sh = MediaQuery.sizeOf(context).height;
+    final d = sh * (72 / 1080);
     return TvFocusable(
-      semanticLabel: _iconLabels[icon],
+      semanticLabel: semanticLabel,
       focusNode: focusNode,
-      // A disabled nav button (no prev/next episode) still sits in the
-      // chain — skip past it rather than letting focus land somewhere with
-      // no visible activation.
       canRequestFocus: enabled,
-      onActivate: enabled ? onPressed : null,
+      onActivate: onPressed,
       onLeft: onLeft,
       onRight: onRight,
       onUp: onUp,
       onDown: onDown,
-      builder: (context, focused) => AnimatedScale(
-        scale: focused ? AppScale.focusScaleIcon : 1.0,
-        duration: AppScale.focusDuration,
-        curve: AppScale.focusCurve,
-        child: Container(
-          width: sz,
-          height: sz,
-          decoration: BoxDecoration(
-            color: Colors.white
-                .withValues(alpha: enabled ? (focused ? 0.22 : 0.12) : 0.04),
-            shape: BoxShape.circle,
-            border: Border.all(
-              color: focused ? AppTheme.primary : Colors.transparent,
-              width: 2,
+      builder: (context, focused) {
+        final fg = focused ? AppTheme.bg : AppTheme.textHigh;
+        return AnimatedScale(
+          scale: focused ? 1.08 : 1.0,
+          duration: AppScale.focusDuration,
+          curve: AppScale.focusCurve,
+          child: AnimatedOpacity(
+            opacity: enabled ? 1 : 0.35,
+            duration: AppScale.focusDuration,
+            child: AnimatedContainer(
+              duration: AppScale.focusDuration,
+              curve: AppScale.focusCurve,
+              height: d,
+              constraints: BoxConstraints(minWidth: d),
+              padding: label != null
+                  ? EdgeInsets.symmetric(horizontal: sh * (28 / 1080))
+                  : null,
+              alignment: Alignment.center,
+              decoration: BoxDecoration(
+                color: focused
+                    ? AppTheme.textHigh
+                    : AppTheme.textHigh.withValues(alpha: 0.12),
+                borderRadius: BorderRadius.circular(d / 2),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  if (icon != null)
+                    Icon(icon, size: sh * (36 / 1080), color: fg),
+                  if (icon != null && label != null)
+                    SizedBox(width: sh * (10 / 1080)),
+                  if (label != null)
+                    Text(label!,
+                        style: TextStyle(
+                          color: fg,
+                          fontSize: sh * (22 / 1080),
+                          fontWeight: FontWeight.w600,
+                        )),
+                ],
+              ),
             ),
-            boxShadow: focused ? AppScale.focusGlow(AppTheme.primary) : null,
           ),
-          child: Icon(icon,
-              color: enabled ? Colors.white : Colors.white24, size: sz * 0.59),
-        ),
-      ),
+        );
+      },
     );
   }
 }

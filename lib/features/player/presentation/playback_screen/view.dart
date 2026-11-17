@@ -823,7 +823,9 @@ class _PlaybackViewState extends State<_PlaybackView> {
   // appear a beat later. `_currentMediaId` here is the resolved stream id,
   // not a bare episode id, so matches fall back to the episode title.
   Future<void> _resolveEpisodeListIfMissing() async {
-    if (widget.args.isLive || _currentEpisodeList.isNotEmpty || _parentId.isEmpty) {
+    if (widget.args.isLive ||
+        _currentEpisodeList.isNotEmpty ||
+        _parentId.isEmpty) {
       return;
     }
     final target = episodeMatchKey(_currentTitle);
@@ -1685,7 +1687,8 @@ class _PlaybackViewState extends State<_PlaybackView> {
 
   Future<void> _loadLanguages() async {
     if (widget.args.isLive) return;
-    if (await _languages.load(widget.args.epPluginId, _currentMediaId) && mounted) {
+    if (await _languages.load(widget.args.epPluginId, _currentMediaId) &&
+        mounted) {
       setState(() {});
     }
   }
@@ -1855,8 +1858,9 @@ class _PlaybackViewState extends State<_PlaybackView> {
     // take ←/→/OK); otherwise the hidden-controls keys are ours. Not
     // node.hasPrimaryFocus: once the overlay is excluded, focus settles on
     // the route's scope rather than back on this node.
-    final promptUp = (_activeSkip != null && !_skipDismissed && _videoStarted) ||
-        _uiCubit.state.nextEpisodeSecs != null;
+    final promptUp =
+        (_activeSkip != null && !_skipDismissed && _videoStarted) ||
+            _uiCubit.state.nextEpisodeSecs != null;
     final hiddenAndOurs = !_uiCubit.state.overlayVisible && !promptUp;
     final loading = !widget.args.isLive &&
         _isLoadingFor(context.read<PlaybackBloc>().state, _uiCubit.state);
