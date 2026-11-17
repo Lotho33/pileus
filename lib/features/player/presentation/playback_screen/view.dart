@@ -2136,6 +2136,7 @@ class _PlaybackViewState extends State<_PlaybackView> {
                                 ? PlayerLiveOverlay(
                                     key: _liveOverlayKey,
                                     title: _currentTitle,
+                                    sourceLabel: _currentSourceLabel,
                                     liveSources: widget.args.liveSources,
                                     liveSourceLabels:
                                         widget.args.liveSourceLabels,
