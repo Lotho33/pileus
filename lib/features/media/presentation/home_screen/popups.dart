@@ -209,9 +209,9 @@ class _CardContextMenuState extends State<_CardContextMenu> {
                   children: [
                     Text(
                       widget.item.title,
-                      style: TextStyle(
+                      style: const TextStyle(
                         color: AppTheme.textHigh,
-                        fontSize: AppScale.space(context, 17),
+                        fontSize: 17,
                         fontWeight: FontWeight.w700,
                       ),
                       maxLines: 2,
@@ -716,9 +716,8 @@ class _TvCloseBarState extends State<_TvCloseBar> {
                     letterSpacing: 1.5,
                   ),
                 ),
+                // No "ESC" hint: a remote has no such key (Back closes).
                 const SizedBox(width: 24),
-                const _TvKey('ESC'),
-                const SizedBox(width: 8),
                 const _TvKey('↑↓ scorri'),
               ],
             ),
