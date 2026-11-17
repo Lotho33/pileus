@@ -158,14 +158,14 @@ class PlayerOverlayState extends State<PlayerOverlay> {
     );
   }
 
-  List<FocusNode> get _topChain => [_backFn, _settingsFn];
-
-  List<FocusNode> get _centerChain => [
+  // The bottom row, left to right: episode nav, ±10, play/pause, settings.
+  List<FocusNode> get _rowChain => [
         if (_prevEpFn != null) _prevEpFn!,
         _skipBackFn,
         _playPauseFn,
         _skipFwdFn,
         if (_nextEpFn != null) _nextEpFn!,
+        _settingsFn,
       ];
 
   void _moveIn(List<FocusNode> chain, FocusNode from, int dir) {
@@ -180,9 +180,43 @@ class PlayerOverlayState extends State<PlayerOverlay> {
     if (i >= 0 && i < chain.length) chain[i].requestFocus();
   }
 
+  // Layout of the Vega OS player (pileus-vega PlayerScreen), the controls
+  // most TV players have: the title top left; at the bottom elapsed · bar ·
+  // remaining on one line and under it a row of round buttons — episode
+  // nav, −10, play/pause, +10 — with settings at the far right. Sizes in
+  // 1080p pixels of the screen height, as there. The loading spinner and
+  // the plugin's progress text sit in the middle while it loads.
   @override
   Widget build(BuildContext context) {
     final hasEpisodeNav = widget.episodeCount > 1 && widget.episodeIndex >= 0;
+    final sh = MediaQuery.sizeOf(context).height;
+    final u = sh / 1080;
+    final hPad = 64 * u;
+
+    Widget rowButton(FocusNode fn,
+        {IconData? icon,
+        String? label,
+        required String semantic,
+        VoidCallback? onPressed}) {
+      return _ShakaButton(
+        icon: icon,
+        label: label,
+        semanticLabel: semantic,
+        onPressed: onPressed,
+        focusNode: fn,
+        onLeft: () => _moveIn(_rowChain, fn, -1),
+        onRight: () => _moveIn(_rowChain, fn, 1),
+        onUp: () => _seekBarFn.requestFocus(),
+        onDown: widget.onNavigateToSkip,
+      );
+    }
+
+    final captionFs = AppScale.caption(context);
+    final bufferRing = (widget.buffering &&
+            widget.bufferingPercent >= 1 &&
+            widget.bufferingPercent < 100)
+        ? widget.bufferingPercent / 100.0
+        : null;
 
     return Container(
       decoration: const BoxDecoration(
@@ -193,245 +227,172 @@ class PlayerOverlayState extends State<PlayerOverlay> {
           stops: [0.0, 0.45, 1.0],
         ),
       ),
-      child: Column(
+      child: Stack(
         children: [
-          // ── Top bar ───────────────────────────────────────────────────────
-          Builder(builder: (context) {
-            final h = MediaQuery.sizeOf(context).height;
-            final iconSz = (h * 0.037).clamp(28.0, 48.0);
-            final titleFs = (h * 0.024).clamp(18.0, 30.0);
-            final epFs = (h * 0.017).clamp(13.0, 22.0);
-            final hPad = AppScale.screenHPad(context);
-            return Padding(
-              padding: EdgeInsets.fromLTRB(hPad, hPad, hPad, 0),
-              child: Row(
-                children: [
-                  _FocusableIconButton(
-                    icon: Icons.arrow_back_ios_new,
-                    size: iconSz,
-                    onPressed: widget.onBack,
-                    focusNode: _backFn,
-                    onLeft: () => _moveIn(_topChain, _backFn, -1),
-                    onRight: () => _moveIn(_topChain, _backFn, 1),
-                    onDown: () => _playPauseFn.requestFocus(),
-                  ),
-                  const SizedBox(width: 4),
-                  if (widget.title != null)
-                    Expanded(
-                      child: Text(
-                        widget.title!,
-                        style: TextStyle(
-                          color: Colors.white,
-                          fontSize: titleFs,
-                          fontWeight: FontWeight.w600,
-                          shadows: const [Shadow(blurRadius: 8)],
-                        ),
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    )
-                  else
-                    const Spacer(),
-                  if (hasEpisodeNav)
-                    Padding(
-                      padding: const EdgeInsets.only(right: 4),
-                      child: Text(
-                        'Ep. ${widget.episodeIndex + 1}/${widget.episodeCount}',
-                        style: TextStyle(color: Colors.white54, fontSize: epFs),
-                      ),
+          // ── Top: title, episode ──────────────────────────────────────────
+          Positioned(
+            left: hPad,
+            right: hPad,
+            top: 48 * u,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                if (widget.title != null)
+                  Text(
+                    widget.title!,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      color: AppTheme.textHigh,
+                      fontSize: 40 * u,
+                      fontWeight: FontWeight.w800,
+                      shadows: const [Shadow(blurRadius: 8)],
                     ),
-                  _FocusableIconButton(
-                    icon: Icons.settings_rounded,
-                    size: iconSz,
-                    onPressed: widget.onOpenSettings,
-                    focusNode: _settingsFn,
-                    onLeft: () => _moveIn(_topChain, _settingsFn, -1),
-                    onRight: () => _moveIn(_topChain, _settingsFn, 1),
-                    onDown: () => _playPauseFn.requestFocus(),
                   ),
-                ],
-              ),
-            );
-          }),
-
-          // ── Centro: episodio-nav · skip-back · play/pause · skip-fwd · episodio-nav ──
-          Expanded(
-            child: Center(
-              child: StreamBuilder<bool>(
-                stream: widget.engine.playingStream,
-                initialData: widget.engine.playing,
-                builder: (_, snap) {
-                  final playing = snap.data ?? false;
-                  // FittedBox previene overflow su schermi stretti
-                  final controlsRow = FittedBox(
-                    fit: BoxFit.scaleDown,
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        if (hasEpisodeNav) ...[
-                          _NavEpisodeButton(
-                            icon: Icons.skip_previous_rounded,
-                            onPressed: widget.onPrevEpisode,
-                            focusNode: _prevEpFn!,
-                            onLeft: () => _moveIn(_centerChain, _prevEpFn!, -1),
-                            onRight: () => _moveIn(_centerChain, _prevEpFn!, 1),
-                            onUp: () => _settingsFn.requestFocus(),
-                            onDown: () => _seekBarFn.requestFocus(),
-                          ),
-                          const SizedBox(width: 24),
-                        ],
-                        _SkipButton(
-                          icon: Icons.replay_10,
-                          focusNode: _skipBackFn,
-                          onLeft: () => _moveIn(_centerChain, _skipBackFn, -1),
-                          onRight: () => _moveIn(_centerChain, _skipBackFn, 1),
-                          onUp: () => _settingsFn.requestFocus(),
-                          onDown: () => _seekBarFn.requestFocus(),
-                          onPressed: widget.loading
-                              ? null
-                              : () => _seekBy(const Duration(seconds: -10)),
-                        ),
-                        const SizedBox(width: 36),
-                        _PlayPauseButton(
-                          playing: playing,
-                          loading: widget.loading,
-                          bufferProgress: (widget.buffering &&
-                                  widget.bufferingPercent >= 1 &&
-                                  widget.bufferingPercent < 100)
-                              ? widget.bufferingPercent / 100.0
-                              : null,
-                          onPressed:
-                              widget.loading ? null : widget.engine.playOrPause,
-                          focusNode: _playPauseFn,
-                          onLeft: () => _moveIn(_centerChain, _playPauseFn, -1),
-                          onRight: () => _moveIn(_centerChain, _playPauseFn, 1),
-                          onUp: () => _settingsFn.requestFocus(),
-                          onDown: () => _seekBarFn.requestFocus(),
-                        ),
-                        const SizedBox(width: 36),
-                        _SkipButton(
-                          icon: Icons.forward_10,
-                          focusNode: _skipFwdFn,
-                          onLeft: () => _moveIn(_centerChain, _skipFwdFn, -1),
-                          onRight: () => _moveIn(_centerChain, _skipFwdFn, 1),
-                          onUp: () => _settingsFn.requestFocus(),
-                          onDown: () => _seekBarFn.requestFocus(),
-                          onPressed: widget.loading
-                              ? null
-                              : () => _seekBy(const Duration(seconds: 10)),
-                        ),
-                        if (hasEpisodeNav) ...[
-                          const SizedBox(width: 24),
-                          _NavEpisodeButton(
-                            icon: Icons.skip_next_rounded,
-                            onPressed: widget.onNextEpisode,
-                            focusNode: _nextEpFn!,
-                            onLeft: () => _moveIn(_centerChain, _nextEpFn!, -1),
-                            onRight: () => _moveIn(_centerChain, _nextEpFn!, 1),
-                            onUp: () => _settingsFn.requestFocus(),
-                            onDown: () => _seekBarFn.requestFocus(),
-                          ),
-                        ],
-                      ],
+                if (hasEpisodeNav)
+                  Padding(
+                    padding: EdgeInsets.only(top: 6 * u),
+                    child: Text(
+                      'Episodio ${widget.episodeIndex + 1} di ${widget.episodeCount}',
+                      style:
+                          TextStyle(color: AppTheme.textMid, fontSize: 24 * u),
                     ),
-                  );
-                  // The button's own spinner (see _PlayPauseButton) is the
-                  // app's one loading indicator — the only other thing that
-                  // can appear is whatever free-form progress text the
-                  // plugin/backend sent via ResolveStream (see
-                  // PlayerOverlay.statusMessage's own doc), shown under the
-                  // controls row.
-                  //
-                  // This status slot is ALWAYS present, at a fixed height,
-                  // whether or not there's a message to show right now (or
-                  // even whether we're loading at all) — the parent chain is
-                  // Expanded(child: Center(...)), which repositions its
-                  // child based on its *total* measured height. A
-                  // conditionally-included/excluded text row here used to
-                  // change that total height every time a message
-                  // appeared/disappeared or loading toggled, which visibly
-                  // shifted the play/pause button up and down. Reserving the
-                  // same fixed-height box unconditionally means the block's
-                  // total height — and therefore the button's position —
-                  // never changes; only the text inside the slot toggles.
-                  final captionFs = AppScale.caption(context);
-                  final statusSlotH = captionFs * 1.3 * 2; // up to 2 lines
-                  return Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      controlsRow,
-                      SizedBox(height: AppScale.space(context, 16)),
-                      SizedBox(
-                        height: statusSlotH,
-                        child: Center(
-                          child: ConstrainedBox(
-                            constraints: BoxConstraints(
-                                maxWidth: AppScale.space(context, 420)),
-                            child: _statusSlot(captionFs),
-                          ),
-                        ),
-                      ),
-                    ],
-                  );
-                },
-              ),
+                  ),
+              ],
             ),
           ),
 
-          // ── Bottom: seekbar + tempi ───────────────────────────────────────
-          Builder(builder: (context) {
-            final sz = MediaQuery.sizeOf(context);
-            final hPad = (sz.width * 0.021).clamp(24.0, 56.0);
-            final bPad = (sz.height * 0.037).clamp(24.0, 56.0);
-            return Padding(
-              padding: EdgeInsets.fromLTRB(hPad, 0, hPad, bPad),
-              child: StreamBuilder<Duration>(
-                // null stream while hidden → no subscription, no per-tick
-                // rebuild; initialData keeps the bar showing the right
-                // position the instant the overlay reappears.
-                stream: widget.active ? widget.engine.positionStream : null,
-                initialData: widget.engine.position,
-                builder: (_, posSnap) {
-                  return StreamBuilder<Duration>(
+          // ── Middle: loading ──────────────────────────────────────────────
+          // The status slot keeps its height whether or not there's a
+          // message, so the spinner never jumps when one comes or goes.
+          if (widget.loading || bufferRing != null)
+            Center(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  PileusSpinner(
+                      size: 64 * u,
+                      color: AppTheme.textHigh,
+                      value: bufferRing),
+                  SizedBox(height: AppScale.space(context, 16)),
+                  SizedBox(
+                    height: captionFs * 1.3 * 2,
+                    child: ConstrainedBox(
+                      constraints: BoxConstraints(
+                          maxWidth: AppScale.space(context, 420)),
+                      child: _statusSlot(captionFs),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+
+          // ── Bottom: bar, buttons ─────────────────────────────────────────
+          Positioned(
+            left: hPad,
+            right: hPad,
+            bottom: 48 * u,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                StreamBuilder<Duration>(
+                  // null stream while hidden → no subscription, no per-tick
+                  // rebuild; initialData keeps the bar showing the right
+                  // position the instant the overlay reappears.
+                  stream: widget.active ? widget.engine.positionStream : null,
+                  initialData: widget.engine.position,
+                  builder: (_, posSnap) => StreamBuilder<Duration>(
                     stream: widget.active ? widget.engine.durationStream : null,
                     initialData: widget.engine.duration,
                     builder: (_, durSnap) {
                       final pos = posSnap.data ?? Duration.zero;
                       final dur = durSnap.data ?? Duration.zero;
-                      final posSec = pos.inMilliseconds / 1000.0;
                       // mpv's duration can trail the real length while the
                       // backend is still generating the HLS playlist — never
-                      // show a shorter total than what the catalog already
-                      // knows (see knownDurationSeconds doc above).
+                      // show a shorter total than what the catalog knows.
                       final durSec = math.max(
                         dur.inMilliseconds / 1000.0,
                         widget.knownDurationSeconds.toDouble(),
                       );
-                      return Column(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          PlayerSeekBar(
-                            posSec: posSec,
-                            durSec: durSec,
-                            skipIntervals: widget.skipIntervals,
-                            onSeek: (sec) => widget.engine.seek(
-                              Duration(milliseconds: (sec * 1000).toInt()),
-                            ),
-                            onScrubStart: _onScrubStart,
-                            onScrubEnd: _onScrubEnd,
-                            focusNode: _seekBarFn,
-                            onNavigateUp: () => _playPauseFn.requestFocus(),
-                            onNavigateDown: widget.onNavigateToSkip,
-                            onActivity: widget.onActivity,
-                            disabled: widget.loading,
-                          ),
-                        ],
+                      return PlayerSeekBar(
+                        posSec: pos.inMilliseconds / 1000.0,
+                        durSec: durSec,
+                        skipIntervals: widget.skipIntervals,
+                        inlineTimes: true,
+                        onSeek: (sec) => widget.engine.seek(
+                          Duration(milliseconds: (sec * 1000).toInt()),
+                        ),
+                        onScrubStart: _onScrubStart,
+                        onScrubEnd: _onScrubEnd,
+                        focusNode: _seekBarFn,
+                        onNavigateDown: () => _playPauseFn.requestFocus(),
+                        onActivity: widget.onActivity,
+                        disabled: widget.loading,
                       );
                     },
-                  );
-                },
-              ),
-            );
-          }),
+                  ),
+                ),
+                SizedBox(height: 28 * u),
+                StreamBuilder<bool>(
+                  stream: widget.engine.playingStream,
+                  initialData: widget.engine.playing,
+                  builder: (_, snap) {
+                    final playing = snap.data ?? false;
+                    final gap = SizedBox(width: 16 * u);
+                    return Row(
+                      children: [
+                        if (hasEpisodeNav) ...[
+                          rowButton(_prevEpFn!,
+                              icon: Icons.skip_previous_rounded,
+                              semantic: 'Episodio precedente',
+                              onPressed: widget.onPrevEpisode),
+                          gap,
+                        ],
+                        rowButton(_skipBackFn,
+                            label: '−10',
+                            semantic: 'Indietro di 10 secondi',
+                            onPressed: widget.loading
+                                ? null
+                                : () => _seekBy(const Duration(seconds: -10))),
+                        gap,
+                        // Focusable while loading too: it's where the
+                        // controls put focus when they come up.
+                        rowButton(_playPauseFn,
+                            icon: playing
+                                ? Icons.pause_rounded
+                                : Icons.play_arrow_rounded,
+                            semantic: playing ? 'Pausa' : 'Riproduci',
+                            onPressed: widget.loading
+                                ? () {}
+                                : widget.engine.playOrPause),
+                        gap,
+                        rowButton(_skipFwdFn,
+                            label: '+10',
+                            semantic: 'Avanti di 10 secondi',
+                            onPressed: widget.loading
+                                ? null
+                                : () => _seekBy(const Duration(seconds: 10))),
+                        if (hasEpisodeNav) ...[
+                          gap,
+                          rowButton(_nextEpFn!,
+                              icon: Icons.skip_next_rounded,
+                              semantic: 'Episodio successivo',
+                              onPressed: widget.onNextEpisode),
+                        ],
+                        const Spacer(),
+                        rowButton(_settingsFn,
+                            icon: Icons.settings_rounded,
+                            semantic: 'Impostazioni di riproduzione',
+                            onPressed: widget.onOpenSettings),
+                      ],
+                    );
+                  },
+                ),
+              ],
+            ),
+          ),
         ],
       ),
     );
