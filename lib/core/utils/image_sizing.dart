@@ -134,8 +134,22 @@ String _rewriteJellyfin(String url, List<int> ladder, int targetPx) {
 String? _imgProxy(String upstream) {
   final base = myceliumHttpBase();
   if (base == null || base.isEmpty || upstream.startsWith(base)) return null;
+  if (_isMyceliumImage(upstream)) return null;
   final u = base64Url.encode(utf8.encode(upstream)).replaceAll('=', '');
   return '$base/img?u=$u';
+}
+
+/// Already a mycelium image (`/img?u=…`, or the `/img/versus` cover the
+/// sports plugins hand out) on any host — when the server wrote its URL with
+/// another base than ours (a server_host override, a reverse proxy…). It is
+/// WebP with CORS already; wrapping it again in `/img` made that request hold
+/// one of the server's few conversion slots while fetching the inner one,
+/// which queued for a slot too: 10 s, then "busy" 503, image missing.
+bool _isMyceliumImage(String url) {
+  final u = Uri.tryParse(url);
+  if (u == null) return false;
+  return u.path == '/img/versus' ||
+      (u.path == '/img' && u.queryParameters.containsKey('u'));
 }
 
 /// Poster/thumbnail source URL for a poster drawn [targetPx] physical pixels
