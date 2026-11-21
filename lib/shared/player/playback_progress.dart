@@ -1,35 +1,19 @@
-import '../../core/di/injection.dart';
-import '../../core/grpc/clients/media_client.dart' show ProgressResponse;
 import '../../features/media/data/media_repository.dart';
 import '../../features/player/audio_lang_pref.dart';
 import '../../features/player/content_view_mode.dart';
-import '../../features/player/cw_advance.dart';
+import '../../features/player/cw_progress.dart';
 import '../../features/player/engine/player_engine.dart';
-import '../../features/player/episode_poster.dart';
 import '../../features/player/episode_prefetch.dart';
 import '../../features/player/models/playback_args.dart';
-import '../../features/player/player_tuning.dart';
 import '../../features/player/resume_seek.dart';
-import '../../features/player/source_continuity.dart';
 
-/// Watch-progress bookkeeping shared by the touch (mobile) and desktop
-/// players — both drive a [PlayerEngine] and take their continue-watching
-/// metadata straight from [PlaybackArgs], so the near-identical helpers they
-/// each carried (`_saveProgress`, `_maybeClearProgress`) plus the
-/// remembered-audio-language logic live here once. The resume-seek retry
-/// loop itself is [ResumeSeekController] (engine-agnostic, shared by all
-/// four platform screens); this class just owns one and feeds it
-/// [PlayerEngine] position/seek calls.
-///
-/// The TV player (`features/player/presentation/playback_screen.dart`) and
-/// the web player (an `HTMLVideoElement`, not a [PlayerEngine]) keep their
-/// own copies of the save/clear logic: TV mutates episode/season state mid-
-/// session (auto-advance) and folds the end-of-title handling into
-/// `_onPosition` alongside skip markers and the next-episode countdown, so it
-/// reads from live fields rather than `widget.args`; web has no
-/// [PlayerEngine] to hand this class at all. Both use the same
-/// [kCwRollForwardThreshold]/[kCwDropThreshold] constants this class does,
-/// and the same [ResumeSeekController].
+/// Watch-progress bookkeeping for the touch (mobile) and desktop players —
+/// both drive a [PlayerEngine] and take their continue-watching metadata
+/// straight from [PlaybackArgs]. The Continue Watching logic itself is
+/// [ContinueWatchingTracker] (cw_progress.dart, engine-agnostic, shared by
+/// all four players); this class feeds it [PlaybackArgs] and [PlayerEngine]
+/// position/duration, and also owns the [ResumeSeekController] and the
+/// remembered-audio-language logic.
 ///
 /// ── Why every screen's 15s heartbeat still skips live streams
 ///
@@ -51,10 +35,18 @@ class PlaybackProgress {
   PlaybackProgress({
     required this.args,
     required this.mediaId,
-    this.onPlaybackElsewhere,
+    void Function(String playingOn)? onPlaybackElsewhere,
     PlaybackProgress? replacing,
+    MediaRepository? repo,
   }) : _resumeSeek =
             ResumeSeekController(targetSec: args.seekTo, isLive: args.isLive) {
+    _cw = ContinueWatchingTracker(
+      snapshot: _snapshot,
+      isLive: args.isLive,
+      onPlaybackElsewhere: onPlaybackElsewhere,
+      onWrite: _trackViewMode,
+      repo: repo,
+    );
     // Applies this title's remembered "Formato" (content_view_mode.dart)
     // before the player's first frame. [replacing]: the instance this one
     // takes over from in the same screen (retry, source/language or episode
@@ -70,6 +62,7 @@ class PlaybackProgress {
   }
 
   Object? _viewModeToken;
+  late final ContinueWatchingTracker _cw;
 
   /// Not final: refreshed in place when the screen learns more mid-session
   /// without starting a new stream — e.g. the episode list backfilled after
@@ -85,25 +78,37 @@ class PlaybackProgress {
   /// only becomes known once the resolve lands.
   String mediaId;
 
-  /// Fired (at most once per instance) the moment a [save]/[markStarted]
-  /// call's own UpdateProgress reveals this device no longer holds the
-  /// profile's single-device playback lease (contract "One device playing
-  /// per profile") — [playingOn] is the other device's display name, empty
-  /// if the server didn't have one. The screen must pause/stop the engine
-  /// and show the "moved elsewhere" prompt (take-over on demand only, never
-  /// retried automatically here).
-  final void Function(String playingOn)? onPlaybackElsewhere;
-
   final ResumeSeekController _resumeSeek;
 
   late final AudioLangPref _audioPref =
       AudioLangPref(() => (pluginId: args.epPluginId, seriesId: args.parentId));
-  bool _elsewhereReported = false;
 
-  // Once [maybeClear] has cleared the continue-watching entry (≥95% watched,
-  // or rolled forward to the next episode), every later [save] caller (15s
-  // heartbeat, dispose save) must not silently recreate it.
-  bool _progressCleared = false;
+  CwSnapshot _snapshot() {
+    final a = args;
+    return CwSnapshot(
+      pluginId: a.epPluginId,
+      cwId: mediaId,
+      parentId: a.parentId,
+      title: a.title ?? '',
+      showTitle: a.showTitle,
+      poster: a.poster,
+      rating: a.rating,
+      genres: a.genres,
+      plot: a.plot,
+      year: a.year,
+      episodeList: a.episodeList,
+      episodeIndex: a.episodeIndex,
+      episodeTitles: a.episodeTitles,
+      episodeThumbs: a.episodeThumbs,
+      seasonNumbers: a.seasonNumbers,
+      episodeNumbers: a.episodeNumbers,
+      knownSeasonIds: a.allSeasonIds,
+      sourceLabel: a.sourceLabel,
+      seriesPoster: a.seriesPoster,
+      seriesCoverUrl: a.seriesCoverUrl,
+      fallbackPoster: a.poster,
+    );
+  }
 
   /// A fresh stream URL was opened — re-arm the one-shot audio-pref apply.
   void onStreamOpened() {
@@ -112,13 +117,12 @@ class PlaybackProgress {
 
   /// Retrying the same media (bloc re-dispatch): allow the CW entry to be
   /// rewritten and the audio pref to re-apply. Also re-arms
-  /// [onPlaybackElsewhere] — covers "Riprendi qui" reusing this same
+  /// onPlaybackElsewhere — covers "Riprendi qui" reusing this same
   /// instance (see each screen's own take-over handling): this device can
   /// legitimately lose the lease again later in the same session.
   void resetForRetry() {
     _audioPref.reset();
-    _progressCleared = false;
-    _elsewhereReported = false;
+    _cw.resetForRetry();
   }
 
   /// The user explicitly picked an audio track — remember it for a later
@@ -126,65 +130,20 @@ class PlaybackProgress {
   /// session.
   void rememberAudioTrack(String label) => _audioPref.remember(label);
 
-  /// Writes a continue-watching row the instant the stream opens, even at
-  /// position 0 — mycelium no longer gates Continue Watching on a minimum
-  /// position, so a title should appear there as soon as it's opened rather
-  /// than waiting for the first 15s heartbeat (or dispose, if the user backs
-  /// out before that).
-  ///
-  /// Reports the resume *target*, not `engine.position`: this runs right
-  /// after open(), while the engine still reads ~0 and the resume seek is in
-  /// flight — sending that 0 zeroed the Continue Watching entry whenever the
-  /// user backed out before the first heartbeat (the dispose save skips a 0
-  /// position). Same fix the TV player's _markOpened already carries.
-  Future<void> markStarted(PlayerEngine engine) async {
-    if (_progressCleared || args.isLive) return;
-    _trackViewMode();
-    final a = args;
+  /// Writes the continue-watching row the instant the stream opens (see
+  /// [ContinueWatchingTracker.markStarted]) — at the resume *target*, not
+  /// `engine.position`, which still reads ~0 while the resume seek is in
+  /// flight.
+  Future<void> markStarted(PlayerEngine engine) {
     final target = Duration(seconds: _resumeSeek.targetSec);
-    final resp = await getIt<MediaRepository>().updateProgress(
-      pluginId: a.epPluginId,
-      mediaId: mediaId,
-      parentId: a.parentId,
+    return _cw.markStarted(
       position: engine.position > target ? engine.position : target,
-      totalDuration: engine.duration,
-      title: (a.title?.isNotEmpty ?? false) ? a.title! : a.showTitle,
-      showTitle: a.showTitle,
-      poster: a.poster,
-      rating: a.rating,
-      genres: a.genres,
-      plot: a.plot,
-      year: a.year,
-      seasonNumber: numberForEpisode(a.seasonNumbers, a.episodeIndex),
-      episodeNumber: numberForEpisode(a.episodeNumbers, a.episodeIndex),
+      duration: engine.duration,
     );
-    _checkElsewhere(resp);
   }
 
-  Future<void> save(PlayerEngine engine) async {
-    if (_progressCleared || args.isLive) return;
-    final pos = engine.position;
-    if (pos.inSeconds <= 0) return;
-    _trackViewMode();
-    final a = args;
-    final resp = await getIt<MediaRepository>().updateProgress(
-      pluginId: a.epPluginId,
-      mediaId: mediaId,
-      parentId: a.parentId,
-      position: pos,
-      totalDuration: engine.duration,
-      title: (a.title?.isNotEmpty ?? false) ? a.title! : a.showTitle,
-      showTitle: a.showTitle,
-      poster: a.poster,
-      rating: a.rating,
-      genres: a.genres,
-      plot: a.plot,
-      year: a.year,
-      seasonNumber: numberForEpisode(a.seasonNumbers, a.episodeIndex),
-      episodeNumber: numberForEpisode(a.episodeNumbers, a.episodeIndex),
-    );
-    _checkElsewhere(resp);
-  }
+  Future<void> save(PlayerEngine engine) =>
+      _cw.save(position: engine.position, duration: engine.duration);
 
   /// The ids Continue Watching is about to store (the stream id once known,
   /// the series id once backfilled) — so the remembered "Formato" still
@@ -204,120 +163,14 @@ class PlaybackProgress {
     if (t != null) contentViewModes.close(t);
   }
 
-  void _checkElsewhere(ProgressResponse? resp) {
-    if (_elsewhereReported || resp == null) return;
-    if (resp.playbackElsewhere) {
-      _elsewhereReported = true;
-      onPlaybackElsewhere?.call(resp.playingOn);
-    }
-  }
-
-  /// End-of-title continue-watching handling, mirroring the TV player: an
-  /// episode ~90% in with a next episode in the same season rolls the CW
-  /// entry forward to it; the last episode of a season ~95% in moves it to
-  /// the next season's first episode (cw_advance.dart, also when there is no
-  /// episode list at all — a download), or drops it when the series is
-  /// over; a movie ~95% in is dropped so it doesn't linger at ~100%.
-  ///
-  /// The roll-forward row stores the next episode's *stream id* for the
-  /// source playing now ([prefetched] when it already covers it) — see
-  /// source_continuity.dart: a bare episode id would resume in the plugin's
-  /// default language.
+  /// End-of-title continue-watching handling — see
+  /// [ContinueWatchingTracker.maybeClear].
   void maybeClear(PlayerEngine engine, {PrefetchedEpisode? prefetched}) {
-    if (_progressCleared || args.isLive) return;
-    final dur = engine.duration;
-    if (dur.inSeconds <= 0) return;
-    final frac = engine.position.inSeconds / dur.inSeconds;
-    final a = args;
-    final hasSameSeasonNext =
-        a.episodeIndex >= 0 && a.episodeIndex + 1 < a.episodeList.length;
-    final repo = getIt<MediaRepository>();
-    if (hasSameSeasonNext && frac >= kCwRollForwardThreshold) {
-      _progressCleared = true;
-      final nextId = a.episodeList[a.episodeIndex + 1];
-      final nextTitle = a.episodeIndex + 1 < a.episodeTitles.length
-          ? a.episodeTitles[a.episodeIndex + 1]
-          : '';
-      final currentId = mediaId;
-      _rollForward(repo, a, nextId, nextTitle, currentId, prefetched);
-    } else if (!hasSameSeasonNext && frac >= kCwDropThreshold) {
-      _progressCleared = true;
-      if (isEpisodeOfSeries(a.parentId, mediaId)) {
-        // Last episode of a season (or a download with no list): on to the
-        // next season's first episode, or gone if the series is over.
-        advanceContinueWatching(
-          repo,
-          CwAdvanceRequest(
-            pluginId: a.epPluginId,
-            seriesId: a.parentId,
-            currentCwId: mediaId,
-            currentTitle: a.title ?? '',
-            seasonNumber: numberForEpisode(a.seasonNumbers, a.episodeIndex),
-            episodeNumber: numberForEpisode(a.episodeNumbers, a.episodeIndex),
-            knownSeasonIds: a.allSeasonIds,
-            sourceLabel: a.sourceLabel,
-            showTitle: a.showTitle,
-            seriesPoster: a.seriesPoster,
-            seriesCoverUrl: a.seriesCoverUrl,
-            fallbackPoster: a.poster,
-            rating: a.rating,
-            genres: a.genres,
-            plot: a.plot,
-            year: a.year,
-          ),
-        );
-      } else {
-        repo.deleteProgress(providerID: a.epPluginId, playableID: mediaId);
-      }
-    }
-  }
-
-  Future<void> _rollForward(
-    MediaRepository repo,
-    PlaybackArgs a,
-    String nextId,
-    String nextTitle,
-    String currentId,
-    PrefetchedEpisode? prefetched,
-  ) async {
-    final nextStreamId = await streamIdForNextEpisode(
-      repo,
-      pluginId: a.epPluginId,
-      nextEpisodeId: nextId,
-      sourceLabel: a.sourceLabel,
+    _cw.maybeClear(
+      position: engine.position,
+      duration: engine.duration,
       prefetched: prefetched,
     );
-    try {
-      await repo.updateProgress(
-        pluginId: a.epPluginId,
-        mediaId: nextStreamId,
-        parentId: a.parentId,
-        position: const Duration(seconds: 31),
-        title: nextTitle.isNotEmpty ? nextTitle : a.showTitle,
-        showTitle: a.showTitle,
-        // The *next* episode's own thumbnail, not the one currently
-        // playing's — see episode_poster.dart's doc comment for the bug
-        // this replaces (the cover used to stay stuck on whichever episode
-        // the session started on).
-        poster: posterForEpisode(
-          episodeThumbs: a.episodeThumbs,
-          index: a.episodeIndex + 1,
-          seriesCoverUrl: a.seriesCoverUrl,
-          seriesPoster: a.seriesPoster,
-          fallback: a.poster,
-        ),
-        rating: a.rating,
-        genres: a.genres,
-        // Always the series' own synopsis, never an episode's — see
-        // PlaybackArgs.copyWith's doc comment on why `plot` has no
-        // per-episode override at all.
-        plot: a.plot,
-        year: a.year,
-        seasonNumber: numberForEpisode(a.seasonNumbers, a.episodeIndex + 1),
-        episodeNumber: numberForEpisode(a.episodeNumbers, a.episodeIndex + 1),
-      );
-    } catch (_) {}
-    repo.deleteProgress(providerID: a.epPluginId, playableID: currentId);
   }
 
   /// What to pass as this title's own [PlayerEngine.open] call — see
