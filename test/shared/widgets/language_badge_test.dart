@@ -6,6 +6,8 @@ void main() {
     expect(languageBadge('ita')!.label, 'ITA');
     expect(languageBadge('jap')!.label, 'JAP');
     expect(languageBadge('eng')!.label, 'ENG');
+    expect(languageBadge('chn')!.label, 'CHN');
+    expect(languageBadge('kor')!.label, 'KOR');
     expect(languageBadge('eng', subs: 'ita')!.label, 'ENG · SUB ITA');
     // Both versions, or nothing known: no badge.
     expect(languageBadge('both'), isNull);

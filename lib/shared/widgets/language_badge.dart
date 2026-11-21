@@ -5,7 +5,8 @@ import 'package:flutter/material.dart';
 /// `extra['lang']` (and `extra['subs']`) — so "only in English" is known
 /// before opening the title, not discovered at Play.
 ///
-/// lang: '' or 'both' (nothing worth flagging), 'ita', 'eng', 'jap'.
+/// lang: '' or 'both' (nothing worth flagging), 'ita', 'eng', 'jap', 'chn',
+/// 'kor' (the original language of donghua and Korean series).
 /// subs: 'ita' when Italian subtitles exist for the original version.
 /// Null when there's nothing to show.
 ({String label, Color color})? languageBadge(String lang, {String subs = ''}) {
@@ -13,6 +14,8 @@ import 'package:flutter/material.dart';
   return switch (lang) {
     'ita' => (label: 'ITA', color: const Color(0xFF38bdf8)),
     'jap' => (label: 'JAP', color: const Color(0xFFf97316)),
+    'chn' => (label: 'CHN', color: const Color(0xFFef4444)),
+    'kor' => (label: 'KOR', color: const Color(0xFF22c55e)),
     'eng' => (
         label: withSubs ? 'ENG · SUB ITA' : 'ENG',
         color: const Color(0xFFa78bfa)
