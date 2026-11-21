@@ -1,24 +1,13 @@
-import 'dart:convert';
-import 'dart:io';
-
 // ignore: deprecated_member_use, material_ui migration pending (docs/FLUTTER_UPGRADE.md)
 import 'package:flutter/material.dart';
-import 'package:http/http.dart' as http;
 
-import '../core/config/server_config.dart';
 import '../core/di/injection.dart';
-import '../core/grpc/host_resolver.dart';
 import '../core/grpc/remote_server_connect.dart';
 import '../core/grpc/server_address.dart';
 import '../core/theme/app_theme.dart';
 import '../features/auth/bloc/auth_bloc.dart';
 import '../features/auth/bloc/auth_event.dart';
-import '../features/auth/data/auth_repository.dart';
-
-class _DiscoveryError implements Exception {
-  final String message;
-  _DiscoveryError(this.message);
-}
+import '../features/auth/data/server_connector.dart';
 
 /// Mobile server discovery: manual IP entry with the system keyboard, plus a
 /// "retry auto-detect" that re-runs the UDP broadcast scan — see
@@ -87,86 +76,33 @@ class _MobileDiscoveryScreenState extends State<MobileDiscoveryScreen> {
       _busy = true;
       _error = null;
     });
-    final String host;
-    try {
-      host = await resolveGrpcHost();
-    } catch (_) {
+    final found = await rediscoverLanServer();
+    if (!mounted) return;
+    if (found == null) {
       // Without this a failing scan left the buttons disabled behind a
       // spinner forever (_busy never reset).
-      if (mounted) {
-        setState(() {
-          _busy = false;
-          _error = 'Nessun server Mycelium trovato sulla rete locale.';
-        });
-      }
+      setState(() {
+        _busy = false;
+        _error = 'Nessun server Mycelium trovato sulla rete locale.';
+      });
       return;
     }
-    if (!mounted) return;
     // On the port the UDP reply announced (a server moved off the default).
-    final port = lanHttpPortFor(host);
-    await _connectTo(host, httpPort: port == ServerPorts.http ? null : port);
+    await _connectTo(found.host, httpPort: found.httpPort);
   }
 
   /// [httpPort]: typed as "ip:port" in the manual address; the fixed
-  /// ServerPorts.http otherwise (auto-discovery).
+  /// ServerPorts.http otherwise (auto-discovery). See connectLanServer.
   Future<void> _connectTo(String host, {int? httpPort}) async {
-    final port = httpPort ?? ServerPorts.http;
     setState(() {
       _busy = true;
       _error = null;
     });
     try {
-      // 1. HTTP side (/pileus/info on :8000) — also carries the gRPC TLS
-      //    pinning fingerprint (trust-on-first-use; the gRPC cert is
-      //    self-signed, so a matching SHA-256 IS the trust check).
-      final res = await http
-          .get(Uri.http('$host:$port', '/pileus/info'))
-          .timeout(const Duration(seconds: 6));
-      if (res.statusCode != 200) {
-        throw _DiscoveryError('Il server a "$host" ha risposto HTTP '
-            '${res.statusCode} su :$port.');
-      }
-      Map<String, dynamic> info;
-      try {
-        info = jsonDecode(res.body) as Map<String, dynamic>;
-      } catch (_) {
-        throw _DiscoveryError('Risposta non valida da "$host:$port".');
-      }
-      if (info['name'] != 'Mycelium') {
-        throw _DiscoveryError('"$host:$port" non è un server Mycelium.');
-      }
-      final fpRaw = info['grpc_tls_fingerprint'] as String?;
-      final tlsFingerprint = (fpRaw != null && fpRaw.isNotEmpty) ? fpRaw : null;
-      // grpc_port: the server's real gRPC port — it used to
-      // always be reported as the fixed default regardless of what mycelium
-      // actually listened on. Missing (older server) falls back to it.
-      final rawGrpcPort = (info['grpc_port'] as num?)?.toInt();
-      final grpcPort = (rawGrpcPort != null && rawGrpcPort > 0)
-          ? rawGrpcPort
-          : ServerPorts.grpc;
-
-      // 2. gRPC side — pairing and every catalog call go here, and it's
-      //    often bound/published separately from :8000. Fail loudly now
-      //    instead of hanging on the pairing screen later. A plain TCP
-      //    connect is enough here even when the port speaks TLS.
-      try {
-        final sock = await Socket.connect(host, grpcPort,
-            timeout: const Duration(seconds: 4));
-        sock.destroy();
-      } catch (_) {
-        throw _DiscoveryError('Il server risponde su :$port ma non su '
-            ':$grpcPort (gRPC). Apri/pubblica quella porta e '
-            'assicurati che Mycelium sia in ascolto su 0.0.0.0.');
-      }
-      await getIt<AuthRepository>().saveHostInfo(host, tlsFingerprint,
-          grpcPort: rawGrpcPort, httpPort: httpPort);
-      await rebuildGrpcClients(host,
-          tlsFingerprint: tlsFingerprint,
-          grpcPort: rawGrpcPort,
-          httpPort: httpPort);
+      await connectLanServer(host, httpPort: httpPort);
       if (!mounted) return;
       getIt<AuthBloc>().add(const AppStartedEvent(splashFloor: false));
-    } on _DiscoveryError catch (e) {
+    } on ServerProbeException catch (e) {
       if (mounted) setState(() => _error = e.message);
     } catch (_) {
       if (mounted) {
