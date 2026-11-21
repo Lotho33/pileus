@@ -97,7 +97,7 @@ class _EpisodeTileRowState extends State<_EpisodeTileRow> {
     final epNum = item.episodeNumber > 0 ? item.episodeNumber : null;
     // This episode's own language versions, when the plugin says (only the
     // exceptions: JAP on an episode not dubbed yet, …).
-    final badge = languageBadge(item.extra['lang'] ?? '');
+    final badges = languageBadges(item.extra['lang'] ?? '');
 
     // Use LayoutBuilder so fonts are additionally clamped to the tile's actual
     // height — prevents the "A RenderFlex overflowed by N pixels" error.
@@ -296,8 +296,8 @@ class _EpisodeTileRowState extends State<_EpisodeTileRow> {
                     ],
                   ),
                 ),
-                if (badge != null) ...[
-                  const SizedBox(width: 8),
+                for (final badge in badges) ...[
+                  SizedBox(width: badge == badges.first ? 8 : 4),
                   Container(
                     padding: EdgeInsets.symmetric(
                         horizontal: sh * (6.0 / 1080.0),

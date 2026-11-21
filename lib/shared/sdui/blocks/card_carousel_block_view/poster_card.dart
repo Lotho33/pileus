@@ -104,13 +104,11 @@ class _PosterCardViewState extends State<_PosterCardView> {
   // title, plus the language badge when there is one.
   @override
   Widget build(BuildContext context) {
-    final badge = languageBadge(widget.item.lang, subs: widget.item.subs);
+    final badges = languageBadges(widget.item.lang, subs: widget.item.subs);
     return Semantics(
       container: true,
       button: true,
-      label: badge == null
-          ? widget.item.title
-          : '${widget.item.title}, ${badge.label}',
+      label: [widget.item.title, for (final b in badges) b.label].join(', '),
       excludeSemantics: true,
       child: _buildCard(context),
     );
@@ -337,16 +335,23 @@ class _PosterFallback extends StatelessWidget {
       );
 }
 
-// ── language badge — top-right ITA/JAP/ENG pill, poster variant only ───────
+// ── language badges — top-right ITA/JAP/ENG… pills (up to 5, stacked, clear
+// of the subtype pill on the left), poster variant only ─────────────────────
 
 List<Widget> _langBadge(String lang, String subs) {
-  final b = languageBadge(lang, subs: subs);
-  if (b == null) return const [];
+  final badges = languageBadges(lang, subs: subs);
+  if (badges.isEmpty) return const [];
   return [
     Positioned(
       top: 8,
       right: 8,
-      child: _StatusPill(label: b.label, color: b.color),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.end,
+        spacing: 3,
+        children: [
+          for (final b in badges) _StatusPill(label: b.label, color: b.color),
+        ],
+      ),
     ),
   ];
 }

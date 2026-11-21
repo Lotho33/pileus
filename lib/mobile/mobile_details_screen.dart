@@ -973,7 +973,7 @@ class _SeasonsState extends State<_Seasons> {
 /// (JAP on an episode not dubbed yet, …).
 Widget? _episodeSubtitle(EpisodeInfo ep) {
   final lang = ep.extra['lang'] ?? '';
-  final hasBadge = languageBadge(lang) != null;
+  final hasBadge = languageBadges(lang).isNotEmpty;
   if (ep.duration <= 0 && !hasBadge) return null;
   return Row(
     children: [

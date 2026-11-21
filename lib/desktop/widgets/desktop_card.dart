@@ -156,7 +156,8 @@ class _DesktopCardState extends State<DesktopCard> {
                             right: 6,
                             child: LanguageBadgePill(
                                 lang: widget.item.extra['lang'] ?? '',
-                                subs: widget.item.extra['subs'] ?? ''),
+                                subs: widget.item.extra['subs'] ?? '',
+                                direction: Axis.vertical),
                           ),
                           AnimatedOpacity(
                             opacity: _hover ? 1 : 0,

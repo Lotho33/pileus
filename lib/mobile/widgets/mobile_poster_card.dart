@@ -87,7 +87,8 @@ class MobilePosterCard extends StatelessWidget {
                       right: 6,
                       child: LanguageBadgePill(
                           lang: item.extra['lang'] ?? '',
-                          subs: item.extra['subs'] ?? ''),
+                          subs: item.extra['subs'] ?? '',
+                          direction: Axis.vertical),
                     ),
                   ],
                 ),

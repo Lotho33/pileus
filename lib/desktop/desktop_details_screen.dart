@@ -1113,7 +1113,7 @@ class _EpisodeCardState extends State<_EpisodeCard> {
                             fontWeight: FontWeight.w600)),
                     // The episode's own language versions, when the plugin
                     // says (JAP on an episode not dubbed yet, …).
-                    if (languageBadge(ep.extra['lang'] ?? '') != null)
+                    if (languageBadges(ep.extra['lang'] ?? '').isNotEmpty)
                       Padding(
                         padding: const EdgeInsets.only(top: 4),
                         child: LanguageBadgePill(lang: ep.extra['lang']!),
