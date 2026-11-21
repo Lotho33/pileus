@@ -63,7 +63,8 @@ class _FakeClient implements MediaGrpcClient {
   }
 
   @override
-  Future<ProgressResponse> updateProgress(ProgressRequest request) async =>
+  Future<ProgressResponse> updateProgress(ProgressRequest request,
+          {bool replay = false}) async =>
       ProgressResponse();
 
   @override

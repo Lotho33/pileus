@@ -221,9 +221,15 @@ class MediaGrpcClient {
   Stream<ResolveStreamEvent> resolveStream(ResolveRequest request) =>
       _mediaStub.resolveStream(request);
 
-  Future<ProgressResponse> updateProgress(ProgressRequest request) =>
+  /// [replay]: progress saved while the server was unreachable, sent now —
+  /// the server stores it without claiming the profile's playback lease
+  /// (nothing is playing; claiming would refuse another device for 90 s).
+  Future<ProgressResponse> updateProgress(ProgressRequest request,
+          {bool replay = false}) =>
       _mediaStub.updateProgress(request,
-          options: CallOptions(timeout: _defaultRpcTimeout));
+          options: CallOptions(
+              timeout: _defaultRpcTimeout,
+              metadata: replay ? const {'x-progress-replay': '1'} : null));
 
   Future<DeleteProgressResponse> deleteProgress(
           DeleteProgressRequest request) =>

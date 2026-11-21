@@ -3,6 +3,7 @@ import '../../core/grpc/clients/media_client.dart' show ProgressResponse;
 import '../../features/media/data/media_repository.dart';
 import '../../features/player/audio_lang_pref.dart';
 import '../../features/player/content_view_mode.dart';
+import '../../features/player/cw_advance.dart';
 import '../../features/player/engine/player_engine.dart';
 import '../../features/player/episode_poster.dart';
 import '../../features/player/episode_prefetch.dart';
@@ -212,9 +213,11 @@ class PlaybackProgress {
   }
 
   /// End-of-title continue-watching handling, mirroring the TV player: an
-  /// episode ~90% in with a known next episode rolls the CW entry forward to
-  /// it; a movie or last episode ~95% in is dropped so it doesn't linger at
-  /// ~100% forever. With no episode list (yet) only the 95% drop applies.
+  /// episode ~90% in with a next episode in the same season rolls the CW
+  /// entry forward to it; the last episode of a season ~95% in moves it to
+  /// the next season's first episode (cw_advance.dart, also when there is no
+  /// episode list at all — a download), or drops it when the series is
+  /// over; a movie ~95% in is dropped so it doesn't linger at ~100%.
   ///
   /// The roll-forward row stores the next episode's *stream id* for the
   /// source playing now ([prefetched] when it already covers it) — see
@@ -239,7 +242,33 @@ class PlaybackProgress {
       _rollForward(repo, a, nextId, nextTitle, currentId, prefetched);
     } else if (!hasSameSeasonNext && frac >= kCwDropThreshold) {
       _progressCleared = true;
-      repo.deleteProgress(providerID: a.epPluginId, playableID: mediaId);
+      if (isEpisodeOfSeries(a.parentId, mediaId)) {
+        // Last episode of a season (or a download with no list): on to the
+        // next season's first episode, or gone if the series is over.
+        advanceContinueWatching(
+          repo,
+          CwAdvanceRequest(
+            pluginId: a.epPluginId,
+            seriesId: a.parentId,
+            currentCwId: mediaId,
+            currentTitle: a.title ?? '',
+            seasonNumber: numberForEpisode(a.seasonNumbers, a.episodeIndex),
+            episodeNumber: numberForEpisode(a.episodeNumbers, a.episodeIndex),
+            knownSeasonIds: a.allSeasonIds,
+            sourceLabel: a.sourceLabel,
+            showTitle: a.showTitle,
+            seriesPoster: a.seriesPoster,
+            seriesCoverUrl: a.seriesCoverUrl,
+            fallbackPoster: a.poster,
+            rating: a.rating,
+            genres: a.genres,
+            plot: a.plot,
+            year: a.year,
+          ),
+        );
+      } else {
+        repo.deleteProgress(providerID: a.epPluginId, playableID: mediaId);
+      }
     }
   }
 

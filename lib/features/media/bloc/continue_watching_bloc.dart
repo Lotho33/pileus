@@ -37,8 +37,13 @@ class ContinueWatchingBloc
     }
     try {
       final items = await _repo.fetchContinueWatching();
+      // Server unreachable: the copy on disk with what was watched offline
+      // since laid over it (a download on a train), not a frozen row.
+      final offline = items == null ? _repo.cachedContinueWatching() : null;
       if (items != null) {
         emit(ContinueWatchingLoaded(items));
+      } else if (offline != null) {
+        emit(ContinueWatchingLoaded(offline));
       } else if (state is ContinueWatchingInitial) {
         // Failed with nothing drawn yet — an empty row, as before. A row
         // already on screen (from disk or an earlier load) stays.

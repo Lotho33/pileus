@@ -24,6 +24,7 @@ import '../features/player/audio_lang_pref.dart';
 import '../features/player/engine/buffer_policy.dart' show hlsJsBuffer;
 import '../features/player/engine/media_track.dart';
 import '../features/player/engine/playback_speed.dart';
+import '../features/player/cw_advance.dart';
 import '../features/player/episode_nav.dart';
 import '../features/player/player_languages.dart';
 import '../features/player/playback_episode_list.dart';
@@ -915,8 +916,8 @@ class _ViewState extends State<_View> {
 
   /// Same kCwRollForwardThreshold/kCwDropThreshold as PlaybackProgress.
   /// maybeClear (shared/player/playback_progress.dart) — a same-season next
-  /// episode rolls the CW entry forward to it, otherwise (movie or last
-  /// episode of a season) it's dropped instead of lingering at ~100% forever.
+  /// episode rolls the CW entry forward to it, the last episode of a season
+  /// moves it to the next season (cw_advance.dart), a movie drops it.
   void _maybeClearProgress(double pos, double dur) {
     if (_progressCleared) return;
     final frac = pos / dur;
@@ -963,7 +964,33 @@ class _ViewState extends State<_View> {
       repo.deleteProgress(providerID: a.epPluginId, playableID: _curMediaId);
     } else if (!hasSameSeasonNext && frac >= kCwDropThreshold) {
       _progressCleared = true;
-      repo.deleteProgress(providerID: a.epPluginId, playableID: _curMediaId);
+      if (isEpisodeOfSeries(a.parentId, _curMediaId)) {
+        // Last episode of a season: the next season's first episode, or
+        // gone if the series is over (cw_advance.dart).
+        advanceContinueWatching(
+          repo,
+          CwAdvanceRequest(
+            pluginId: a.epPluginId,
+            seriesId: a.parentId,
+            currentCwId: _curMediaId,
+            currentTitle: _curTitle,
+            seasonNumber: _nav.currentSeasonNumber,
+            episodeNumber: _nav.currentEpisodeNumber,
+            knownSeasonIds: _nav.allSeasonIds,
+            sourceLabel: _curSourceLabel,
+            showTitle: a.showTitle,
+            seriesPoster: _nav.seriesPoster,
+            seriesCoverUrl: _nav.seriesCoverUrl,
+            fallbackPoster: a.poster,
+            rating: _curRating ?? a.rating,
+            genres: a.genres,
+            plot: a.plot,
+            year: _curYear ?? a.year,
+          ),
+        );
+      } else {
+        repo.deleteProgress(providerID: a.epPluginId, playableID: _curMediaId);
+      }
     }
   }
 

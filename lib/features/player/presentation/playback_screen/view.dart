@@ -1222,11 +1222,11 @@ class _PlaybackViewState extends State<_PlaybackView> {
       //    before the last-30s auto-advance wiped the whole series out of
       //    Continue Watching — you'd have to go dig the series back up and
       //    find your place.
-      //  - Last episode of a non-last season (a season boundary): leave the
-      //    entry as-is so the series stays in CW; resuming replays the tail
-      //    and the auto-advance carries on into the next season.
-      //  - Movie, or the genuinely last episode, ~95% in: it really is
-      //    finished — drop it so it doesn't linger at ~100% forever.
+      //  - Last episode of a season (or a download played with no list),
+      //    ~95% in: the entry moves to the next season's first episode
+      //    (cw_advance.dart), or goes when the series is over.
+      //  - Movie, ~95% in: it really is finished — drop it so it doesn't
+      //    linger at ~100% forever.
       // _transitioningEpisode: mid episode-switch, `pos`/`dur` here can still
       // be the outgoing episode's while `_currentMediaId`/`_currentEpisodeIndex`
       // already point at the incoming one (or vice versa, right as the new
@@ -1291,12 +1291,41 @@ class _PlaybackViewState extends State<_PlaybackView> {
               ));
           progressFuture.catchError((_) => null).whenComplete(() =>
               repo.deleteProgress(providerID: pluginId, playableID: currentId));
-        } else if (!_hasNextEpisode && frac >= kCwDropThreshold) {
+        } else if (!hasSameSeasonNext && frac >= kCwDropThreshold) {
           _progressCleared = true;
-          getIt<MediaRepository>().deleteProgress(
-            providerID: widget.args.epPluginId,
-            playableID: _cwId,
-          );
+          final repo = getIt<MediaRepository>();
+          if (isEpisodeOfSeries(_parentId, _cwId)) {
+            // Last episode of a season, or a download with no list: the
+            // next season's first episode, or gone if the series is over.
+            advanceContinueWatching(
+              repo,
+              CwAdvanceRequest(
+                pluginId: widget.args.epPluginId,
+                seriesId: _parentId,
+                currentCwId: _cwId,
+                currentTitle: _currentTitle ?? '',
+                seasonNumber: numberForEpisode(
+                    _currentSeasonNumbers, _currentEpisodeIndex),
+                episodeNumber: numberForEpisode(
+                    _currentEpisodeNumbers, _currentEpisodeIndex),
+                knownSeasonIds: widget.args.allSeasonIds,
+                sourceLabel: _currentSourceLabel,
+                showTitle: _showTitle,
+                seriesPoster: widget.args.seriesPoster,
+                seriesCoverUrl: widget.args.seriesCoverUrl,
+                fallbackPoster: widget.args.poster,
+                rating: _rating,
+                genres: _genres,
+                plot: _plot,
+                year: _year,
+              ),
+            );
+          } else {
+            repo.deleteProgress(
+              providerID: widget.args.epPluginId,
+              playableID: _cwId,
+            );
+          }
         }
       }
     }

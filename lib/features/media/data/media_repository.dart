@@ -16,7 +16,9 @@ import '../../../core/utils/perf_log.dart';
 import '../../auth/data/auth_repository.dart';
 import '../../player/content_view_mode.dart';
 import '../../settings/data/settings_repository.dart';
+import '../../player/cw_advance.dart';
 import 'continue_watching_item.dart';
+import 'cw_offline_queue.dart';
 import 'plugin_prefs.dart';
 
 /// The server hasn't measured this item's logo yet: it does so in the
@@ -966,9 +968,13 @@ class MediaRepository {
     // numberForEpisode() for how callers compute these.
     int seasonNumber = 0,
     int episodeNumber = 0,
+    // false: a caller replaying/deciding itself (cw_advance.dart) — a
+    // failure is reported (null) but not queued for later.
+    bool queueOffline = true,
+    // A write from the offline queue — see MediaGrpcClient.updateProgress.
+    bool replay = false,
   }) async {
-    try {
-      final resp = await _client.updateProgress(ProgressRequest(
+    final req = ProgressRequest(
         pluginId: pluginId,
         mediaId: mediaId,
         parentId: parentId,
@@ -985,20 +991,155 @@ class MediaRepository {
         year: year,
         seasonNumber: seasonNumber,
         episodeNumber: episodeNumber,
-      ));
+      );
+    try {
+      final resp = await _client.updateProgress(req, replay: replay);
       // Watching a row removed offline brings it back: its queued removal
       // must not delete it later.
       final pending = _cwPending();
       if (pending.remove(_cwKey(pluginId, mediaId))) {
         await _setCwPending(pending);
       }
+      // Reachable again: what was written offline goes out now — minus
+      // anything this write just made stale.
+      final pid = _interceptor.profileId;
+      if (pid != null && pid.isNotEmpty && !_cwQueue.isEmpty(pid)) {
+        await _cwQueue.dropSuperseded(pid, pluginId, mediaId, parentId);
+        unawaited(flushCwOffline());
+      }
       return resp;
     } catch (e) {
       if (_handledSessionExpiry(e)) return null;
       if (_handledProfileLock(e)) return null;
       if (kDebugMode) debugPrint('[MediaRepo] updateProgress error: $e');
+      if (queueOffline) await _queueCw((pid) => _cwQueue.addUpdate(pid, req));
       return null;
     }
+  }
+
+  // ── Continue Watching written while offline ─────────────────────────────
+  // A download watched with no server (a train), or a Wi-Fi drop
+  // mid-episode: progress, automatic removals and "move to the next
+  // episode" are queued per profile (CwOfflineQueue) and replayed in order
+  // at the next write or Continue Watching fetch that reaches the server.
+  late final CwOfflineQueue _cwQueue = CwOfflineQueue(_prefs);
+  Future<void>? _cwFlushing;
+
+  Future<void> _queueCw(Future<void> Function(String pid) add) async {
+    final pid = _interceptor.profileId;
+    if (pid == null || pid.isEmpty) return;
+    try {
+      await add(pid);
+    } catch (_) {}
+  }
+
+  /// See [advanceContinueWatching]: the server didn't answer, retry later.
+  Future<void> queueCwAdvance(CwAdvanceRequest r) =>
+      _queueCw((pid) => _cwQueue.addAdvance(pid, r));
+
+  /// Replays the offline queue, oldest first; stops at the first op the
+  /// server still doesn't take (the rest waits for the next try). One run
+  /// at a time.
+  Future<void> flushCwOffline() {
+    final running = _cwFlushing;
+    if (running != null) return running;
+    final f = _flushCwOffline().whenComplete(() => _cwFlushing = null);
+    _cwFlushing = f;
+    return f;
+  }
+
+  Future<void> _flushCwOffline() async {
+    final pid = _interceptor.profileId;
+    if (pid == null || pid.isEmpty || _cwQueue.isEmpty(pid)) return;
+    final ops = _cwQueue.read(pid);
+    var sent = 0;
+    for (final op in ops) {
+      bool? ok;
+      try {
+        switch (op) {
+          case CwQueuedUpdate(:final request):
+            await _client.updateProgress(request, replay: true);
+            ok = true;
+          case CwQueuedDelete(:final pluginId, :final mediaId):
+            await _client.deleteProgress(
+                DeleteProgressRequest(pluginId: pluginId, mediaId: mediaId));
+            _dropFromCwSnapshot(pluginId, mediaId);
+            ok = true;
+          case CwQueuedAdvance(:final request):
+            ok = await tryAdvanceContinueWatching(this, request, replay: true);
+        }
+      } catch (e) {
+        // The session or profile lock refused it: nothing a retry fixes.
+        if (isUnauthenticated(e) || isProfileLocked(e)) ok = true;
+      }
+      if (ok != true) break;
+      sent++;
+    }
+    if (sent == 0) return;
+    // Re-read: ops may have been queued while this ran.
+    final now = _cwQueue.read(pid);
+    final done = ops.take(sent).map(_cwOpId).toSet();
+    await _cwQueue.write(
+        pid, [for (final op in now) if (!done.contains(_cwOpId(op))) op]);
+  }
+
+  static String _cwOpId(CwQueuedOp op) => switch (op) {
+        CwQueuedUpdate(:final request) =>
+          'u\u0000${request.pluginId}\u0000${request.mediaId}\u0000${request.currentPosition}',
+        CwQueuedDelete(:final pluginId, :final mediaId) =>
+          'd\u0000$pluginId\u0000$mediaId',
+        CwQueuedAdvance(:final request) =>
+          'a\u0000${request.pluginId}\u0000${request.seriesId}\u0000${request.currentCwId}',
+      };
+
+  /// The rows written offline, newest first, as Continue Watching items —
+  /// laid over the copy on disk while the server is unreachable.
+  List<ContinueWatchingItem> _queuedCwItems() {
+    final pid = _interceptor.profileId;
+    if (pid == null || pid.isEmpty || _cwQueue.isEmpty(pid)) return const [];
+    return [
+      for (final op in _cwQueue.read(pid).reversed)
+        if (op is CwQueuedUpdate)
+          ContinueWatchingItem(
+            providerID: op.request.pluginId,
+            playableID: op.request.mediaId,
+            parentID: op.request.parentId,
+            title: op.request.title,
+            showTitle: op.request.navigationContext,
+            poster: op.request.poster,
+            progressTime: op.request.currentPosition.toDouble(),
+            totalTime: op.request.totalDuration.toDouble(),
+            rating: op.request.rating,
+            genres: op.request.genres,
+            plot: op.request.plot,
+            year: op.request.year,
+            seasonNumber: op.request.seasonNumber,
+            episodeNumber: op.request.episodeNumber,
+          )
+    ];
+  }
+
+  List<ContinueWatchingItem> _withQueued(List<ContinueWatchingItem> items) {
+    final pid = _interceptor.profileId;
+    if (pid == null || pid.isEmpty || _cwQueue.isEmpty(pid)) return items;
+    final ops = _cwQueue.read(pid);
+    final deleted = {
+      for (final op in ops)
+        if (op is CwQueuedDelete) _cwKey(op.pluginId, op.mediaId)
+    };
+    final queued = _queuedCwItems();
+    // One row per series, like the server keeps it: the newest offline
+    // episode replaces the series' older row.
+    final seen = <String>{};
+    final out = <ContinueWatchingItem>[];
+    for (final i in [...queued, ...items]) {
+      if (deleted.contains(_cwKey(i.providerID, i.playableID))) continue;
+      final group = i.parentID.isNotEmpty
+          ? 'p\u0000${i.providerID}\u0000${i.parentID}'
+          : 'm\u0000${_cwKey(i.providerID, i.playableID)}';
+      if (seen.add(group)) out.add(i);
+    }
+    return out;
   }
 
   /// Returns whether the delete actually reached the server — callers doing
@@ -1096,6 +1237,8 @@ class MediaRepository {
   Future<bool> deleteProgress({
     required String providerID,
     required String playableID,
+    // See updateProgress's queueOffline.
+    bool queueOffline = true,
   }) async {
     try {
       await _client.deleteProgress(DeleteProgressRequest(
@@ -1103,11 +1246,18 @@ class MediaRepository {
         mediaId: playableID,
       ));
       _dropFromCwSnapshot(providerID, playableID);
+      final pid = _interceptor.profileId;
+      if (pid != null && pid.isNotEmpty) {
+        await _cwQueue.dropSuperseded(pid, providerID, playableID, '');
+      }
       return true;
     } catch (e) {
       if (_handledSessionExpiry(e)) return false;
       if (_handledProfileLock(e)) return false;
       if (kDebugMode) debugPrint('[MediaRepo] deleteProgress error: $e');
+      if (queueOffline) {
+        await _queueCw((pid) => _cwQueue.addDelete(pid, providerID, playableID));
+      }
       return false;
     }
   }
@@ -1131,6 +1281,9 @@ class MediaRepository {
   Future<List<ContinueWatchingItem>?> fetchContinueWatching(
       {int limit = 20, String? parentId, String? pluginId}) async {
     try {
+      // Offline writes first, so this answer already includes them. A
+      // failure there leaves them queued; the fetch itself still decides.
+      await flushCwOffline().catchError((_) {});
       final resp = await _client.getContinueWatching(ContinueWatchingRequest(
         limit: limit,
         parentId: parentId,
@@ -1192,15 +1345,20 @@ class MediaRepository {
   }
 
   /// The home's Continue Watching row as of the last successful fetch for
-  /// the active profile, no network. Null when there's none.
+  /// the active profile, no network, with what was watched offline since
+  /// laid over it. Null when there's none.
   List<ContinueWatchingItem>? cachedContinueWatching() {
     final pid = _interceptor.profileId;
     if (pid == null || pid.isEmpty) return null;
     final entry = _readEntry('$_cwSnapshotPrefix$pid');
-    if (entry == null || entry.jsonLayoutStructure.isEmpty) return null;
+    if (entry == null || entry.jsonLayoutStructure.isEmpty) {
+      final queued = _withQueued(const []);
+      return queued.isEmpty ? null : queued;
+    }
     try {
-      return _withoutPending(_cwItems(ContinueWatchingResponse.fromBuffer(
-          base64Decode(entry.jsonLayoutStructure))));
+      return _withQueued(_withoutPending(_cwItems(
+          ContinueWatchingResponse.fromBuffer(
+              base64Decode(entry.jsonLayoutStructure)))));
     } catch (_) {
       return null;
     }
