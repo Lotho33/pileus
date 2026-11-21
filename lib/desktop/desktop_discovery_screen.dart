@@ -89,7 +89,9 @@ class _DesktopDiscoveryScreenState extends State<DesktopDiscoveryScreen> {
       _error = null;
     });
     final host = await resolveGrpcHost();
-    await _connectTo(host);
+    // On the port the UDP reply announced (a server moved off the default).
+    final port = lanHttpPortFor(host);
+    await _connectTo(host, httpPort: port == ServerPorts.http ? null : port);
   }
 
   /// [httpPort]: typed as "ip:port" in the manual address; the fixed

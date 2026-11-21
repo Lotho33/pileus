@@ -102,7 +102,9 @@ class _MobileDiscoveryScreenState extends State<MobileDiscoveryScreen> {
       return;
     }
     if (!mounted) return;
-    await _connectTo(host);
+    // On the port the UDP reply announced (a server moved off the default).
+    final port = lanHttpPortFor(host);
+    await _connectTo(host, httpPort: port == ServerPorts.http ? null : port);
   }
 
   /// [httpPort]: typed as "ip:port" in the manual address; the fixed

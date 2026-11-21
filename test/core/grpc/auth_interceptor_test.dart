@@ -101,4 +101,22 @@ void main() {
       expect(i.debugMetadataForTests.containsKey('x-profile-session'), isFalse);
     });
   });
+
+  group('AuthInterceptor — server HTTP port (x-http-host)', () {
+    test('default 8000 when nothing was learned', () {
+      final i = AuthInterceptor()..setCredentials('jwt', 'p');
+      i.setGrpcHost('192.168.1.10');
+      expect(i.debugMetadataForTests['x-http-host'], '192.168.1.10:8000');
+    });
+
+    test('a server moved off 8000 (another service on it)', () {
+      final i = AuthInterceptor()..setCredentials('jwt', 'p');
+      i.setGrpcHost('192.168.1.10', httpPort: 18000);
+      expect(i.debugMetadataForTests['x-http-host'], '192.168.1.10:18000');
+      i.setHttpPort(null);
+      expect(i.httpPort, 8000);
+      i.setHttpPort(70000);
+      expect(i.httpPort, 8000);
+    });
+  });
 }

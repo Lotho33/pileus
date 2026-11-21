@@ -10,6 +10,7 @@ import 'package:http/http.dart' as http;
 
 import '../../../core/config/server_config.dart';
 import '../../../core/di/injection.dart';
+import '../../../core/grpc/host_resolver.dart' show discoverServerOnLan;
 import '../../../core/grpc/remote_server_connect.dart';
 import '../../../core/grpc/server_address.dart';
 import '../../../core/theme/app_scale.dart';
@@ -117,6 +118,8 @@ class _ServerDiscoveryScreenState extends State<ServerDiscoveryScreen> {
             ? fingerprint
             : null,
         grpcPort: (grpcPort != null && grpcPort > 0) ? grpcPort : null,
+        // The port that answered, when not the default — saved with the host.
+        httpPort: (port != null && port != _port) ? port : null,
       );
     } catch (_) {
       return null;
@@ -131,16 +134,24 @@ class _ServerDiscoveryScreenState extends State<ServerDiscoveryScreen> {
       _error = null;
     });
     final completer = Completer<({String host, _ProbeResult result})?>();
-    var pending = _candidates.length;
-    for (final host in _candidates) {
-      _probe(host).then((result) {
-        if (result != null && !completer.isCompleted) {
-          completer.complete((host: host, result: result));
-        }
-        pending--;
-        if (pending == 0 && !completer.isCompleted) completer.complete(null);
-      });
+    // The fixed candidates plus the UDP broadcast — the one way to find a
+    // server on any port (the reply says which).
+    var pending = _candidates.length + 1;
+    void settle(String? host, _ProbeResult? result) {
+      if (host != null && result != null && !completer.isCompleted) {
+        completer.complete((host: host, result: result));
+      }
+      pending--;
+      if (pending == 0 && !completer.isCompleted) completer.complete(null);
     }
+
+    for (final host in _candidates) {
+      _probe(host).then((result) => settle(host, result));
+    }
+    discoverServerOnLan().then((udp) async {
+      if (udp == null) return settle(null, null);
+      settle(udp.host, await _probe(udp.host, port: udp.httpPort));
+    }).catchError((_) => settle(null, null));
     var found = await completer.future;
 
     // Nothing on the well-known hosts (the norm — there's no mDNS/well-known
@@ -152,7 +163,8 @@ class _ServerDiscoveryScreenState extends State<ServerDiscoveryScreen> {
 
     if (!mounted) return;
     if (found != null) {
-      await _saveHost(found.host, found.result);
+      await _saveHost(found.host, found.result,
+          httpPort: found.result.httpPort);
       if (!mounted) return;
       setState(() {
         _scanState = _ScanState.found;
@@ -738,5 +750,7 @@ enum _ScanState { scanning, found, notFound }
 class _ProbeResult {
   final String? tlsFingerprint;
   final int? grpcPort;
-  const _ProbeResult({this.tlsFingerprint, this.grpcPort});
+  // The HTTP port that answered when it isn't the default (UDP reply).
+  final int? httpPort;
+  const _ProbeResult({this.tlsFingerprint, this.grpcPort, this.httpPort});
 }

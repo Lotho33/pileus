@@ -34,8 +34,13 @@ class AuthInterceptor extends ClientInterceptor {
     _grpcHost = host;
     _remote = remote;
     _remotePort = remotePort;
+    setHttpPort(httpPort);
+  }
+
+  /// See DeviceSession.httpPort; null or invalid = ServerPorts.http.
+  void setHttpPort(int? port) {
     _httpPort =
-        (httpPort != null && httpPort > 0) ? httpPort : ServerPorts.http;
+        (port != null && port > 0 && port < 65536) ? port : ServerPorts.http;
   }
 
   void setCredentials(String jwt, String profileId) {

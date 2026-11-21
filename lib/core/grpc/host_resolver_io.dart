@@ -55,11 +55,11 @@ Future<bool> answersAsMycelium(
 
 /// UDP broadcast discovery — mirrors mycelium's responder
 /// (internal/api/discovery.go). Returns the source IP of the first
-/// `{"name":"Mycelium"}` reply (plus its `grpc_port`, when the reply
-/// carries one — the reply used to omit it and every server
-/// was assumed to listen on the fixed default), or null on timeout / any
-/// socket error.
-Future<({String host, int? grpcPort})?> discoverViaBroadcast({
+/// `{"name":"Mycelium"}` reply (plus its `grpc_port` and `http_port`, when
+/// the reply carries them — a server moved off the default ports was
+/// otherwise found but then probed on the wrong one), or null on timeout /
+/// any socket error.
+Future<({String host, int? grpcPort, int? httpPort})?> discoverViaBroadcast({
   Duration timeout = const Duration(milliseconds: 1400),
 }) async {
   const discoveryPort = ServerPorts.discoveryUdp;
@@ -68,7 +68,7 @@ Future<({String host, int? grpcPort})?> discoverViaBroadcast({
   try {
     sock = await RawDatagramSocket.bind(InternetAddress.anyIPv4, 0);
     sock.broadcastEnabled = true;
-    final done = Completer<({String host, int? grpcPort})?>();
+    final done = Completer<({String host, int? grpcPort, int? httpPort})?>();
     final payload = utf8.encode(magic);
 
     sock.listen((event) {
@@ -79,7 +79,12 @@ Future<({String host, int? grpcPort})?> discoverViaBroadcast({
         final info = jsonDecode(utf8.decode(dg.data));
         if (info is Map && info['name'] == 'Mycelium' && !done.isCompleted) {
           final grpcPort = (info['grpc_port'] as num?)?.toInt();
-          done.complete((host: dg.address.address, grpcPort: grpcPort));
+          final httpPort = (info['http_port'] as num?)?.toInt();
+          done.complete((
+            host: dg.address.address,
+            grpcPort: grpcPort,
+            httpPort: httpPort,
+          ));
         }
       } catch (_) {
         // not our reply — ignore

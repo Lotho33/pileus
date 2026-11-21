@@ -6,6 +6,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../config/server_config.dart';
 import '../db/models/device_session.dart';
 import '../di/injection.dart';
+import 'auth_interceptor.dart';
 // dart:io lives behind this shim so `flutter build web` links only the stub.
 // `dart.library.js_interop` (not legacy `dart.library.html`) so the stub is
 // also picked under `flutter build web --wasm`.
@@ -169,6 +170,9 @@ Future<String> resolveGrpcHost({int port = ServerPorts.grpc}) async {
   // below. Left null (not reset to the default) when nothing new was
   // learned, so a stale-but-correct persisted port isn't clobbered.
   int? discoveredGrpcPort;
+  // Same for the HTTP port: the UDP reply announces it (a server moved off
+  // 8000, e.g. another service already there).
+  int? discoveredHttpPort;
   void win(String h) {
     if (!completer.isCompleted) completer.complete(h);
   }
@@ -179,8 +183,10 @@ Future<String> resolveGrpcHost({int port = ServerPorts.grpc}) async {
   discoverViaBroadcast().then((result) async {
     if (result == null || completer.isCompleted) return;
     final probePort = result.grpcPort ?? port;
+    lastUdpDiscovery = (host: result.host, httpPort: result.httpPort);
     if (await canReach(result.host, probePort, timeout)) {
       discoveredGrpcPort = result.grpcPort;
+      discoveredHttpPort = result.httpPort;
       win(result.host);
     }
   });
@@ -229,6 +235,16 @@ Future<String> resolveGrpcHost({int port = ServerPorts.grpc}) async {
         session.grpcPort = discoveredGrpcPort;
         changed = true;
       }
+      if (discoveredHttpPort != null &&
+          session.httpPort != discoveredHttpPort) {
+        session.httpPort = discoveredHttpPort;
+        changed = true;
+        // Same host, new port: the running clients follow now, not at the
+        // next start (x-http-host builds every proxy URL).
+        if (getIt.isRegistered<AuthInterceptor>()) {
+          getIt<AuthInterceptor>().setHttpPort(discoveredHttpPort);
+        }
+      }
       if (changed) await DeviceSession.writeTo(prefs, session);
     }
   } catch (_) {}
@@ -245,6 +261,36 @@ Future<String> resolveGrpcHost({int port = ServerPorts.grpc}) async {
 /// (plus the explicit remote port, if any) — the HTTP API isn't on the
 /// LAN-only fixed :8000 for a publicly published mycelium.
 const _myceliumHttpPort = ServerPorts.http;
+
+/// One UDP broadcast round (see discoverViaBroadcast), remembered in
+/// [lastUdpDiscovery] — for the discovery screens, which otherwise probe
+/// fixed hosts and the /24 on the default port only.
+Future<({String host, int? grpcPort, int? httpPort})?>
+    discoverServerOnLan() async {
+  final r = await discoverViaBroadcast();
+  if (r != null) lastUdpDiscovery = (host: r.host, httpPort: r.httpPort);
+  return r;
+}
+
+/// The last UDP discovery reply this session got: lets a discovery screen
+/// probe a found server on the HTTP port it announced even before a session
+/// row exists to remember it in (first run).
+({String host, int? httpPort})? lastUdpDiscovery;
+
+/// The HTTP port to reach the LAN server at [host] on: [explicit] (typed as
+/// "ip:port"), else what the UDP reply or the saved session say for that
+/// host, else ServerPorts.http.
+int lanHttpPortFor(String host, {int? explicit}) {
+  bool ok(int? p) => p != null && p > 0 && p < 65536;
+  if (ok(explicit)) return explicit!;
+  final udp = lastUdpDiscovery;
+  if (udp != null && udp.host == host && ok(udp.httpPort)) return udp.httpPort!;
+  try {
+    final session = DeviceSession.readFrom(getIt<SharedPreferences>());
+    if (session != null && session.grpcHost == host) return session.lanHttpPort;
+  } catch (_) {}
+  return ServerPorts.http;
+}
 
 String? myceliumHttpBase() {
   try {

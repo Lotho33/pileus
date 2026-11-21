@@ -14,7 +14,7 @@ Future<bool> answersAsMycelium(
         String host, int httpPort, Duration timeout) async =>
     false;
 
-Future<({String host, int? grpcPort})?> discoverViaBroadcast({
+Future<({String host, int? grpcPort, int? httpPort})?> discoverViaBroadcast({
   Duration timeout = const Duration(milliseconds: 1400),
 }) async =>
     null;
