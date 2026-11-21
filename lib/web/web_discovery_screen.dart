@@ -1,15 +1,12 @@
-import 'dart:convert';
-
 // ignore: deprecated_member_use, material_ui migration pending (docs/FLUTTER_UPGRADE.md)
 import 'package:flutter/material.dart';
-import 'package:http/http.dart' as http;
 
 import '../core/grpc/server_address.dart';
 import '../core/config/server_config.dart';
 import '../core/di/injection.dart';
 import '../features/auth/bloc/auth_bloc.dart';
 import '../features/auth/bloc/auth_event.dart';
-import '../features/auth/data/auth_repository.dart';
+import '../features/auth/data/server_connector.dart';
 import '../desktop/desktop_splash_screen.dart' show DesktopAuthCard;
 
 /// Web server discovery. The page is normally served *by* mycelium, so the
@@ -60,18 +57,20 @@ class _WebDiscoveryScreenState extends State<WebDiscoveryScreen> {
           ? '${Uri.base.scheme}://${Uri.base.host}'
               '${Uri.base.hasPort ? ":${Uri.base.port}" : ""}'
           : 'http://$host:${httpPort ?? ServerPorts.http}';
-      final res = await http
-          .get(Uri.parse('$base/pileus/info'))
-          .timeout(const Duration(seconds: 6));
-      if (res.statusCode != 200) {
-        throw 'HTTP ${res.statusCode} da $base/pileus/info';
+      try {
+        await fetchServerInfo(host, httpPort ?? ServerPorts.http,
+            url: Uri.parse('$base/pileus/info'), httpPort: httpPort);
+      } on ServerProbeException catch (e) {
+        throw switch (e.kind) {
+          ServerProbeFailure.httpStatus =>
+            'HTTP ${e.statusCode} da $base/pileus/info',
+          ServerProbeFailure.notMycelium => 'Non è un server Mycelium.',
+          _ => e.message,
+        };
       }
-      final info = jsonDecode(res.body) as Map<String, dynamic>;
-      if (info['name'] != 'Mycelium') throw 'Non è un server Mycelium.';
-
-      await getIt<AuthRepository>()
-          .saveHostInfo(host, null, httpPort: httpPort);
-      await rebuildGrpcClients(host, tlsFingerprint: null, httpPort: httpPort);
+      // No TLS pinning nor gRPC port on web: the transport is gRPC-Web
+      // through the HTTP side.
+      await useServer(host, ServerInfo(httpPort: httpPort));
       if (!mounted) return;
       getIt<AuthBloc>().add(const AppStartedEvent(splashFloor: false));
     } catch (e) {

@@ -1,4 +1,3 @@
-import 'dart:convert';
 import 'dart:async';
 import 'dart:io';
 import 'package:flutter/foundation.dart' show kIsWeb;
@@ -6,7 +5,6 @@ import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
-import 'package:http/http.dart' as http;
 
 import '../../../core/config/server_config.dart';
 import '../../../core/di/injection.dart';
@@ -22,7 +20,7 @@ import '../../../shared/widgets/tv_focusable.dart';
 import '../bloc/auth_bloc.dart';
 import '../bloc/auth_event.dart' show AppStartedEvent;
 import '../bloc/auth_state.dart';
-import '../data/auth_repository.dart';
+import '../data/server_connector.dart';
 
 // dart:io's Platform throws at runtime on web the moment any member is
 // touched, so kIsWeb must short-circuit before Platform.isAndroid — same
@@ -49,8 +47,7 @@ class _ServerDiscoveryScreenState extends State<ServerDiscoveryScreen> {
       String.fromEnvironment('PILEUS_MYCELIUM_HOST', defaultValue: '');
 
   // 'mycelium.local' used to be a candidate here — dropped alongside
-  // mycelium-core's own mDNS responder for it (see _saveHost's
-  // doc): with nothing left to answer for that name, it could never
+  // mycelium-core's own mDNS responder for it: with nothing left to answer for that name, it could never
   // resolve, so keeping it only cost a probe slot every scan.
   static List<String> get _candidates => [
         if (_bakedHost.isNotEmpty) _bakedHost,
@@ -91,53 +88,23 @@ class _ServerDiscoveryScreenState extends State<ServerDiscoveryScreen> {
     super.dispose();
   }
 
-  /// Null if `host` isn't a reachable Mycelium instance. Otherwise carries
-  /// the TLS pinning fingerprint alongside the yes/no — grpc_tls_fingerprint
-  /// is empty when the server reports TLS off (grpc_tls: false) — and the
-  /// real gRPC port (`grpc_port`; null on an older server that
-  /// doesn't report it, in which case ServerPorts.grpc is the fallback).
-  /// [port]: the HTTP port typed as "ip:port" in the manual address; the
-  /// fixed one otherwise (auto-discovery).
-  Future<_ProbeResult?> _probe(String host,
-      {Duration? timeout, int? port}) async {
-    // Own client, closed in `finally`: closing is what actually aborts a
-    // request the timeout gave up on. On web a dangling XHR per dead sweep
-    // address would otherwise pile up against the browser's socket cap.
-    final client = http.Client();
-    try {
-      final res = await client
-          .get(Uri.http('$host:${port ?? _port}', '/pileus/info'))
-          .timeout(timeout ?? _timeout);
-      if (res.statusCode != 200) return null;
-      final json = jsonDecode(res.body) as Map<String, dynamic>;
-      if (json['name'] != 'Mycelium') return null;
-      final fingerprint = json['grpc_tls_fingerprint'] as String?;
-      final grpcPort = (json['grpc_port'] as num?)?.toInt();
-      return _ProbeResult(
-        tlsFingerprint: (fingerprint != null && fingerprint.isNotEmpty)
-            ? fingerprint
-            : null,
-        grpcPort: (grpcPort != null && grpcPort > 0) ? grpcPort : null,
-        // The port that answered, when not the default — saved with the host.
-        httpPort: (port != null && port != _port) ? port : null,
-      );
-    } catch (_) {
-      return null;
-    } finally {
-      client.close();
-    }
-  }
+  /// Null if `host` isn't a reachable Mycelium instance — see
+  /// probeLanServer (server_connector.dart). [port]: the HTTP port typed as
+  /// "ip:port" in the manual address, or announced by the UDP reply; the
+  /// fixed one otherwise.
+  Future<ServerInfo?> _probe(String host, {Duration? timeout, int? port}) =>
+      probeLanServer(host, port: port, timeout: timeout ?? _timeout);
 
   Future<void> _scan() async {
     setState(() {
       _scanState = _ScanState.scanning;
       _error = null;
     });
-    final completer = Completer<({String host, _ProbeResult result})?>();
+    final completer = Completer<({String host, ServerInfo result})?>();
     // The fixed candidates plus the UDP broadcast — the one way to find a
     // server on any port (the reply says which).
     var pending = _candidates.length + 1;
-    void settle(String? host, _ProbeResult? result) {
+    void settle(String? host, ServerInfo? result) {
       if (host != null && result != null && !completer.isCompleted) {
         completer.complete((host: host, result: result));
       }
@@ -163,8 +130,7 @@ class _ServerDiscoveryScreenState extends State<ServerDiscoveryScreen> {
 
     if (!mounted) return;
     if (found != null) {
-      await _saveHost(found.host, found.result,
-          httpPort: found.result.httpPort);
+      await useServer(found.host, found.result);
       if (!mounted) return;
       setState(() {
         _scanState = _ScanState.found;
@@ -187,7 +153,7 @@ class _ServerDiscoveryScreenState extends State<ServerDiscoveryScreen> {
   /// parallel, bounded, short timeout. Returns the first that identifies as
   /// Mycelium, or null. No mDNS, no server-side support needed — just the
   /// `/pileus/info` endpoint that's already the liveness check.
-  Future<({String host, _ProbeResult result})?> _sweepLan() async {
+  Future<({String host, ServerInfo result})?> _sweepLan() async {
     final prefixes = await _localV24Prefixes();
     if (prefixes.isEmpty) return null;
 
@@ -205,7 +171,7 @@ class _ServerDiscoveryScreenState extends State<ServerDiscoveryScreen> {
 
     const concurrency = 48;
     const sweepTimeout = Duration(milliseconds: 700);
-    final completer = Completer<({String host, _ProbeResult result})?>();
+    final completer = Completer<({String host, ServerInfo result})?>();
     var index = 0;
     var active = 0;
     var launched = 0;
@@ -314,7 +280,7 @@ class _ServerDiscoveryScreenState extends State<ServerDiscoveryScreen> {
     final result = await _probe(parsed.host, port: parsed.port);
     if (!mounted) return;
     if (result != null) {
-      await _saveHost(parsed.host, result, httpPort: parsed.port);
+      await useServer(parsed.host, result);
       setState(() {
         _scanState = _ScanState.found;
         _foundHost = parsed.host;
@@ -347,16 +313,6 @@ class _ServerDiscoveryScreenState extends State<ServerDiscoveryScreen> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) _keyboardKey.currentState?.firstFocusNode.requestFocus();
     });
-  }
-
-  Future<void> _saveHost(String host, _ProbeResult result,
-      {int? httpPort}) async {
-    await getIt<AuthRepository>().saveHostInfo(host, result.tlsFingerprint,
-        grpcPort: result.grpcPort, httpPort: httpPort);
-    await rebuildGrpcClients(host,
-        tlsFingerprint: result.tlsFingerprint,
-        grpcPort: result.grpcPort,
-        httpPort: httpPort);
   }
 
   @override
@@ -746,11 +702,3 @@ class _TextActionButton extends StatelessWidget {
 }
 
 enum _ScanState { scanning, found, notFound }
-
-class _ProbeResult {
-  final String? tlsFingerprint;
-  final int? grpcPort;
-  // The HTTP port that answered when it isn't the default (UDP reply).
-  final int? httpPort;
-  const _ProbeResult({this.tlsFingerprint, this.grpcPort, this.httpPort});
-}
