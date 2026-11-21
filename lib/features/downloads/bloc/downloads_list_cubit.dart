@@ -6,6 +6,7 @@ import '../../../core/app_lifecycle.dart';
 import '../../../core/grpc/clients/media_client.dart' show DownloadInfo;
 import '../../../core/grpc/grpc_errors.dart';
 import '../../media/data/media_repository.dart';
+import '../data/downloaded_index.dart';
 import '../data/downloads_local_index.dart';
 import 'downloads_list_state.dart';
 
@@ -91,11 +92,14 @@ class DownloadsListCubit extends Cubit<DownloadsListState> {
   Future<void> cancelDownload(String downloadId) async {
     await _repo.cancelDownload(downloadId);
     await _refresh();
+    unawaited(DownloadedIndex.instance.refresh(force: true));
   }
 
   Future<void> deleteDownload(String downloadId) async {
     await _repo.deleteDownload(downloadId);
     await _refresh();
+    // The details screens may offer it again now.
+    unawaited(DownloadedIndex.instance.refresh(force: true));
   }
 
   @override

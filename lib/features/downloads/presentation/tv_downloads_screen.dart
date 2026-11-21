@@ -27,6 +27,7 @@ import '../bloc/downloads_list_cubit.dart';
 import '../bloc/downloads_list_state.dart';
 import '../data/downloads_local_index.dart';
 import '../download_format.dart';
+import '../download_groups.dart';
 import '../download_playback.dart';
 
 class TvDownloadsScreen extends StatelessWidget {
@@ -54,13 +55,35 @@ class _View extends StatefulWidget {
 class _ViewState extends State<_View> {
   final _backFn = FocusNode();
   final _nodes = <String, FocusNode>{};
+  // The series whose downloaded episodes are shown (null = the list of
+  // series and movies). Back closes it before leaving the page.
+  DownloadGroup? _open;
+
+  void _openGroup(DownloadGroup g) {
+    setState(() => _open = g);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _nodeFor('ep_0').requestFocus();
+    });
+  }
+
+  void _back() {
+    final g = _open;
+    if (g == null) {
+      context.pop();
+      return;
+    }
+    setState(() => _open = null);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _nodeFor('g_${g.key}').requestFocus();
+    });
+  }
 
   FocusNode _nodeFor(String key) => _nodes.putIfAbsent(key, () => FocusNode());
 
   @override
   void dispose() {
     _backFn.dispose();
-    for (final n in _nodes.values) {
+    for (final n in _nodes.values.toSet()) {
       n.dispose();
     }
     super.dispose();
@@ -71,7 +94,7 @@ class _ViewState extends State<_View> {
     return TvFocusable(
       canRequestFocus: false,
       onEsc: () {
-        if (consumeBackEvent()) context.pop();
+        if (consumeBackEvent()) _back();
       },
       builder: (context, _) => Scaffold(
         backgroundColor: AppTheme.bg,
@@ -80,11 +103,14 @@ class _ViewState extends State<_View> {
             child: Column(
               children: [
                 SettingsHeader(
-                  title: 'Download',
+                  title: _open?.title ?? 'Download',
                   focusNode: _backFn,
                   autofocus: true,
-                  onBack: () => context.pop(),
-                  onFocusDown: () => _nodeFor('row_0').requestFocus(),
+                  onBack: _back,
+                  onFocusDown: () => _nodeFor(_open == null
+                          ? 'row_0'
+                          : 'ep_0')
+                      .requestFocus(),
                 ),
                 Expanded(
                   child: BlocBuilder<DownloadsListCubit, DownloadsListState>(
@@ -107,29 +133,7 @@ class _ViewState extends State<_View> {
                                 title: 'Nessun download',
                                 message:
                                     'I contenuti scaricati sul server compariranno qui.')
-                            : ListView.builder(
-                                padding: EdgeInsets.symmetric(
-                                    horizontal:
-                                        AppScale.screenHPad(context),
-                                    vertical: AppScale.space(context, 8)),
-                                itemCount: downloads.length,
-                                itemBuilder: (context, i) {
-                                  final up = i == 0
-                                      ? _backFn
-                                      : _nodeFor('row_${i - 1}');
-                                  final down = i < downloads.length - 1
-                                      ? _nodeFor('row_${i + 1}')
-                                      : null;
-                                  return _DownloadRow(
-                                    info: downloads[i],
-                                    focusNode: _nodeFor('row_$i'),
-                                    onFocusUp: () => up.requestFocus(),
-                                    onFocusDown: down == null
-                                        ? null
-                                        : () => down.requestFocus(),
-                                  );
-                                },
-                              ),
+                            : _list(context, groupDownloads(downloads)),
                     },
                   ),
                 ),
@@ -138,6 +142,68 @@ class _ViewState extends State<_View> {
           ),
         ),
       ),
+    );
+  }
+
+  /// The series/movies, or — with a series open — its episodes by season.
+  Widget _list(BuildContext context, List<DownloadGroup> groups) {
+    final open = _open == null
+        ? null
+        : groups.where((g) => g.key == _open!.key).firstOrNull;
+    final pad = EdgeInsets.symmetric(
+        horizontal: AppScale.screenHPad(context),
+        vertical: AppScale.space(context, 8));
+    if (open != null) {
+      final eps = open.items;
+      return ListView.builder(
+        padding: pad,
+        itemCount: eps.length,
+        itemBuilder: (context, i) => _DownloadRow(
+          info: eps[i],
+          label: episodeRowLabel(eps[i]),
+          focusNode: _nodeFor('ep_$i'),
+          onFocusUp: () => (i == 0 ? _backFn : _nodeFor('ep_${i - 1}'))
+              .requestFocus(),
+          onFocusDown: i < eps.length - 1
+              ? () => _nodeFor('ep_${i + 1}').requestFocus()
+              : null,
+        ),
+      );
+    }
+    return ListView.builder(
+      padding: pad,
+      itemCount: groups.length,
+      itemBuilder: (context, i) {
+        final g = groups[i];
+        final up = i == 0 ? _backFn : _nodeFor('row_${i - 1}');
+        final down = i < groups.length - 1 ? _nodeFor('row_${i + 1}') : null;
+        // Same node under two names: row_i for up/down, g_key to land back
+        // on it after closing the series.
+        final node = _nodes.putIfAbsent('row_$i', () => FocusNode());
+        _nodes['g_${g.key}'] = node;
+        if (!g.isSeries) {
+          return _DownloadRow(
+            info: g.items.first,
+            focusNode: node,
+            onFocusUp: () => up.requestFocus(),
+            onFocusDown: down == null ? null : () => down.requestFocus(),
+          );
+        }
+        final sub = [
+          '${g.items.length} ${g.items.length == 1 ? 'episodio' : 'episodi'}',
+          if (g.totalBytes > 0) formatBytes(g.totalBytes),
+          if (g.anyInProgress) 'in preparazione',
+        ].join(' · ');
+        return SettingsNavRow(
+          icon: Icons.video_library_rounded,
+          label: g.title,
+          subtitle: sub,
+          focusNode: node,
+          onFocusUp: () => up.requestFocus(),
+          onFocusDown: down == null ? null : () => down.requestFocus(),
+          onTap: () => _openGroup(g),
+        );
+      },
     );
   }
 }
@@ -183,11 +249,14 @@ class _DownloadRow extends StatelessWidget {
   final FocusNode focusNode;
   final VoidCallback onFocusUp;
   final VoidCallback? onFocusDown;
+  // Inside a series: "S1 · E3 — Titolo".
+  final String? label;
   const _DownloadRow({
     required this.info,
     required this.focusNode,
     required this.onFocusUp,
     this.onFocusDown,
+    this.label,
   });
 
   String _fmtTime(DateTime d) =>
@@ -205,9 +274,10 @@ class _DownloadRow extends StatelessWidget {
     ];
     return SettingsNavRow(
       icon: ready ? Icons.play_circle_fill_rounded : Icons.download_rounded,
-      label: info.seriesTitle.isNotEmpty
-          ? '${info.seriesTitle} · ${info.title}'
-          : info.title,
+      label: label ??
+          (info.seriesTitle.isNotEmpty
+              ? '${info.seriesTitle} · ${info.title}'
+              : info.title),
       subtitle: parts.join(' · '),
       focusNode: focusNode,
       onFocusUp: onFocusUp,

@@ -524,6 +524,7 @@ class _DownloadChipState extends State<_DownloadChip> {
   void initState() {
     super.initState();
     _check();
+    DownloadedIndex.instance.refresh();
   }
 
   Future<void> _check() async {
@@ -542,11 +543,21 @@ class _DownloadChipState extends State<_DownloadChip> {
   @override
   Widget build(BuildContext context) {
     if (_supported != true) return const SizedBox.shrink();
+    return ListenableBuilder(
+      listenable: DownloadedIndex.instance,
+      builder: (context, _) => _chip(context,
+          DownloadedIndex.instance.has(widget.pluginId, widget.mediaId)),
+    );
+  }
+
+  // [done]: already downloaded (or on its way) — focusable as before, not
+  // offered again.
+  Widget _chip(BuildContext context, bool done) {
     return TvFocusable(
       focusNode: widget.focusNode,
       onLeft: widget.onLeft,
       onRight: widget.onRight,
-      onActivate: () => pushTvDownloadOptions(
+      onActivate: done ? () {} : () => pushTvDownloadOptions(
         context,
         pluginId: widget.pluginId,
         preferredSourceLabel: widget.preferredSourceLabel,
@@ -557,8 +568,11 @@ class _DownloadChipState extends State<_DownloadChip> {
           poster: widget.posterUrl,
         ),
       ),
-      builder: (context, focused) =>
-          detailsSecondaryChip(context, focused, Icons.download_rounded, 'Scarica'),
+      builder: (context, focused) => detailsSecondaryChip(
+          context,
+          focused,
+          done ? Icons.download_done_rounded : Icons.download_rounded,
+          done ? 'Scaricato' : 'Scarica'),
     );
   }
 }

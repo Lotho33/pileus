@@ -606,11 +606,16 @@ class _ExoPlayerEngine extends PlayerEngine {
         ? BetterPlayerVideoFormat.other
         : BetterPlayerVideoFormat.hls;
     try {
+      // A download copied onto the device is a plain path (see
+      // DeviceDownloads), not a URL: ExoPlayer needs the file source type.
+      final local = url.startsWith('/') || url.startsWith('file://');
       await _c.setupDataSource(
         BetterPlayerDataSource(
-          BetterPlayerDataSourceType.network,
-          url,
-          headers: headers,
+          local
+              ? BetterPlayerDataSourceType.file
+              : BetterPlayerDataSourceType.network,
+          local && url.startsWith('file://') ? Uri.parse(url).toFilePath() : url,
+          headers: local ? null : headers,
           liveStream: _isLive,
           videoFormat: videoFormat,
           // HLS master-playlist tracks; a progressive file has none.

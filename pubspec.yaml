@@ -81,6 +81,10 @@ dependencies:
   # Own cache for profile pictures (shared/widgets/profile_avatar_cache.dart).
   flutter_cache_manager: ^3.4.1
 
+  # App support directory for downloads copied onto the device
+  # (features/downloads/device) — was already a transitive dep.
+  path_provider: ^2.1.6
+
   # Utils
   uuid: ^4.4.2
   collection: ^1.18.0

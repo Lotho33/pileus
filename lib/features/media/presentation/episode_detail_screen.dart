@@ -10,6 +10,7 @@ import '../../../core/utils/image_sizing.dart';
 import '../../downloads/bloc/download_options_cubit.dart'
     show DownloadTarget, DownloadBatchCandidate, DownloadBatchGroup;
 import '../../downloads/download_format.dart' show pluginSupportsDownload;
+import '../../downloads/data/downloaded_index.dart';
 import '../../downloads/presentation/tv_download_options_screen.dart'
     show pushTvDownloadOptions;
 import '../../../shared/widgets/error_retry_view.dart';
@@ -890,6 +891,7 @@ class _EpDownloadButtonState extends State<_EpDownloadButton> {
   void initState() {
     super.initState();
     _check();
+    DownloadedIndex.instance.refresh();
   }
 
   Future<void> _check() async {
@@ -908,20 +910,31 @@ class _EpDownloadButtonState extends State<_EpDownloadButton> {
   @override
   Widget build(BuildContext context) {
     if (_supported != true) return const SizedBox.shrink();
-    return _EpPlayButton(
-      label: 'Scarica',
-      icon: Icons.download_rounded,
-      scale: widget.scale,
-      focusNode: widget.focusNode,
-      onUp: widget.onUp,
-      onLeft: widget.onLeft,
-      onTap: () => pushTvDownloadOptions(
-        context,
-        pluginId: widget.pluginId,
-        target: widget.target,
-        preferredSourceLabel: widget.preferredSourceLabel,
-        batchGroups: widget.batchGroups,
-      ),
+    // Already downloaded (or on its way): still focusable, so the D-pad
+    // chain doesn't change, but it no longer offers it again.
+    return ListenableBuilder(
+      listenable: DownloadedIndex.instance,
+      builder: (context, _) {
+        final done = DownloadedIndex.instance
+            .has(widget.pluginId, widget.target.mediaId);
+        return _EpPlayButton(
+          label: done ? 'Scaricato' : 'Scarica',
+          icon: done ? Icons.download_done_rounded : Icons.download_rounded,
+          scale: widget.scale,
+          focusNode: widget.focusNode,
+          onUp: widget.onUp,
+          onLeft: widget.onLeft,
+          onTap: done
+              ? () {}
+              : () => pushTvDownloadOptions(
+                    context,
+                    pluginId: widget.pluginId,
+                    target: widget.target,
+                    preferredSourceLabel: widget.preferredSourceLabel,
+                    batchGroups: widget.batchGroups,
+                  ),
+        );
+      },
     );
   }
 }

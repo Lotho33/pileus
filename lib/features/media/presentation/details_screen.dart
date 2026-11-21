@@ -31,6 +31,7 @@ import '../data/continue_watching_item.dart';
 import '../data/media_repository.dart';
 import '../../downloads/bloc/download_options_cubit.dart' show DownloadTarget;
 import '../../downloads/download_format.dart' show pluginSupportsDownload;
+import '../../downloads/data/downloaded_index.dart';
 import '../../downloads/presentation/tv_download_options_screen.dart'
     show pushTvDownloadOptions;
 import '../../player/continue_watching_launch.dart';

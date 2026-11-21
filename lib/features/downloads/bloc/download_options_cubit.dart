@@ -5,6 +5,7 @@ import '../../../core/grpc/clients/media_client.dart'
     show CreateDownloadRequest, CreateDownloadItem, CreateDownloadsRequest;
 import '../../../core/grpc/grpc_errors.dart';
 import '../../media/data/media_repository.dart';
+import '../data/downloaded_index.dart';
 import '../download_format.dart' show DownloadScheduleKind;
 import 'download_options_state.dart';
 
@@ -207,6 +208,7 @@ class DownloadOptionsCubit extends Cubit<DownloadOptionsState> {
         episodeNumber: target.episodeNumber,
         upgradeIfBetter: s.upgradeIfBetter,
       ));
+      DownloadedIndex.instance.markRequested(pluginId, [target.mediaId]);
       if (isClosed) return;
       emit(DownloadOptionsSubmitted([info]));
     } catch (e) {
@@ -248,6 +250,8 @@ class DownloadOptionsCubit extends Cubit<DownloadOptionsState> {
         usePreferredHours: _usePreferredHours(s),
         upgradeIfBetter: s.upgradeIfBetter,
       ));
+      DownloadedIndex.instance
+          .markRequested(pluginId, [for (final t in targets) t.mediaId]);
       if (isClosed) return;
       emit(DownloadOptionsSubmitted(resp.downloads,
           serverEstimatedTotalBytes: resp.estimatedTotalBytes.toInt()));

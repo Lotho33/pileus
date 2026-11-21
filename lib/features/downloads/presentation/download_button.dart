@@ -10,6 +10,7 @@ import 'package:flutter/material.dart';
 
 import '../../../core/di/injection.dart';
 import '../bloc/download_options_cubit.dart';
+import '../data/downloaded_index.dart';
 import '../download_format.dart';
 import '../../media/data/media_repository.dart';
 import 'download_options_sheet.dart';
@@ -47,6 +48,7 @@ class _DownloadButtonState extends State<DownloadButton> {
   void initState() {
     super.initState();
     _check();
+    DownloadedIndex.instance.refresh();
   }
 
   Future<void> _check() async {
@@ -73,17 +75,28 @@ class _DownloadButtonState extends State<DownloadButton> {
   @override
   Widget build(BuildContext context) {
     if (_supported != true) return const SizedBox.shrink();
-    if (widget.compact) {
-      return IconButton.filledTonal(
-        tooltip: 'Scarica',
-        onPressed: _open,
-        icon: const Icon(Icons.download_rounded),
-      );
-    }
-    return OutlinedButton.icon(
-      onPressed: _open,
-      icon: const Icon(Icons.download_rounded),
-      label: const Text('Scarica'),
+    // Already downloaded (or on its way): shown, but not offered again.
+    return ListenableBuilder(
+      listenable: DownloadedIndex.instance,
+      builder: (context, _) {
+        final done = DownloadedIndex.instance
+            .has(widget.pluginId, widget.target.mediaId);
+        if (widget.compact) {
+          return IconButton.filledTonal(
+            tooltip: done ? 'Già scaricato' : 'Scarica',
+            onPressed: done ? null : _open,
+            icon: Icon(done
+                ? Icons.download_done_rounded
+                : Icons.download_rounded),
+          );
+        }
+        return OutlinedButton.icon(
+          onPressed: done ? null : _open,
+          icon: Icon(
+              done ? Icons.download_done_rounded : Icons.download_rounded),
+          label: Text(done ? 'Scaricato' : 'Scarica'),
+        );
+      },
     );
   }
 }
