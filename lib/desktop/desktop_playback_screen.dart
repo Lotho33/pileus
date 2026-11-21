@@ -31,6 +31,7 @@ import '../features/player/models/playback_args.dart';
 import '../features/player/models/skip_interval.dart';
 import '../features/player/next_episode_countdown.dart';
 import '../features/player/player_tuning.dart';
+import '../features/player/progress_heartbeat.dart';
 import '../features/player/resume_seek.dart' show resolveStartPositionSec;
 import '../features/player/presentation/widgets/player_seek_bar.dart';
 import '../features/player/presentation/widgets/pointer_next_episode_banner.dart';
@@ -140,8 +141,9 @@ class _ViewState extends State<_View> with WindowListener {
   // or retried — only the user's own tap on either button clears it.
   _TakeoverPrompt? _takeoverPrompt;
   Timer? _hideTimer;
-  Timer? _errorGrace;
-  Timer? _progressTimer;
+  final _errorGrace = ErrorGrace();
+  late final _heartbeat = ProgressHeartbeat(
+      isLive: widget.args.isLive, onSave: _saveProgressGuarded);
   // Backstop for _started's own resume-confirmation gate (see _onEngine) —
   // see kResumeCoverSafetyTimeout's doc. Re-armed on every open, cancelled
   // the moment _started actually flips on its own.
@@ -219,20 +221,7 @@ class _ViewState extends State<_View> with WindowListener {
 
   void _onLifecycle() {
     if (!mounted) return;
-    if (_backgrounded) {
-      if (_progressTimer != null) {
-        _progressTimer!.cancel();
-        _progressTimer = null;
-        if (!widget.args.isLive) {
-          try {
-            _saveProgressGuarded();
-          } catch (_) {}
-        }
-      }
-    } else if (_progressTimer == null && !widget.args.isLive) {
-      _progressTimer = Timer.periodic(
-          const Duration(seconds: 15), (_) => _saveProgressGuarded());
-    }
+    _heartbeat.setBackgrounded(_backgrounded);
   }
 
   // See _transitioningEpisode's doc — the one guard every heartbeat/
@@ -287,10 +276,7 @@ class _ViewState extends State<_View> with WindowListener {
     // isLive skips this on purpose even for the single-device-lease
     // heartbeat's sake — see PlaybackProgress's class doc
     // ("Why every screen's 15s heartbeat still skips live streams").
-    if (!widget.args.isLive) {
-      _progressTimer = Timer.periodic(
-          const Duration(seconds: 15), (_) => _saveProgressGuarded());
-    }
+    _heartbeat.start();
     _posSub = _engine.positionStream.listen(_onPosition);
     // Live and on-demand, same as TV/mobile — see live_stall_watchdog.dart.
     final live = widget.args.isLive;
@@ -303,7 +289,7 @@ class _ViewState extends State<_View> with WindowListener {
           !_resolvingEpisode &&
           _takeoverPrompt == null &&
           _error == null &&
-          (_errorGrace?.isActive != true) &&
+          !_errorGrace.isActive &&
           _engine.playing,
       isBuffering: () => _engine.buffering,
       onStallTier1: () {
@@ -392,16 +378,11 @@ class _ViewState extends State<_View> with WindowListener {
     windowManager.removeListener(this);
     AppLifecycleReactor.instance.state.removeListener(_onLifecycle);
     _hideTimer?.cancel();
-    _errorGrace?.cancel();
-    _progressTimer?.cancel();
+    _errorGrace.cancel();
     _resumeCoverSafetyTimer?.cancel();
     _posSub?.cancel();
     _liveWatchdog?.disarm();
-    if (!widget.args.isLive) {
-      try {
-        _saveProgressGuarded();
-      } catch (_) {}
-    }
+    _heartbeat.close(); // final save
     _progress.close(); // per-content "Formato", see content_view_mode.dart
     // Best-effort, never blocks teardown — see ReleasePlaybackRequest's own
     // doc (contract "One device playing per profile"): frees this device's
@@ -438,7 +419,7 @@ class _ViewState extends State<_View> with WindowListener {
 
     if (playing) {
       if (_error != null) {
-        _errorGrace?.cancel();
+        _errorGrace.cancel();
         _error = null;
         rebuild = true;
       }
@@ -497,8 +478,8 @@ class _ViewState extends State<_View> with WindowListener {
       _onPlaybackTakenOver('');
       return;
     }
-    _errorGrace?.cancel();
-    _errorGrace = Timer(kErrorGraceDuration, () {
+    _errorGrace.cancel();
+    _errorGrace.arm(() {
       if (!mounted || _engine.playing) return;
       if (_tryLiveFailover()) return;
       setState(() => _error = msg);
@@ -520,7 +501,7 @@ class _ViewState extends State<_View> with WindowListener {
         behavior: SnackBarBehavior.floating,
         duration: const Duration(seconds: 4),
       ));
-    _errorGrace?.cancel();
+    _errorGrace.cancel();
     _curStreamId = next;
     final i = widget.args.liveSources.indexOf(next);
     if (i >= 0 && i < widget.args.liveSourceLabels.length) {
@@ -548,7 +529,7 @@ class _ViewState extends State<_View> with WindowListener {
   // "Riprendi qui" gets playback back on this device.
   void _onPlaybackTakenOver(String playingOn) {
     if (!mounted || _takeoverPrompt != null) return;
-    _errorGrace?.cancel();
+    _errorGrace.cancel();
     final resumePos = _engine.position;
     _engine.pause();
     // Best-effort — records exactly where this device stopped (mainly
@@ -663,7 +644,7 @@ class _ViewState extends State<_View> with WindowListener {
 
   Future<void> _goToNextEpisode() async {
     if (_resolvingEpisode || !_nav.hasNext) return;
-    _errorGrace?.cancel();
+    _errorGrace.cancel();
     setState(() {
       _resolvingEpisode = true;
       _nextEpisodeSecs = null;
@@ -687,7 +668,7 @@ class _ViewState extends State<_View> with WindowListener {
 
   Future<void> _goToPreviousEpisode() async {
     if (_resolvingEpisode || !_nav.hasPrevious) return;
-    _errorGrace?.cancel();
+    _errorGrace.cancel();
     setState(() {
       _resolvingEpisode = true;
       _nextEpisodeSecs = null;
@@ -922,7 +903,7 @@ class _ViewState extends State<_View> with WindowListener {
   /// *first* episode), re-resolving the same source/language, with a fresh
   /// [PlaybackProgress] so the resume seek is re-armed.
   void _reopenCurrent({int? atSec, bool takeOver = false}) {
-    _errorGrace?.cancel();
+    _errorGrace.cancel();
     final bloc = context.read<PlaybackBloc>();
     final isLive = widget.args.isLive;
     final sameTitle = _curMediaId == widget.mediaId;

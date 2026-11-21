@@ -151,8 +151,10 @@ void main() {
 
     test('empty title falls back to the show title', () async {
       await tracker(() => const CwSnapshot(
-              pluginId: 'p', cwId: 'x', parentId: '', showTitle: 'Serie'))
-          .save(position: _at(3));
+          pluginId: 'p',
+          cwId: 'x',
+          parentId: '',
+          showTitle: 'Serie')).save(position: _at(3));
       expect(repo.updates.single.req.title, 'Serie');
     });
 

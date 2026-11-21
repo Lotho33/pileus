@@ -31,6 +31,7 @@ import '../core/utils/metrics.dart';
 import '../core/utils/perf_log.dart';
 import '../features/player/next_episode_countdown.dart';
 import '../features/player/player_tuning.dart';
+import '../features/player/progress_heartbeat.dart';
 import '../features/player/resume_seek.dart' show resolveStartPositionSec;
 import '../features/player/playback_episode_list.dart';
 import '../features/player/presentation/widgets/player_audio_artwork.dart';
@@ -144,8 +145,9 @@ class _MobilePlayerViewState extends State<_MobilePlayerView> {
   // or retried — only the user's own tap on either button clears it.
   _TakeoverPrompt? _takeoverPrompt;
   Timer? _hideTimer;
-  Timer? _errorGrace;
-  Timer? _progressTimer;
+  final _errorGrace = ErrorGrace();
+  late final _heartbeat = ProgressHeartbeat(
+      isLive: widget.args.isLive, onSave: _saveProgressGuarded);
   // Backstop for _started's own resume-confirmation gate (see _onEngine) —
   // re-armed on every open, cancelled the moment _started flips on its own.
   Timer? _resumeCoverSafetyTimer;
@@ -323,7 +325,7 @@ class _MobilePlayerViewState extends State<_MobilePlayerView> {
           !_resolvingEpisode &&
           _takeoverPrompt == null &&
           _playbackError == null &&
-          (_errorGrace?.isActive != true) &&
+          !_errorGrace.isActive &&
           _engine.playing,
       isBuffering: () => _engine.buffering,
       onStallTier1: () {
@@ -352,10 +354,7 @@ class _MobilePlayerViewState extends State<_MobilePlayerView> {
     // resume point — and, separately, skips this on purpose even for the
     // single-device-lease heartbeat's sake, see PlaybackProgress's class doc
     // ("Why every screen's 15s heartbeat still skips live streams").
-    if (!widget.args.isLive) {
-      _progressTimer = Timer.periodic(
-          const Duration(seconds: 15), (_) => _saveProgressGuarded());
-    }
+    _heartbeat.start();
 
     // One-shot background fetch: a launch path that only knows a single
     // episode (Continue Watching, a search/quick-play deep link) carries no
@@ -374,20 +373,7 @@ class _MobilePlayerViewState extends State<_MobilePlayerView> {
 
   void _onLifecycle() {
     if (!mounted) return;
-    if (AppLifecycleReactor.instance.isBackgrounded) {
-      if (_progressTimer != null) {
-        _progressTimer!.cancel();
-        _progressTimer = null;
-        if (!widget.args.isLive) {
-          try {
-            _saveProgressGuarded();
-          } catch (_) {}
-        }
-      }
-    } else if (_progressTimer == null && !widget.args.isLive) {
-      _progressTimer = Timer.periodic(
-          const Duration(seconds: 15), (_) => _saveProgressGuarded());
-    }
+    _heartbeat.setBackgrounded(AppLifecycleReactor.instance.isBackgrounded);
   }
 
   // See _transitioningEpisode's doc — the one guard every heartbeat/
@@ -432,8 +418,7 @@ class _MobilePlayerViewState extends State<_MobilePlayerView> {
     SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
     AppLifecycleReactor.instance.state.removeListener(_onLifecycle);
     _hideTimer?.cancel();
-    _errorGrace?.cancel();
-    _progressTimer?.cancel();
+    _errorGrace.cancel();
     _resumeCoverSafetyTimer?.cancel();
     _posSub?.cancel();
     _stallWatchdog?.disarm();
@@ -441,11 +426,7 @@ class _MobilePlayerViewState extends State<_MobilePlayerView> {
     _seekBarFocusNode.dispose();
     // Final save while the engine is still alive — catches everything since
     // the last heartbeat (e.g. the user backs out 8s after the last tick).
-    if (!widget.args.isLive) {
-      try {
-        _saveProgressGuarded();
-      } catch (_) {}
-    }
+    _heartbeat.close();
     _progress.close(); // per-content "Formato", see content_view_mode.dart
     // Best-effort, never blocks teardown — see ReleasePlaybackRequest's own
     // doc (contract "One device playing per profile"): frees this device's
@@ -484,7 +465,7 @@ class _MobilePlayerViewState extends State<_MobilePlayerView> {
 
     if (playing) {
       if (_playbackError != null) {
-        _errorGrace?.cancel();
+        _errorGrace.cancel();
         _playbackError = null;
         needsRebuild = true;
       }
@@ -549,8 +530,8 @@ class _MobilePlayerViewState extends State<_MobilePlayerView> {
       _onPlaybackTakenOver('');
       return;
     }
-    _errorGrace?.cancel();
-    _errorGrace = Timer(kErrorGraceDuration, () {
+    _errorGrace.cancel();
+    _errorGrace.arm(() {
       if (mounted && !_engine.playing) {
         if (_tryLiveFailover()) return;
         setState(() => _playbackError = msg);
@@ -566,7 +547,7 @@ class _MobilePlayerViewState extends State<_MobilePlayerView> {
   // "Riprendi qui" gets playback back on this device.
   void _onPlaybackTakenOver(String playingOn) {
     if (!mounted || _takeoverPrompt != null) return;
-    _errorGrace?.cancel();
+    _errorGrace.cancel();
     final resumePos = _engine.position;
     _engine.pause();
     // Best-effort — records exactly where this device stopped (mainly
@@ -670,7 +651,7 @@ class _MobilePlayerViewState extends State<_MobilePlayerView> {
   ///  - builds a fresh [PlaybackProgress] so its resume seek is re-armed (the
   ///    old one is long confirmed, which made the reopen start at 0).
   void _reopenCurrent({int? atSec, bool takeOver = false}) {
-    _errorGrace?.cancel();
+    _errorGrace.cancel();
     final bloc = context.read<PlaybackBloc>();
     final isLive = widget.args.isLive;
     // A direct URL (offline download) only applies to the title the screen
@@ -927,7 +908,7 @@ class _MobilePlayerViewState extends State<_MobilePlayerView> {
 
   Future<void> _goToNextEpisode() async {
     if (_resolvingEpisode || !_hasNextEpisode) return;
-    _errorGrace?.cancel();
+    _errorGrace.cancel();
     setState(() {
       _resolvingEpisode = true;
       _nextEpisodeSecs = null;
@@ -947,7 +928,7 @@ class _MobilePlayerViewState extends State<_MobilePlayerView> {
 
   Future<void> _goToPreviousEpisode() async {
     if (_resolvingEpisode || !_hasPreviousEpisode) return;
-    _errorGrace?.cancel();
+    _errorGrace.cancel();
     setState(() {
       _resolvingEpisode = true;
       _nextEpisodeSecs = null;
@@ -1645,7 +1626,7 @@ class _MobilePlayerViewState extends State<_MobilePlayerView> {
     final id = widget.args.liveSources[i];
     if (id == _curStreamId) return;
     _liveFailover?.switchedTo(id);
-    _errorGrace?.cancel();
+    _errorGrace.cancel();
     _curStreamId = id;
     if (i < widget.args.liveSourceLabels.length) {
       _curSourceLabel = widget.args.liveSourceLabels[i];

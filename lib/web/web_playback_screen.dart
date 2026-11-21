@@ -36,6 +36,7 @@ import '../features/player/models/playback_args.dart';
 import '../features/player/models/skip_interval.dart';
 import '../features/player/next_episode_countdown.dart';
 import '../features/player/player_tuning.dart';
+import '../features/player/progress_heartbeat.dart';
 import '../features/player/presentation/widgets/pointer_next_episode_banner.dart';
 import '../features/player/presentation/widgets/pointer_skip_button.dart';
 import '../features/player/profile_lease_conflict.dart';
@@ -256,7 +257,8 @@ class _ViewState extends State<_View> {
   late web.HTMLVideoElement _video;
 
   _Hls? _hls;
-  Timer? _progressTimer;
+  late final _heartbeat = ProgressHeartbeat(
+      isLive: widget.args.isLive, onSave: () => _saveProgress());
   // Live without hls.js (Safari's own HLS: iOS, the iOS PWA): nothing
   // steers it back to the shared distance from the edge — LiveSync does,
   // from the <video>'s seekable end. hls.js does it itself (_HlsConfig).
@@ -387,7 +389,7 @@ class _ViewState extends State<_View> {
   // the one platform of the four that would flash the blocking error
   // overlay on a blip the others silently shrug off.
   String? _pendingFatalError;
-  Timer? _errorGrace;
+  final _errorGrace = ErrorGrace();
   // Non-null shows _TakeoverOverlay instead of every other overlay —
   // contract "One device playing per profile", either the pre-play ABORTED
   // prompt (PlaybackPlayingElsewhere, "Guarda qui") or a mid-playback
@@ -415,10 +417,7 @@ class _ViewState extends State<_View> {
     // isLive skips this on purpose even for the single-device-lease
     // heartbeat's sake — see PlaybackProgress's class doc
     // ("Why every screen's 15s heartbeat still skips live streams").
-    if (!widget.args.isLive) {
-      _progressTimer =
-          Timer.periodic(const Duration(seconds: 15), (_) => _saveProgress());
-    }
+    _heartbeat.start();
     // The <video> element keeps playing regardless (browsers don't pause
     // media on a backgrounded tab) — this only gates the 15s heartbeat, same
     // reasoning as desktop/mobile.
@@ -553,8 +552,8 @@ class _ViewState extends State<_View> {
         }
         _pendingFatalError =
             'Riproduzione interrotta (errore ${err?.code ?? '?'}).';
-        _errorGrace?.cancel();
-        _errorGrace = Timer(kErrorGraceDuration, () {
+        _errorGrace.cancel();
+        _errorGrace.arm(() {
           if (!mounted || _fatalError != null) return;
           if (!_video.paused) {
             // Recovered on its own within the window.
@@ -636,16 +635,7 @@ class _ViewState extends State<_View> {
 
   void _onLifecycle() {
     if (!mounted) return;
-    if (AppLifecycleReactor.instance.isBackgrounded) {
-      if (_progressTimer != null) {
-        _progressTimer!.cancel();
-        _progressTimer = null;
-        if (!widget.args.isLive) _saveProgress();
-      }
-    } else if (_progressTimer == null && !widget.args.isLive) {
-      _progressTimer =
-          Timer.periodic(const Duration(seconds: 15), (_) => _saveProgress());
-    }
+    _heartbeat.setBackgrounded(AppLifecycleReactor.instance.isBackgrounded);
   }
 
   @override
@@ -653,12 +643,11 @@ class _ViewState extends State<_View> {
     _phoneLandscape.exit();
     _mediaSession.clear();
     AppLifecycleReactor.instance.state.removeListener(_onLifecycle);
-    _progressTimer?.cancel();
     _liveSyncTimer?.cancel();
-    _errorGrace?.cancel();
+    _errorGrace.cancel();
     _resumeCoverSafetyTimer?.cancel();
     _liveWatchdog?.disarm();
-    if (!widget.args.isLive) _saveProgress();
+    _heartbeat.close(); // final save
     // Best-effort, never blocks teardown — see ReleasePlaybackRequest's own
     // doc (contract "One device playing per profile"): frees this device's
     // hold on the lease at once instead of leaving it to lapse by itself
@@ -756,7 +745,7 @@ class _ViewState extends State<_View> {
   }
 
   void _retryFatal() {
-    _errorGrace?.cancel();
+    _errorGrace.cancel();
     _pendingFatalError = null;
     setState(() {
       _fatalError = null;
@@ -799,7 +788,7 @@ class _ViewState extends State<_View> {
         behavior: SnackBarBehavior.floating,
         duration: const Duration(seconds: 4),
       ));
-    _errorGrace?.cancel();
+    _errorGrace.cancel();
     final i = widget.args.liveSources.indexOf(next);
     if (i >= 0 && i < widget.args.liveSourceLabels.length) {
       _curSourceLabel = widget.args.liveSourceLabels[i];
@@ -1415,7 +1404,7 @@ class _ViewState extends State<_View> {
   // playback back on this device.
   void _onPlaybackTakenOver(String playingOn) {
     if (!mounted || _takeoverPrompt != null) return;
-    _errorGrace?.cancel();
+    _errorGrace.cancel();
     _pendingFatalError = null;
     _liveWatchdog?.disarm();
     final resumePos = _video.currentTime.toInt();

@@ -85,12 +85,18 @@ class _PlaybackViewState extends State<_PlaybackView> {
   // open(). Never left running once _videoStarted actually flips (cancelled
   // there), so it can't fire late against a *later* episode's own state.
   Timer? _resumeCoverSafetyTimer;
-  Timer? _heartbeatTimer;
+  // isLive never runs it — see ProgressHeartbeat.
+  late final _heartbeat = ProgressHeartbeat(
+    isLive: widget.args.isLive,
+    onSave: () {
+      if (mounted) _saveProgress();
+    },
+  );
   // TV-only — see _onAppLifecycle's own doc. Armed while backgrounded,
   // releases the single-device playback lease if the background lasts
   // longer than kBackgroundReleaseTimeout.
   Timer? _backgroundReleaseTimer;
-  Timer? _errorGraceTimer;
+  final _errorGrace = ErrorGrace();
   // Catches the case a plain error/buffering event never covers — ExoPlayer
   // (or mpv) reporting playing=true with no error at all while the position
   // has genuinely stopped advancing (e.g. an HLS live edge blip that lands
@@ -320,10 +326,7 @@ class _PlaybackViewState extends State<_PlaybackView> {
     // isLive skips this on purpose even for the single-device-lease
     // heartbeat's sake — see PlaybackProgress's class doc
     // ("Why every screen's 15s heartbeat still skips live streams").
-    _heartbeatTimer = Timer.periodic(const Duration(seconds: 15), (_) {
-      if (!mounted || widget.args.isLive) return;
-      _saveProgress();
-    });
+    _heartbeat.start();
     // Unlike mobile/desktop/web, TV never listened for the app going to
     // background at all — the only saves were this 15s heartbeat and
     // dispose() (which only runs when the route itself is torn down, not
@@ -384,7 +387,7 @@ class _PlaybackViewState extends State<_PlaybackView> {
     // signal that happened. Without clearing it here, _InPlayerErrorOverlay
     // stays up forever blocking a stream that works underneath it.
     if (playing && (_playbackError != null || _pendingErrorText != null)) {
-      _errorGraceTimer?.cancel();
+      _errorGrace.cancel();
       _pendingErrorText = null;
       if (_playbackError != null) setState(() => _playbackError = null);
     }
@@ -427,8 +430,8 @@ class _PlaybackViewState extends State<_PlaybackView> {
     // the stream proves it's alive.
     setState(() => _pendingErrorText = 'Errore riproduzione: $err');
     final firedAt = DateTime.now();
-    _errorGraceTimer?.cancel();
-    _errorGraceTimer = Timer(kErrorGraceDuration, () {
+    _errorGrace.cancel();
+    _errorGrace.arm(() {
       if (!mounted) return;
       final progressed =
           _lastProgressAt != null && _lastProgressAt!.isAfter(firedAt);
@@ -452,7 +455,7 @@ class _PlaybackViewState extends State<_PlaybackView> {
 
   void _switchLiveSourceTo(String srcId) {
     _liveFailover?.switchedTo(srcId);
-    _errorGraceTimer?.cancel();
+    _errorGrace.cancel();
     setState(() {
       _pendingErrorText = null;
       _playbackError = null;
@@ -495,7 +498,7 @@ class _PlaybackViewState extends State<_PlaybackView> {
   // the lease by themselves.
   void _onPlaybackTakenOver(String playingOn) {
     if (!mounted || _takeoverPrompt != null) return; // already showing
-    _errorGraceTimer?.cancel();
+    _errorGrace.cancel();
     _stallWatchdog?.cancel();
     _pendingErrorText = null;
     final resumePos = _engine.position;
@@ -724,7 +727,7 @@ class _PlaybackViewState extends State<_PlaybackView> {
         : null;
     perf('screen: manual player restart in place');
     _stallStrikes = 0;
-    _errorGraceTimer?.cancel();
+    _errorGrace.cancel();
     setState(() {
       _playbackError = null;
       _pendingErrorText = null;
@@ -883,9 +886,8 @@ class _PlaybackViewState extends State<_PlaybackView> {
   void dispose() {
     _mediaSession.clear();
     perf('screen: dispose (videoStarted=$_videoStarted)');
-    _heartbeatTimer?.cancel();
     _backgroundReleaseTimer?.cancel();
-    _errorGraceTimer?.cancel();
+    _errorGrace.cancel();
     _stallWatchdog?.cancel();
     _optimisticSeekClearTimer?.cancel();
     _remoteSeekCommit?.cancel();
@@ -893,7 +895,7 @@ class _PlaybackViewState extends State<_PlaybackView> {
     AppLifecycleReactor.instance.state.removeListener(_onAppLifecycle);
     _engine.removeListener(_onEngineChanged);
     _uiCubit.close(); // cancella internamente il suo _hideTimer
-    if (!widget.args.isLive) _saveProgress();
+    _heartbeat.close(); // final save
     final viewModeToken = _viewModeToken;
     if (viewModeToken != null) contentViewModes.close(viewModeToken);
     // Best-effort, never blocks teardown — catches any exit path that
@@ -915,15 +917,7 @@ class _PlaybackViewState extends State<_PlaybackView> {
   void _onAppLifecycle() {
     if (!mounted) return;
     if (AppLifecycleReactor.instance.isBackgrounded) {
-      if (_heartbeatTimer != null) {
-        _heartbeatTimer!.cancel();
-        _heartbeatTimer = null;
-        if (!widget.args.isLive) {
-          try {
-            _saveProgress();
-          } catch (_) {}
-        }
-      }
+      _heartbeat.setBackgrounded(true);
       // TV-only (contract "One device playing per profile"): the heartbeat
       // above just stopped, so nothing keeps renewing this device's lease
       // while backgrounded — it would lapse by itself in ~90s anyway. A
@@ -939,12 +933,7 @@ class _PlaybackViewState extends State<_PlaybackView> {
     } else {
       _backgroundReleaseTimer?.cancel();
       _backgroundReleaseTimer = null;
-      if (_heartbeatTimer == null && !widget.args.isLive) {
-        _heartbeatTimer = Timer.periodic(const Duration(seconds: 15), (_) {
-          if (!mounted || widget.args.isLive) return;
-          _saveProgress();
-        });
-      }
+      _heartbeat.setBackgrounded(false);
     }
   }
 
@@ -1069,7 +1058,7 @@ class _PlaybackViewState extends State<_PlaybackView> {
     // error triggered _playbackError, even mid-playback (not just on the
     // very first frame; see _onPlayingChanged for the same reasoning).
     if (mounted && (_playbackError != null || _pendingErrorText != null)) {
-      _errorGraceTimer?.cancel();
+      _errorGrace.cancel();
       _pendingErrorText = null;
       if (_playbackError != null) setState(() => _playbackError = null);
     }
@@ -1315,7 +1304,7 @@ class _PlaybackViewState extends State<_PlaybackView> {
     // can still be pending here — without cancelling it, it fires 8s later
     // against *this* new stream and shows the old error message over one
     // that's actually loading fine.
-    _errorGraceTimer?.cancel();
+    _errorGrace.cancel();
     _audioPref.reset();
     _lastStreamUrl = url;
     _lastStreamHeaders = headers;
@@ -1441,7 +1430,7 @@ class _PlaybackViewState extends State<_PlaybackView> {
       _saveProgress();
       _transitioningEpisode = true;
       _currentStreamId = prefetched.streamId;
-      _errorGraceTimer?.cancel();
+      _errorGrace.cancel();
       _engine.stop();
       _uiCubit.setNextEpisodeSecs(null);
       setState(() {
@@ -1518,7 +1507,7 @@ class _PlaybackViewState extends State<_PlaybackView> {
       _saveProgress();
       _transitioningEpisode = true;
       _currentStreamId = match.id;
-      _errorGraceTimer?.cancel();
+      _errorGrace.cancel();
       _engine.stop();
       _uiCubit.setNextEpisodeSecs(null);
       setState(() {

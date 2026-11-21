@@ -42,6 +42,7 @@ import '../models/playback_args.dart';
 import '../models/skip_interval.dart';
 import '../next_episode_countdown.dart';
 import '../player_tuning.dart';
+import '../progress_heartbeat.dart';
 import '../playback_episode_list.dart';
 import '../profile_lease_conflict.dart';
 import '../models/duration_format.dart';
