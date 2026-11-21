@@ -28,7 +28,8 @@ import '../features/player/cw_advance.dart';
 import '../features/player/episode_nav.dart';
 import '../features/player/player_languages.dart';
 import '../features/player/playback_episode_list.dart';
-import '../features/player/source_continuity.dart' show inferSourceLabel;
+import '../features/player/source_continuity.dart'
+    show inferSourceLabel, streamIdForNextEpisode;
 import '../features/player/episode_poster.dart';
 import '../features/player/episode_prefetch.dart';
 import '../features/player/live_stall_watchdog.dart';
@@ -288,6 +289,14 @@ class _ViewState extends State<_View> {
   // ── episode navigation / skip markers / CW closing / live watchdog ───────
   // See episode_nav.dart/skip_interval.dart/live_stall_watchdog.dart.
   late String _curMediaId = widget.mediaId;
+  // The stream (source/language) playing — learnt from PlaybackReady.streamId
+  // or the prefetch, null until known. Continue Watching stores it rather
+  // than the bare media id, which would resume in the plugin's default
+  // language (source_continuity.dart) — same as the other 3 players.
+  late String? _curStreamId = (widget.args.directStreamId?.isNotEmpty ?? false)
+      ? widget.args.directStreamId
+      : null;
+  String get _cwId => _curStreamId ?? _curMediaId;
   // NOT final — the warm path in _openEpisode reassigns this to whatever
   // label EpisodePrefetcher actually matched (it falls back to the first
   // available source if the current label has no equivalent on the next
@@ -704,6 +713,7 @@ class _ViewState extends State<_View> {
     final t = _video.currentTime;
     final at = t.isFinite && t > 0 ? t.toInt() : 0;
     _curSourceLabel = src.label;
+    _curStreamId = src.id;
     SourceMemory.remember(
         widget.args.epPluginId, widget.args.parentId, src.label);
     _resumeSeek = ResumeSeekController(targetSec: at, isLive: false);
@@ -721,6 +731,7 @@ class _ViewState extends State<_View> {
   void _onReady(PlaybackReady s) {
     if (_opened) return;
     _opened = true;
+    if (s.streamId.isNotEmpty) _curStreamId = s.streamId;
     unawaited(_loadLanguages());
     // The new stream is confirmed resolved and about to attach — the
     // transition started by _openEpisode is over, heartbeat/dispose saves
@@ -931,40 +942,60 @@ class _ViewState extends State<_View> {
       final nextTitle = _nav.episodeIndex + 1 < _nav.episodeTitles.length
           ? _nav.episodeTitles[_nav.episodeIndex + 1]
           : '';
-      repo.updateProgress(
-        pluginId: a.epPluginId,
-        mediaId: nextId,
-        // See _saveProgress's comment — the stable series id, not
-        // _nav.parentId (which EpisodeNavState may already have rewritten to
-        // a season-folder id if resolving this next episode crossed one).
-        parentId: a.parentId,
-        position: const Duration(seconds: 31),
-        title: nextTitle.isNotEmpty ? nextTitle : a.showTitle,
-        showTitle: a.showTitle,
-        // The *next* episode's own thumbnail, not the one currently
-        // playing's — see episode_poster.dart's doc comment.
-        poster: posterForEpisode(
-          episodeThumbs: _nav.episodeThumbs,
-          index: _nav.episodeIndex + 1,
-          seriesCoverUrl: _nav.seriesCoverUrl,
-          seriesPoster: _nav.seriesPoster,
-          fallback: a.poster,
-        ),
-        rating: _curRating ?? a.rating,
-        genres: a.genres,
-        // Always the series' own synopsis, never an episode's — see
-        // PlaybackArgs.copyWith's doc comment.
-        plot: a.plot,
-        year: _curYear ?? a.year,
-        seasonNumber:
-            numberForEpisode(_nav.seasonNumbers, _nav.episodeIndex + 1),
-        episodeNumber:
-            numberForEpisode(_nav.episodeNumbers, _nav.episodeIndex + 1),
+      // The next episode's *stream id* for the source playing now, not its
+      // bare id (which resumes in the plugin's default language) — see
+      // source_continuity.dart. Captured up front: the lookup is async and
+      // the screen may have moved on by then.
+      final currentId = _cwId;
+      // The *next* episode's own thumbnail, not the one currently playing's
+      // — see episode_poster.dart's doc comment.
+      final nextPoster = posterForEpisode(
+        episodeThumbs: _nav.episodeThumbs,
+        index: _nav.episodeIndex + 1,
+        seriesCoverUrl: _nav.seriesCoverUrl,
+        seriesPoster: _nav.seriesPoster,
+        fallback: a.poster,
       );
-      repo.deleteProgress(providerID: a.epPluginId, playableID: _curMediaId);
+      final nextSeason =
+          numberForEpisode(_nav.seasonNumbers, _nav.episodeIndex + 1);
+      final nextEpisode =
+          numberForEpisode(_nav.episodeNumbers, _nav.episodeIndex + 1);
+      final rating = _curRating ?? a.rating;
+      final year = _curYear ?? a.year;
+      streamIdForNextEpisode(
+        repo,
+        pluginId: a.epPluginId,
+        nextEpisodeId: nextId,
+        sourceLabel: _curSourceLabel,
+        prefetched: _prefetcher.cached,
+      )
+          .then((nextStreamId) => repo.updateProgress(
+                pluginId: a.epPluginId,
+                mediaId: nextStreamId,
+                // See _saveProgress's comment — the stable series id, not
+                // _nav.parentId (which EpisodeNavState may already have
+                // rewritten to a season-folder id if resolving this next
+                // episode crossed one).
+                parentId: a.parentId,
+                position: const Duration(seconds: 31),
+                title: nextTitle.isNotEmpty ? nextTitle : a.showTitle,
+                showTitle: a.showTitle,
+                poster: nextPoster,
+                rating: rating,
+                genres: a.genres,
+                // Always the series' own synopsis, never an episode's — see
+                // PlaybackArgs.copyWith's doc comment.
+                plot: a.plot,
+                year: year,
+                seasonNumber: nextSeason,
+                episodeNumber: nextEpisode,
+              ))
+          .catchError((_) => null)
+          .whenComplete(() => repo.deleteProgress(
+              providerID: a.epPluginId, playableID: currentId));
     } else if (!hasSameSeasonNext && frac >= kCwDropThreshold) {
       _progressCleared = true;
-      if (isEpisodeOfSeries(a.parentId, _curMediaId)) {
+      if (isEpisodeOfSeries(a.parentId, _cwId)) {
         // Last episode of a season: the next season's first episode, or
         // gone if the series is over (cw_advance.dart).
         advanceContinueWatching(
@@ -972,7 +1003,7 @@ class _ViewState extends State<_View> {
           CwAdvanceRequest(
             pluginId: a.epPluginId,
             seriesId: a.parentId,
-            currentCwId: _curMediaId,
+            currentCwId: _cwId,
             currentTitle: _curTitle,
             seasonNumber: _nav.currentSeasonNumber,
             episodeNumber: _nav.currentEpisodeNumber,
@@ -989,7 +1020,7 @@ class _ViewState extends State<_View> {
           ),
         );
       } else {
-        repo.deleteProgress(providerID: a.epPluginId, playableID: _curMediaId);
+        repo.deleteProgress(providerID: a.epPluginId, playableID: _cwId);
       }
     }
   }
@@ -1071,6 +1102,8 @@ class _ViewState extends State<_View> {
       _prefetcher.clear();
       setState(() {
         _curMediaId = target.mediaId;
+        _curStreamId =
+            prefetched.streamId.isNotEmpty ? prefetched.streamId : null;
         _curTitle = prefetched.title?.isNotEmpty == true
             ? prefetched.title!
             : (target.title.isNotEmpty ? target.title : _curTitle);
@@ -1102,6 +1135,7 @@ class _ViewState extends State<_View> {
 
     setState(() {
       _curMediaId = target.mediaId;
+      _curStreamId = null; // learnt again from PlaybackReady
       _curTitle = target.title.isNotEmpty ? target.title : _curTitle;
       _opened = false;
       _resolvingEpisode = false;
@@ -1428,7 +1462,7 @@ class _ViewState extends State<_View> {
     final a = widget.args;
     final resp = await getIt<MediaRepository>().updateProgress(
       pluginId: a.epPluginId,
-      mediaId: _curMediaId,
+      mediaId: _cwId,
       // The series' own stable id, never the season-folder id EpisodeNavState
       // rewrites into _nav.parentId while browsing across a season boundary
       // (see EpisodeNavState._resolveAt) — using that here left a stale
@@ -1459,15 +1493,21 @@ class _ViewState extends State<_View> {
   /// position 0 — mycelium no longer gates Continue Watching on a minimum
   /// position, so a title should appear there as soon as it's opened rather
   /// than waiting for the first 15s heartbeat. Runs again for every episode
-  /// change (see _onReady), each time with the now-current _curMediaId.
+  /// change (see _onReady), each time with the now-current _cwId.
+  ///
+  /// Reports the resume *target*, not the video's position: this runs as the
+  /// source attaches, while the resume seek is still in flight — sending 0
+  /// zeroed the row whenever the user backed out before the first heartbeat
+  /// (same fix the other 3 players carry).
   Future<void> _markOpened() async {
+    if (_progressCleared) return;
     final a = widget.args;
     final resp = await getIt<MediaRepository>().updateProgress(
       pluginId: a.epPluginId,
-      mediaId: _curMediaId,
+      mediaId: _cwId,
       // See _saveProgress's comment — the stable series id, not _nav.parentId.
       parentId: a.parentId,
-      position: Duration.zero,
+      position: Duration(seconds: _resumeSeek.targetSec),
       totalDuration: Duration.zero,
       title: _curTitle.isNotEmpty ? _curTitle : a.showTitle,
       showTitle: a.showTitle,
