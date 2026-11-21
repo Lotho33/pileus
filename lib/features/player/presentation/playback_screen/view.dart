@@ -219,9 +219,15 @@ class _PlaybackViewState extends State<_PlaybackView> {
   // stop() was still mid-reset wrote the wrong identity/position pairing.
   bool _transitioningEpisode = false;
   bool _autoAdvanced = false;
-  // Guards the continue-watching cleanup below against firing more than
-  // once per media — reset whenever `_currentMediaId` changes.
-  bool _progressCleared = false;
+  // Continue Watching bookkeeping shared with the other 3 players
+  // (cw_progress.dart). Its "cleared" flag is reset whenever
+  // `_currentMediaId` changes.
+  late final ContinueWatchingTracker _cw = ContinueWatchingTracker(
+    snapshot: _cwSnapshot,
+    isLive: widget.args.isLive,
+    onPlaybackElsewhere: _onPlaybackTakenOver,
+    onWrite: _trackViewMode,
+  );
 
   @override
   void initState() {
@@ -510,7 +516,7 @@ class _PlaybackViewState extends State<_PlaybackView> {
         backLabel: 'Esci',
         onAction: () {
           setState(() => _takeoverPrompt = null);
-          _elsewhereReported = false; // a fresh attempt can trip it again
+          _cw.rearmElsewhere(); // a fresh attempt can trip it again
           // Re-armed to resume-seek at resumePos instead of wherever this
           // instance's own target already landed/confirmed long ago —
           // _startPlayback (run once the resolve below completes) reads
@@ -945,40 +951,16 @@ class _PlaybackViewState extends State<_PlaybackView> {
   // ── Progress ───────────────────────────────────────────────────────────────
 
   Future<void> _saveProgress() async {
-    // Once _onPosition has already deleted the continue-watching entry
-    // (≥95% watched, marked as finished), every remaining caller of this
-    // method — the stream.playing listener firing on natural EOF, the 15s
-    // heartbeat, and the unconditional dispose() save — would otherwise
-    // silently recreate the entry it just cleared.
+    // Once the end-of-title handling has cleared the continue-watching entry
+    // (≥95% watched, or rolled forward), the tracker ignores every remaining
+    // caller of this method — the stream.playing listener firing on natural
+    // EOF, the 15s heartbeat, and the unconditional dispose() save.
     // _transitioningEpisode: see its doc comment — mid episode-switch there's
     // nothing reliable to save (the one call that must go through
     // regardless, the final save for the outgoing episode fired from
     // _resolveEpisodeAt, runs before this flag is set, so it's unaffected).
-    if (_progressCleared || _transitioningEpisode) return;
-    final pos = _engine.position;
-    final dur = _engine.duration;
-    if (pos.inSeconds <= 0) return;
-    _trackViewMode();
-    final resp = await getIt<MediaRepository>().updateProgress(
-      pluginId: widget.args.epPluginId,
-      mediaId: _cwId,
-      parentId: _parentId,
-      position: pos,
-      totalDuration: dur,
-      // Card main line = what you're watching now ("Episodio 5" for an
-      // episode, the film title for a movie); the series name rides in
-      // showTitle and the card shows it as a small overline above it.
-      title: (_currentTitle?.isNotEmpty ?? false) ? _currentTitle! : _showTitle,
-      showTitle: _showTitle,
-      poster: _currentEpisodePoster(),
-      rating: _rating,
-      genres: _genres,
-      plot: _plot,
-      year: _year,
-      seasonNumber: _currentSeasonNumber(),
-      episodeNumber: _currentEpisodeNumber(),
-    );
-    _checkElsewhere(resp);
+    if (_transitioningEpisode) return;
+    await _cw.save(position: _engine.position, duration: _engine.duration);
   }
 
   /// Writes a continue-watching row the instant the stream opens, even at
@@ -1003,27 +985,10 @@ class _PlaybackViewState extends State<_PlaybackView> {
   /// synchronously, no race — so this now reports *that* (still 0 for a
   /// title with nothing to resume) instead of guessing from an engine that
   /// hasn't caught up yet.
-  Future<void> _markOpened() async {
-    if (_progressCleared) return;
-    _trackViewMode();
-    final resp = await getIt<MediaRepository>().updateProgress(
-      pluginId: widget.args.epPluginId,
-      mediaId: _cwId,
-      parentId: _parentId,
-      position: Duration(seconds: _resumeSeek.targetSec),
-      totalDuration: _engine.duration,
-      title: (_currentTitle?.isNotEmpty ?? false) ? _currentTitle! : _showTitle,
-      showTitle: _showTitle,
-      poster: _currentEpisodePoster(),
-      rating: _rating,
-      genres: _genres,
-      plot: _plot,
-      year: _year,
-      seasonNumber: _currentSeasonNumber(),
-      episodeNumber: _currentEpisodeNumber(),
-    );
-    _checkElsewhere(resp);
-  }
+  Future<void> _markOpened() => _cw.markStarted(
+        position: Duration(seconds: _resumeSeek.targetSec),
+        duration: _engine.duration,
+      );
 
   /// Feeds the ids Continue Watching is about to store for this title (the
   /// stream id once resolved, the series id once looked up) to the
@@ -1036,17 +1001,34 @@ class _PlaybackViewState extends State<_PlaybackView> {
         .track(t, parentId: _parentId, ids: [_cwId, _currentMediaId]);
   }
 
-  // Once per instance — a later heartbeat after this device has already
-  // been told "you lost it" would otherwise keep re-triggering the prompt
-  // (or worse, re-triggering it after the user already picked "Riprendi
-  // qui" and a fresh resolve is in flight).
-  bool _elsewhereReported = false;
-
-  void _checkElsewhere(ProgressResponse? resp) {
-    if (_elsewhereReported || resp == null || !resp.playbackElsewhere) return;
-    _elsewhereReported = true;
-    _onPlaybackTakenOver(resp.playingOn);
-  }
+  /// What Continue Watching stores for the item playing right now — read
+  /// from the live episode/season fields, which change mid-session.
+  CwSnapshot _cwSnapshot() => CwSnapshot(
+        pluginId: widget.args.epPluginId,
+        cwId: _cwId,
+        parentId: _parentId,
+        // Card main line = what you're watching now ("Episodio 5" for an
+        // episode, the film title for a movie); the series name rides in
+        // showTitle and the card shows it as a small overline above it.
+        title: _currentTitle ?? '',
+        showTitle: _showTitle,
+        poster: _currentEpisodePoster(),
+        rating: _rating,
+        genres: _genres,
+        plot: _plot,
+        year: _year,
+        episodeList: _currentEpisodeList,
+        episodeIndex: _currentEpisodeIndex,
+        episodeTitles: _currentEpisodeTitles,
+        episodeThumbs: _currentEpisodeThumbs,
+        seasonNumbers: _currentSeasonNumbers,
+        episodeNumbers: _currentEpisodeNumbers,
+        knownSeasonIds: widget.args.allSeasonIds,
+        sourceLabel: _currentSourceLabel,
+        seriesPoster: widget.args.seriesPoster,
+        seriesCoverUrl: widget.args.seriesCoverUrl,
+        fallbackPoster: widget.args.poster,
+      );
 
   /// This episode's Continue Watching cover — its own thumbnail if we have
   /// one, the series poster otherwise, `widget.args.poster` (the entry
@@ -1060,14 +1042,6 @@ class _PlaybackViewState extends State<_PlaybackView> {
         seriesPoster: widget.args.seriesPoster,
         fallback: widget.args.poster,
       );
-
-  // This episode's real "S{x}"/"E{y}" number — 0 when unknown (a movie, or a
-  // plugin that doesn't tag episodes), which the CW card hides rather than
-  // showing "S0 · E0". See episode_poster.dart's numberForEpisode().
-  int _currentEpisodeNumber() =>
-      numberForEpisode(_currentEpisodeNumbers, _currentEpisodeIndex);
-  int _currentSeasonNumber() =>
-      numberForEpisode(_currentSeasonNumbers, _currentEpisodeIndex);
 
   // ── Resume-from-timestamp ─────────────────────────────────────────────────
   //
@@ -1232,101 +1206,10 @@ class _PlaybackViewState extends State<_PlaybackView> {
       // already point at the incoming one (or vice versa, right as the new
       // stream attaches) — same failure mode as the other 3 platforms'
       // equivalent guard.
-      if (!_progressCleared && !_transitioningEpisode && dur.inSeconds > 0) {
-        final frac = pos.inSeconds / dur.inSeconds;
-        final hasSameSeasonNext = _currentEpisodeIndex >= 0 &&
-            _currentEpisodeIndex + 1 < _currentEpisodeList.length;
-        if (hasSameSeasonNext && frac >= kCwRollForwardThreshold) {
-          _progressCleared = true;
-          final nextId = _currentEpisodeList[_currentEpisodeIndex + 1];
-          final nextTitle =
-              _currentEpisodeIndex + 1 < _currentEpisodeTitles.length
-                  ? _currentEpisodeTitles[_currentEpisodeIndex + 1]
-                  : '';
-          final repo = getIt<MediaRepository>();
-          final currentId = _cwId;
-          final pluginId = widget.args.epPluginId;
-          final parentId = _parentId;
-          final sourceLabel = _currentSourceLabel;
-          final prefetched = _prefetcher.cached;
-          // The next episode's *stream id* for the source playing now, not
-          // its bare id — resuming a bare id gives the plugin's default
-          // source, i.e. possibly another language. See
-          // source_continuity.dart. Everything it needs is captured above:
-          // the lookup is async and the screen may have moved on by then.
-          final progressFuture = streamIdForNextEpisode(
-            repo,
-            pluginId: pluginId,
-            nextEpisodeId: nextId,
-            sourceLabel: sourceLabel,
-            prefetched: prefetched,
-          ).then((nextStreamId) => repo.updateProgress(
-                pluginId: pluginId,
-                mediaId: nextStreamId,
-                parentId: parentId,
-                // 31 s, and totalDuration left at 0 on purpose: the card's bar
-                // reads 0% (progressFraction needs total_time), and resuming
-                // this row starts ~30 s in — past the recap/logo stings on most
-                // episodes.
-                position: const Duration(seconds: 31),
-                title: nextTitle.isNotEmpty ? nextTitle : _showTitle,
-                showTitle: _showTitle,
-                // The *next* episode's own thumbnail, not the one currently
-                // playing's — see _currentEpisodePoster()'s doc comment.
-                poster: posterForEpisode(
-                  episodeThumbs: _currentEpisodeThumbs,
-                  index: _currentEpisodeIndex + 1,
-                  seriesCoverUrl: widget.args.seriesCoverUrl,
-                  seriesPoster: widget.args.seriesPoster,
-                  fallback: widget.args.poster,
-                ),
-                rating: _rating,
-                genres: _genres,
-                plot: _plot,
-                year: _year,
-                seasonNumber: numberForEpisode(
-                    _currentSeasonNumbers, _currentEpisodeIndex + 1),
-                episodeNumber: numberForEpisode(
-                    _currentEpisodeNumbers, _currentEpisodeIndex + 1),
-              ));
-          progressFuture.catchError((_) => null).whenComplete(() =>
-              repo.deleteProgress(providerID: pluginId, playableID: currentId));
-        } else if (!hasSameSeasonNext && frac >= kCwDropThreshold) {
-          _progressCleared = true;
-          final repo = getIt<MediaRepository>();
-          if (isEpisodeOfSeries(_parentId, _cwId)) {
-            // Last episode of a season, or a download with no list: the
-            // next season's first episode, or gone if the series is over.
-            advanceContinueWatching(
-              repo,
-              CwAdvanceRequest(
-                pluginId: widget.args.epPluginId,
-                seriesId: _parentId,
-                currentCwId: _cwId,
-                currentTitle: _currentTitle ?? '',
-                seasonNumber: numberForEpisode(
-                    _currentSeasonNumbers, _currentEpisodeIndex),
-                episodeNumber: numberForEpisode(
-                    _currentEpisodeNumbers, _currentEpisodeIndex),
-                knownSeasonIds: widget.args.allSeasonIds,
-                sourceLabel: _currentSourceLabel,
-                showTitle: _showTitle,
-                seriesPoster: widget.args.seriesPoster,
-                seriesCoverUrl: widget.args.seriesCoverUrl,
-                fallbackPoster: widget.args.poster,
-                rating: _rating,
-                genres: _genres,
-                plot: _plot,
-                year: _year,
-              ),
-            );
-          } else {
-            repo.deleteProgress(
-              providerID: widget.args.epPluginId,
-              playableID: _cwId,
-            );
-          }
-        }
+      // (ContinueWatchingTracker.maybeClear, shared with the other 3.)
+      if (!_transitioningEpisode) {
+        _cw.maybeClear(
+            position: pos, duration: dur, prefetched: _prefetcher.cached);
       }
     }
   }
@@ -1580,8 +1463,7 @@ class _PlaybackViewState extends State<_PlaybackView> {
         _resolvingEpisode = false;
         _autoAdvanced = false;
         _nextEpisodeDismissed = false;
-        _progressCleared = false;
-        _elsewhereReported = false;
+        _cw.resetForRetry();
       });
       _resumeSeek =
           ResumeSeekController(targetSec: 0, isLive: widget.args.isLive);
@@ -1652,8 +1534,7 @@ class _PlaybackViewState extends State<_PlaybackView> {
         _resolvingEpisode = false;
         _autoAdvanced = false;
         _nextEpisodeDismissed = false;
-        _progressCleared = false;
-        _elsewhereReported = false;
+        _cw.resetForRetry();
       });
       // A new episode starts from 0 — don't carry the resume target.
       _resumeSeek =
