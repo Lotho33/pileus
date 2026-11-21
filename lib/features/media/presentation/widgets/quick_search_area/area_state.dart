@@ -751,7 +751,10 @@ class _QuickSearchAreaState extends State<QuickSearchArea> {
           duration: const Duration(milliseconds: 320),
           curve: Curves.easeOutCubic,
           width: _expanded ? expandedW : collapsedW,
-          clipBehavior: Clip.antiAlias,
+          // Clip only the open panel: collapsed, this box is just the bar,
+          // and its 16 radius cut the bar's own 10-radius corners, border
+          // included — the outline vanished at each corner.
+          clipBehavior: _expanded ? Clip.antiAlias : Clip.none,
           decoration: BoxDecoration(borderRadius: BorderRadius.circular(16)),
           // Blurred backdrop + a genuinely translucent tint, replacing what
           // used to be a near-opaque (0xF0 ≈ 94%) solid panel — that fully
