@@ -2,8 +2,8 @@
 // (tv_downloads_screen.dart). On mobile/desktop a finished download can
 // also be copied onto the device, on request (DeviceDownloads): the server
 // keeps its copy, and the device's one plays with no server at all.
-// ignore: deprecated_member_use, material_ui migration pending (docs/FLUTTER_UPGRADE.md)
 import 'package:cached_network_image/cached_network_image.dart';
+// ignore: deprecated_member_use, material_ui migration pending (docs/FLUTTER_UPGRADE.md)
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';

@@ -57,7 +57,7 @@ jobs:
           channel: stable
           # Pinned: what the devcontainer builds with — a new stable is picked up
           # on purpose (docs/FLUTTER_UPGRADE.md), never silently on a release tag.
-          flutter-version: 3.50.0
+          flutter-version: 3.50.1
           cache: true
 
       - name: Derive version
