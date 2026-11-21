@@ -879,16 +879,13 @@ class _MobilePlayerViewState extends State<_MobilePlayerView> {
     // Warm the next episode (stream + fresh metadata) once we're most of
     // the way through this one — same-season only, a season-boundary next
     // still resolves cold (rarer, and finding it needs its own browse()).
-    _prefetcher.maybeStart(
+    _prefetcher.maybeStartInSeason(
       position: pos,
       duration: dur,
-      nextEpisodeId: _curEpisodeIndex + 1 < _curEpisodeList.length
-          ? _curEpisodeList[_curEpisodeIndex + 1]
-          : null,
+      episodeList: _curEpisodeList,
+      episodeTitles: _curEpisodeTitles,
+      episodeIndex: _curEpisodeIndex,
       currentSourceLabel: _curSourceLabel,
-      nextEpisodeFallbackTitle: _curEpisodeIndex + 1 < _curEpisodeTitles.length
-          ? _curEpisodeTitles[_curEpisodeIndex + 1]
-          : null,
     );
 
     if (!_hasNextEpisode) return;

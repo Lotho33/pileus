@@ -1142,17 +1142,13 @@ class _PlaybackViewState extends State<_PlaybackView> {
       // Warm the next episode once we're most of the way through this one —
       // same-season only, same kPrefetchThreshold as the other 3 platforms
       // (episode_prefetch.dart).
-      _prefetcher.maybeStart(
+      _prefetcher.maybeStartInSeason(
         position: pos,
         duration: dur,
-        nextEpisodeId: _currentEpisodeIndex + 1 < _currentEpisodeList.length
-            ? _currentEpisodeList[_currentEpisodeIndex + 1]
-            : null,
+        episodeList: _currentEpisodeList,
+        episodeTitles: _currentEpisodeTitles,
+        episodeIndex: _currentEpisodeIndex,
         currentSourceLabel: _currentSourceLabel,
-        nextEpisodeFallbackTitle:
-            _currentEpisodeIndex + 1 < _currentEpisodeTitles.length
-                ? _currentEpisodeTitles[_currentEpisodeIndex + 1]
-                : null,
       );
       if (hasNext && dur.inSeconds > kMinDurationForEndOfEpisodeLogicSec) {
         final tick = nextEpisodeTick(

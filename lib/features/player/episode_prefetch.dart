@@ -87,6 +87,29 @@ class EpisodePrefetcher {
     _start(nextEpisodeId, nextEpisodeFallbackTitle, currentSourceLabel);
   }
 
+  /// [maybeStart] for the episode after [episodeIndex] in the season the
+  /// player holds — same-season only (a season-boundary next still resolves
+  /// cold: rarer, and finding it needs its own browse). The shape all four
+  /// players call it with.
+  void maybeStartInSeason({
+    required Duration position,
+    required Duration duration,
+    required List<String> episodeList,
+    required List<String> episodeTitles,
+    required int episodeIndex,
+    required String currentSourceLabel,
+  }) {
+    final next = episodeIndex + 1;
+    maybeStart(
+      position: position,
+      duration: duration,
+      nextEpisodeId: next < episodeList.length ? episodeList[next] : null,
+      currentSourceLabel: currentSourceLabel,
+      nextEpisodeFallbackTitle:
+          next < episodeTitles.length ? episodeTitles[next] : null,
+    );
+  }
+
   Future<void> _start(
     String nextId,
     String? fallbackTitle,

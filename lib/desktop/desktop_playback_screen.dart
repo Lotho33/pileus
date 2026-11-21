@@ -612,17 +612,13 @@ class _ViewState extends State<_View> with WindowListener {
 
     // Warm the next episode once we're most of the way through this one —
     // same-season only; a season-boundary next still resolves cold.
-    _prefetcher.maybeStart(
+    _prefetcher.maybeStartInSeason(
       position: pos,
       duration: dur,
-      nextEpisodeId: _nav.episodeIndex + 1 < _nav.episodeList.length
-          ? _nav.episodeList[_nav.episodeIndex + 1]
-          : null,
+      episodeList: _nav.episodeList,
+      episodeTitles: _nav.episodeTitles,
+      episodeIndex: _nav.episodeIndex,
       currentSourceLabel: _curSourceLabel,
-      nextEpisodeFallbackTitle:
-          _nav.episodeIndex + 1 < _nav.episodeTitles.length
-              ? _nav.episodeTitles[_nav.episodeIndex + 1]
-              : null,
     );
 
     if (!_nav.hasNext) return;
