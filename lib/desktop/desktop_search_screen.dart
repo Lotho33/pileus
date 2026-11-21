@@ -29,13 +29,35 @@ import '../shared/sdui/sdui_parser.dart' show resultsAreLive;
 
 const _kMinLen = 2;
 
+/// The plugin the search pane shows: the one already picked in it
+/// ([current]), else the home's ([home]), else the first ready one.
+@visibleForTesting
+PluginInfo? resolveSearchPlugin(List<PluginInfo> plugins,
+    {String? current, String? home}) {
+  if (plugins.isEmpty) return null;
+  for (final id in [current, home]) {
+    if (id == null) continue;
+    for (final p in plugins) {
+      if (p.pluginId == id) return p;
+    }
+  }
+  return plugins.firstWhere((p) => p.isReady, orElse: () => plugins.first);
+}
+
 /// Desktop search pane: a wide search field + plugin selector + filter
 /// sheet, results in a responsive grid.
 class DesktopSearchScreen extends StatefulWidget {
   /// Whether this section is on screen (desktop_shell.dart's IndexedStack
   /// keeps it alive while hidden) — see SearchFiltersLoader.setVisible.
   final bool visible;
-  const DesktopSearchScreen({super.key, this.visible = true});
+
+  /// The plugin the home is showing (the shell's rail selection). Search
+  /// starts there and follows it whenever it changes; the dropdown still
+  /// picks another one for this pane alone.
+  final String? homePluginId;
+
+  const DesktopSearchScreen(
+      {super.key, this.visible = true, this.homePluginId});
 
   @override
   State<DesktopSearchScreen> createState() => _DesktopSearchScreenState();
@@ -90,6 +112,11 @@ class _DesktopSearchScreenState extends State<DesktopSearchScreen> {
   void didUpdateWidget(DesktopSearchScreen oldWidget) {
     super.didUpdateWidget(oldWidget);
     _filtersLoader.setVisible(widget.visible);
+    final home = widget.homePluginId;
+    if (home != null && home != oldWidget.homePluginId) {
+      // Already rebuilding: no setState needed.
+      _applyPlugin(home);
+    }
   }
 
   void _onFiltersChanged() {
@@ -126,14 +153,9 @@ class _DesktopSearchScreenState extends State<DesktopSearchScreen> {
       s is PluginsLoaded ? s.plugins : const [];
 
   PluginInfo? _resolve(List<PluginInfo> plugins) {
-    if (plugins.isEmpty) return null;
-    PluginInfo? match;
-    for (final p in plugins) {
-      if (p.pluginId == _pluginId) match = p;
-    }
-    final found = match ??
-        plugins.firstWhere((p) => p.isReady, orElse: () => plugins.first);
-    if (found.pluginId != _pluginId) {
+    final found = resolveSearchPlugin(plugins,
+        current: _pluginId, home: widget.homePluginId);
+    if (found != null && found.pluginId != _pluginId) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (mounted && _pluginId != found.pluginId) {
           _switchPlugin(found.pluginId);
@@ -145,11 +167,14 @@ class _DesktopSearchScreenState extends State<DesktopSearchScreen> {
 
   void _switchPlugin(String id) {
     if (id == _pluginId) return;
-    setState(() {
-      _pluginId = id;
-      _active.clear();
-      _submitted = '';
-    });
+    setState(() => _applyPlugin(id));
+  }
+
+  void _applyPlugin(String id) {
+    if (id == _pluginId) return;
+    _pluginId = id;
+    _active.clear();
+    _submitted = '';
     _ctrl.clear();
     _bloc.add(const ClearSearchEvent());
     _filtersLoader.setPlugin(id);
@@ -362,8 +387,7 @@ class _DesktopSearchScreenState extends State<DesktopSearchScreen> {
                         // Live events: the home's 16:9 live card (same
                         // 1.8× width), not a tall poster.
                         final live = resultsAreLive(s.items);
-                        final cardW =
-                            live ? bp.cardWidth * 1.8 : bp.cardWidth;
+                        final cardW = live ? bp.cardWidth * 1.8 : bp.cardWidth;
                         final cellH = (live ? cardW * 9 / 16 : cardW * 1.5) +
                             8 +
                             capH +

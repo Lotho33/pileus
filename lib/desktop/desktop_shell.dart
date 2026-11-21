@@ -208,7 +208,8 @@ class _DesktopShellState extends State<DesktopShell> {
                               children: [
                                 _homePane(ps, active),
                                 DesktopSearchScreen(
-                                    visible: _section == DesktopSection.search),
+                                    visible: _section == DesktopSection.search,
+                                    homePluginId: active?.pluginId),
                                 const DesktopMyListPane(),
                                 const DesktopSettingsPane(),
                               ],
