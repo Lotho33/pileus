@@ -21,7 +21,7 @@ import '../features/player/bloc/playback_state.dart';
 import '../features/player/engine/playback_speed.dart';
 import '../features/player/engine/player_engine.dart';
 import '../features/player/episode_poster.dart';
-import '../features/player/episode_nav.dart' show loadSeasonEpisodes;
+import '../features/player/episode_nav.dart' show stepToAdjacentSeason;
 import '../features/player/player_languages.dart';
 import '../features/player/episode_prefetch.dart';
 import '../features/player/live_stall_watchdog.dart';
@@ -954,20 +954,19 @@ class _MobilePlayerViewState extends State<_MobilePlayerView> {
     if (newIndex < 0 || newIndex >= episodeList.length) {
       // Season boundary, either direction: newIndex < 0 steps back a season
       // (landing on its last episode), past the end steps forward one.
-      final allSeasonIds = widget.args.allSeasonIds;
-      final newSeasonIndex = newIndex < 0 ? seasonIndex - 1 : seasonIndex + 1;
-      if (allSeasonIds.isEmpty ||
-          newSeasonIndex < 0 ||
-          newSeasonIndex >= allSeasonIds.length) {
+      final step = await stepToAdjacentSeason(
+        repo,
+        pluginId: widget.args.epPluginId,
+        allSeasonIds: widget.args.allSeasonIds,
+        seasonIndex: seasonIndex,
+        forward: newIndex >= 0,
+      );
+      if (step == null) {
         if (mounted) setState(() => _resolvingEpisode = false);
         return;
       }
-      final season = await loadSeasonEpisodes(
-          repo, widget.args.epPluginId, allSeasonIds[newSeasonIndex]);
-      if (season == null) {
-        if (mounted) setState(() => _resolvingEpisode = false);
-        return;
-      }
+      final season = step.episodes;
+      final newSeasonIndex = step.seasonIndex;
       final newIds = season.ids;
       final newTitles = season.titles;
       final newThumbs = season.thumbs;
@@ -983,7 +982,7 @@ class _MobilePlayerViewState extends State<_MobilePlayerView> {
           _curSeasonIndex = newSeasonIndex;
         });
       }
-      final targetIndex = newIndex < 0 ? newIds.length - 1 : 0;
+      final targetIndex = step.episodeIndex;
       await _resolveEpisodeAt(targetIndex, newIds, newTitles, newSeasonIndex);
       return;
     }

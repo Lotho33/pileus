@@ -51,6 +51,48 @@ Future<SeasonEpisodes?> loadSeasonEpisodes(
 
 const seasonBrowseTimeout = Duration(seconds: 20);
 
+/// Stepping past either end of the season a player holds: the adjacent
+/// season's episodes and where to land in it.
+class SeasonStep {
+  final int seasonIndex;
+  final SeasonEpisodes episodes;
+
+  /// The first episode going forward, the last one going back.
+  final int episodeIndex;
+
+  const SeasonStep({
+    required this.seasonIndex,
+    required this.episodes,
+    required this.episodeIndex,
+  });
+}
+
+/// The season after (or before) [seasonIndex] in [allSeasonIds], loaded —
+/// null when there is none or it has no episodes. The season-boundary half
+/// of "next/previous episode", shared by every player.
+Future<SeasonStep?> stepToAdjacentSeason(
+  MediaRepository repo, {
+  required String pluginId,
+  required List<String> allSeasonIds,
+  required int seasonIndex,
+  required bool forward,
+}) async {
+  final newSeasonIndex = forward ? seasonIndex + 1 : seasonIndex - 1;
+  if (allSeasonIds.isEmpty ||
+      newSeasonIndex < 0 ||
+      newSeasonIndex >= allSeasonIds.length) {
+    return null;
+  }
+  final eps =
+      await loadSeasonEpisodes(repo, pluginId, allSeasonIds[newSeasonIndex]);
+  if (eps == null) return null;
+  return SeasonStep(
+    seasonIndex: newSeasonIndex,
+    episodes: eps,
+    episodeIndex: forward ? 0 : eps.ids.length - 1,
+  );
+}
+
 /// Resolves the next/previous episode across season boundaries — same
 /// strategy as the TV player's `_resolveEpisodeAt`
 /// (`presentation/playback_screen/view.dart`), rewritten standalone so
@@ -180,32 +222,24 @@ class EpisodeNavState {
     var newParentId = parentId;
     var newIndex = wantedIndex;
 
-    if (newIndex < 0) {
-      if (allSeasonIds.isEmpty || seasonIndex <= 0) return null;
-      newSeasonIndex = seasonIndex - 1;
+    if (newIndex < 0 || newIndex >= list.length) {
+      final step = await stepToAdjacentSeason(
+        repo,
+        pluginId: pluginId,
+        allSeasonIds: allSeasonIds,
+        seasonIndex: seasonIndex,
+        forward: newIndex >= 0,
+      );
+      if (step == null) return null;
+      final eps = step.episodes;
+      newSeasonIndex = step.seasonIndex;
       newParentId = allSeasonIds[newSeasonIndex];
-      final eps = await loadSeasonEpisodes(repo, pluginId, newParentId);
-      if (eps == null) return null;
       list = eps.ids;
       titles = eps.titles;
       thumbs = eps.thumbs;
       epNums = eps.episodeNumbers;
       seasonNums = eps.seasonNumbers;
-      newIndex = list.length - 1;
-    } else if (newIndex >= list.length) {
-      if (allSeasonIds.isEmpty || seasonIndex + 1 >= allSeasonIds.length) {
-        return null;
-      }
-      newSeasonIndex = seasonIndex + 1;
-      newParentId = allSeasonIds[newSeasonIndex];
-      final eps = await loadSeasonEpisodes(repo, pluginId, newParentId);
-      if (eps == null) return null;
-      list = eps.ids;
-      titles = eps.titles;
-      thumbs = eps.thumbs;
-      epNums = eps.episodeNumbers;
-      seasonNums = eps.seasonNumbers;
-      newIndex = 0;
+      newIndex = step.episodeIndex;
     }
     if (newIndex < 0 || newIndex >= list.length) return null;
 

@@ -85,4 +85,46 @@ void main() {
     expect((await nav.resolveNext(repo))!.mediaId, 'b');
     expect(nav.hasNext, isFalse);
   });
+
+  group('stepToAdjacentSeason', () {
+    Future<SeasonStep?> step(int seasonIndex, {required bool forward}) =>
+        stepToAdjacentSeason(repo,
+            pluginId: 'p',
+            allSeasonIds: const ['s1', 's2', 's3'],
+            seasonIndex: seasonIndex,
+            forward: forward);
+
+    setUp(() {
+      repo.seasons['s1'] = BrowseResponse(episodes: [_ep('a', 1), _ep('b', 2)]);
+      repo.seasons['s2'] =
+          BrowseResponse(episodes: [_ep('c', 1), _ep('d', 2), _ep('e', 3)]);
+    });
+
+    test('forward lands on the first episode of the next season', () async {
+      final s = await step(0, forward: true);
+      expect(s!.seasonIndex, 1);
+      expect(s.episodeIndex, 0);
+      expect(s.episodes.ids, ['c', 'd', 'e']);
+    });
+
+    test('back lands on the last episode of the previous season', () async {
+      final s = await step(1, forward: false);
+      expect(s!.seasonIndex, 0);
+      expect(s.episodeIndex, 1);
+      expect(s.episodes.ids[s.episodeIndex], 'b');
+    });
+
+    test('no season past either end, or an empty one', () async {
+      expect(await step(0, forward: false), isNull);
+      expect(await step(2, forward: true), isNull);
+      expect(await step(1, forward: true), isNull); // s3 has no episodes
+      expect(
+          await stepToAdjacentSeason(repo,
+              pluginId: 'p',
+              allSeasonIds: const [],
+              seasonIndex: 0,
+              forward: true),
+          isNull);
+    });
+  });
 }

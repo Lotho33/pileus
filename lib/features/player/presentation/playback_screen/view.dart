@@ -1374,23 +1374,20 @@ class _PlaybackViewState extends State<_PlaybackView> {
     final repo = getIt<MediaRepository>();
 
     if (newIndex < 0 || newIndex >= episodeList.length) {
-      final allSeasonIds = widget.args.allSeasonIds;
-      if (allSeasonIds.isEmpty) {
+      final step = await stepToAdjacentSeason(
+        repo,
+        pluginId: widget.args.epPluginId,
+        allSeasonIds: widget.args.allSeasonIds,
+        seasonIndex: seasonIndex,
+        forward: newIndex >= 0,
+      );
+      if (step == null) {
         if (mounted) setState(() => _resolvingEpisode = false);
         return;
       }
-      final newSeasonIndex = newIndex < 0 ? seasonIndex - 1 : seasonIndex + 1;
-      if (newSeasonIndex < 0 || newSeasonIndex >= allSeasonIds.length) {
-        if (mounted) setState(() => _resolvingEpisode = false);
-        return;
-      }
-      final season = await loadSeasonEpisodes(
-          repo, widget.args.epPluginId, allSeasonIds[newSeasonIndex]);
-      if (season == null) {
-        if (mounted) setState(() => _resolvingEpisode = false);
-        return;
-      }
-      final targetIndex = newIndex < 0 ? season.ids.length - 1 : 0;
+      final season = step.episodes;
+      final newSeasonIndex = step.seasonIndex;
+      final targetIndex = step.episodeIndex;
       final newIds = season.ids;
       final newTitles = season.titles;
       final newThumbs = season.thumbs;

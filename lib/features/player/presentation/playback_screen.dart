@@ -35,7 +35,7 @@ import '../content_view_mode.dart';
 import '../cw_progress.dart';
 import '../engine/player_engine.dart';
 import '../episode_poster.dart';
-import '../episode_nav.dart' show loadSeasonEpisodes;
+import '../episode_nav.dart' show stepToAdjacentSeason;
 import '../player_languages.dart';
 import '../episode_prefetch.dart';
 import '../models/playback_args.dart';
