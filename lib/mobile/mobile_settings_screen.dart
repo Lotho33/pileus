@@ -6,6 +6,7 @@ import '../core/di/injection.dart';
 import '../core/theme/app_theme.dart';
 import '../features/auth/bloc/auth_bloc.dart';
 import '../features/auth/bloc/auth_event.dart';
+import '../features/settings/presentation/server_info_dialog.dart';
 import '../shared/utils/tap_guard.dart';
 
 /// Mobile settings landing — a plain touch list. The leaf screens
@@ -39,6 +40,8 @@ class MobileSettingsScreen extends StatelessWidget {
           const Divider(color: AppTheme.border),
           // "Cambia profilo" and "Esci" live on the home profile button
           // (top-right avatar) — not duplicated here.
+          _row(context, Icons.info_outline, 'Server',
+              () => showServerInfoDialog(context)),
           _row(context, Icons.dns_outlined, 'Cambia server', () {
             _confirm(context, 'Cambiare server?',
                 'Dovrai rifare discovery e abbinamento.', () {
@@ -107,8 +110,7 @@ class MobileSettingsScreen extends StatelessWidget {
         content: Text(body),
         actions: [
           TextButton(
-              onPressed: () => popIfCurrent(ctx),
-              child: const Text('Annulla')),
+              onPressed: () => popIfCurrent(ctx), child: const Text('Annulla')),
           FilledButton(
             onPressed: () {
               if (!popIfCurrent(ctx)) return;

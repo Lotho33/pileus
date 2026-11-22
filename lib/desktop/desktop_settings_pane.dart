@@ -20,6 +20,7 @@ import '../features/settings/bloc/profile_management_cubit.dart';
 import '../features/settings/bloc/profile_management_state.dart';
 import '../features/player/source_preference.dart' show PreferredLanguage;
 import '../features/settings/data/settings_repository.dart';
+import '../features/settings/presentation/server_info_dialog.dart';
 import '../core/grpc/clients/media_client.dart' show PluginInfo;
 import '../shared/widgets/avatar_picker_dialog.dart';
 import '../shared/widgets/default_avatars.dart';
@@ -817,6 +818,18 @@ class _AdvancedSectionState extends State<_AdvancedSection> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         _sectionTitle('Avanzate'),
+        Card(
+          color: AppTheme.surface,
+          child: ListTile(
+            leading: const Icon(Icons.info_outline, color: AppTheme.textMid),
+            title: const Text('Server',
+                style: TextStyle(color: AppTheme.textHigh)),
+            subtitle: const Text('Indirizzo, porte, versione e stato',
+                style: TextStyle(color: AppTheme.textLow, fontSize: 12)),
+            onTap: () => showServerInfoDialog(context),
+          ),
+        ),
+        const SizedBox(height: 8),
         Card(
           color: AppTheme.surface,
           child: ListTile(

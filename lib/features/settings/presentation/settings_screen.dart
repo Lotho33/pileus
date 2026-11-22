@@ -15,6 +15,7 @@ import '../../../shared/widgets/settings/settings_header.dart';
 import '../../../shared/widgets/settings/settings_nav_row.dart';
 import '../../../shared/widgets/settings/settings_section_header.dart';
 import '../../../shared/widgets/tv_focusable.dart';
+import 'server_info_dialog.dart';
 
 /// Impostazioni hub — the single home for app-wide actions. "Cambia server"
 /// and "Esci dall'app" live here now (the side nav no longer carries an
@@ -29,6 +30,7 @@ class SettingsScreen extends StatefulWidget {
 class _SettingsScreenState extends State<SettingsScreen> {
   final _backFn = FocusNode();
   final _profileFn = FocusNode();
+  final _serverInfoFn = FocusNode();
   final _serverFn = FocusNode();
   final _prefsFn = FocusNode();
   final _pluginsFn = FocusNode();
@@ -39,6 +41,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   void dispose() {
     _backFn.dispose();
     _profileFn.dispose();
+    _serverInfoFn.dispose();
     _serverFn.dispose();
     _prefsFn.dispose();
     _pluginsFn.dispose();
@@ -77,17 +80,26 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     focusNode: _profileFn,
                     autofocus: true,
                     onFocusUp: () => _backFn.requestFocus(),
-                    onFocusDown: () => _serverFn.requestFocus(),
+                    onFocusDown: () => _serverInfoFn.requestFocus(),
                     onTap: () => context.push('/settings/profile'),
                   ),
                   const SettingsSectionHeader('Connessione'),
+                  SettingsNavRow(
+                    icon: Icons.info_outline_rounded,
+                    label: 'Server',
+                    subtitle: 'Indirizzo, porte, versione e stato del server',
+                    focusNode: _serverInfoFn,
+                    onFocusUp: () => _profileFn.requestFocus(),
+                    onFocusDown: () => _serverFn.requestFocus(),
+                    onTap: () => showServerInfoDialog(context, tv: true),
+                  ),
                   SettingsNavRow(
                     icon: Icons.dns_rounded,
                     label: 'Cambia server',
                     subtitle:
                         'Torna alla ricerca del server — richiede un nuovo abbinamento',
                     focusNode: _serverFn,
-                    onFocusUp: () => _profileFn.requestFocus(),
+                    onFocusUp: () => _serverInfoFn.requestFocus(),
                     onFocusDown: () => _prefsFn.requestFocus(),
                     onTap: () => _showChangeServerDialog(context),
                   ),
