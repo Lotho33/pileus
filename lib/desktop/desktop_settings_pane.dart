@@ -1,4 +1,6 @@
 import 'package:cached_network_image/cached_network_image.dart';
+import 'dart:io' show Platform;
+
 import 'package:flutter/foundation.dart' show kIsWeb;
 // ignore: deprecated_member_use, material_ui migration pending (docs/FLUTTER_UPGRADE.md)
 import 'package:flutter/material.dart';
@@ -19,6 +21,7 @@ import '../features/media/presentation/widgets/plugin_nav.dart'
 import '../features/settings/bloc/profile_management_cubit.dart';
 import '../features/settings/bloc/profile_management_state.dart';
 import '../features/player/source_preference.dart' show PreferredLanguage;
+import '../features/player/android_video_settings.dart';
 import '../features/settings/data/settings_repository.dart';
 import '../features/settings/presentation/server_info_dialog.dart';
 import '../core/grpc/clients/media_client.dart' show PluginInfo;
@@ -225,6 +228,7 @@ class _PlaybackSectionState extends State<_PlaybackSection> {
   late int _live = _s.getLiveBufferSec();
   late bool _original =
       _s.getPreferredLanguage() == PreferredLanguage.original.id;
+  late bool _hwVideo = _s.getLinuxHardwareVideo();
 
   @override
   Widget build(BuildContext context) {
@@ -247,6 +251,24 @@ class _PlaybackSectionState extends State<_PlaybackSection> {
               'Spenta: italiano. Al Play parte questa versione quando c\'è; si può sempre scegliere l\'altra dalla scheda del titolo.',
               style: TextStyle(color: AppTheme.textLow, fontSize: 12)),
         ),
+        // Linux renders video in software by default (PlayerEngine.
+        // configureDesktopVideo): this tries the GPU instead.
+        if (!kIsWeb && Platform.isLinux)
+          SwitchListTile(
+            contentPadding: EdgeInsets.zero,
+            value: _hwVideo,
+            onChanged: (v) => setState(() {
+              _hwVideo = v;
+              _s
+                  .setLinuxHardwareVideo(v)
+                  .then((_) => applyDesktopVideoSettings(_s));
+            }),
+            title: const Text('Accelerazione hardware del video',
+                style: TextStyle(color: AppTheme.textHigh)),
+            subtitle: const Text(
+                'Decodifica e disegna il video con la scheda grafica invece che con il processore. Più fluido; disattivala se il video resta nero o il PC si blocca. Vale dal prossimo video.',
+                style: TextStyle(color: AppTheme.textLow, fontSize: 12)),
+          ),
         _SliderRow(
           label: 'Riserva di riproduzione',
           value: '$_vod s',

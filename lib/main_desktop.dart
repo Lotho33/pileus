@@ -10,6 +10,7 @@ import 'core/utils/error_hooks.dart';
 import 'core/utils/metrics.dart';
 import 'core/utils/perf_log.dart';
 import 'desktop/desktop_app.dart';
+import 'features/player/android_video_settings.dart';
 import 'features/settings/data/settings_repository.dart';
 
 /// Entry point for the **desktop / large-screen** build (Linux, Windows,
@@ -59,6 +60,7 @@ Future<void> runDesktopApp() async {
 
   final settings = getIt<SettingsRepository>();
   kPerfDiagnostics = kDebugMode || kProfileMode || settings.getDiagnostics();
+  applyDesktopVideoSettings(settings);
   installJankLogger();
 
   isAndroidTv = false;

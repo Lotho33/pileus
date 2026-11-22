@@ -74,6 +74,22 @@ abstract class PlayerEngine extends ChangeNotifier {
     BetterPlayerAndroidOptions.statsIntervalMs = stats ? 10000 : 0;
   }
 
+  /// Desktop (mpv) options, read when the next player is created.
+  /// [linuxHardware]: GPU rendering and hardware decoding on Linux, which
+  /// otherwise renders in software (a past amdgpu/Mesa lockup made that the
+  /// safe default) — every frame through the CPU, which can drop frames on
+  /// 1080p. [stats]: frames shown/dropped every 10 s in `pileus/perf`.
+  static void configureDesktopVideo({
+    required bool linuxHardware,
+    required bool stats,
+  }) {
+    _linuxHardwareVideo = linuxHardware;
+    _mpvStats = stats;
+  }
+
+  static bool _linuxHardwareVideo = false;
+  static bool _mpvStats = false;
+
   bool _disposed = false;
 
   final _positionCtrl = StreamController<Duration>.broadcast();
@@ -614,7 +630,9 @@ class _ExoPlayerEngine extends PlayerEngine {
           local
               ? BetterPlayerDataSourceType.file
               : BetterPlayerDataSourceType.network,
-          local && url.startsWith('file://') ? Uri.parse(url).toFilePath() : url,
+          local && url.startsWith('file://')
+              ? Uri.parse(url).toFilePath()
+              : url,
           headers: local ? null : headers,
           liveStream: _isLive,
           videoFormat: videoFormat,
@@ -962,7 +980,8 @@ class _MpvPlayerEngine extends PlayerEngine {
     bottomPadding: 80,
   );
 
-  bool get _swRender => !kIsWeb && Platform.isLinux;
+  bool get _swRender =>
+      !kIsWeb && Platform.isLinux && !PlayerEngine._linuxHardwareVideo;
 
   // libmpv digitally amplifies past unity gain (softvol) instead of just
   // hard-capping like ExoPlayer; a browser <video> element's `.volume`
@@ -1032,6 +1051,7 @@ class _MpvPlayerEngine extends PlayerEngine {
             waitForInitialization: false);
         native.setProperty('cache-secs', '$bufferSeconds',
             waitForInitialization: false);
+        if (PlayerEngine._mpvStats && !_disposedMpv) _startStats(native);
       }));
     }
     _videoController = mkv.VideoController(
@@ -1159,8 +1179,58 @@ class _MpvPlayerEngine extends PlayerEngine {
     return _playerCreated ? _player.stop() : Future.value();
   }
 
+  // ── frame statistics (field diagnostics) ───────────────────────────────
+  // One `pileus/perf` line every 10 s while playing: frames dropped by the
+  // video output and by the decoder in that interval, frames shown late,
+  // the decoder in use (hwdec "no" = software), fps and buffer — to tell
+  // "the video stutters" apart from "the UI stutters" (pileus/jank).
+  Timer? _statsTimer;
+  bool _disposedMpv = false;
+  int _lastVoDrop = 0;
+  int _lastDecDrop = 0;
+  int _lastDelayed = 0;
+
+  void _startStats(dynamic native) {
+    perf('mpv: render ${_swRender ? 'software' : 'hardware'}');
+    _statsTimer?.cancel();
+    _statsTimer = Timer.periodic(const Duration(seconds: 10), (_) async {
+      if (_disposedMpv || !_player.state.playing) return;
+      Future<String> get(String name) async {
+        try {
+          return await (native.getProperty(name, waitForInitialization: false)
+              as Future<String>);
+        } catch (_) {
+          return '';
+        }
+      }
+
+      final vo = int.tryParse(await get('frame-drop-count')) ?? 0;
+      final dec = int.tryParse(await get('decoder-frame-drop-count')) ?? 0;
+      final delayed = int.tryParse(await get('vo-delayed-frame-count')) ?? 0;
+      final hwdec = await get('hwdec-current');
+      final codec = await get('video-format');
+      final h = await get('video-params/h');
+      final fps = double.tryParse(await get('estimated-vf-fps'));
+      final cache = double.tryParse(await get('demuxer-cache-duration'));
+      if (_disposedMpv) return;
+      perf('mpv: stats pos=${_player.state.position.inSeconds}s '
+          'dropped=+${vo - _lastVoDrop} (tot $vo) '
+          'decoder-dropped=+${dec - _lastDecDrop} (tot $dec) '
+          'late=+${delayed - _lastDelayed} '
+          'fps=${fps?.toStringAsFixed(1) ?? '?'} $codec ${h}p '
+          'hwdec=${hwdec.isEmpty ? 'no' : hwdec} '
+          'render=${_swRender ? 'sw' : 'hw'} '
+          'buffer=${cache?.toStringAsFixed(0) ?? '?'}s');
+      _lastVoDrop = vo;
+      _lastDecDrop = dec;
+      _lastDelayed = delayed;
+    });
+  }
+
   @override
   void dispose() {
+    _disposedMpv = true;
+    _statsTimer?.cancel();
     _liveTimer?.cancel();
     for (final s in _subs) {
       s.cancel();

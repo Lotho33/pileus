@@ -47,6 +47,7 @@ class SettingsRepository {
   static const _kLowPowerMode = 'settings.lowPowerMode';
   static const _kDiagnostics = 'settings.diagnostics';
   static const _kSoftwareVideoDecoder = 'settings.softwareVideoDecoder';
+  static const _kLinuxHardwareVideo = 'settings.linuxHardwareVideo';
   // v2: the default flipped to on (see getCompatVideoSurface); a renamed key
   // so an "off" saved under the old default doesn't keep the box on the
   // software decoder.
@@ -140,6 +141,13 @@ class SettingsRepository {
   //    the box's own (which stays as fallback). CPU-heavy above 720p.
   //  - compat surface: video drawn into a GL SurfaceTexture (the pre-fork
   //    path) instead of Flutter's SurfaceProducer.
+  // Linux desktop only: GPU rendering + hardware decoding in mpv. Off by
+  // default (software rendering, the known-safe path — see
+  // PlayerEngine.configureDesktopVideo).
+  bool getLinuxHardwareVideo() => _prefs.getBool(_kLinuxHardwareVideo) ?? false;
+  Future<void> setLinuxHardwareVideo(bool v) =>
+      _prefs.setBool(_kLinuxHardwareVideo, v);
+
   bool getSoftwareVideoDecoder() =>
       _prefs.getBool(_kSoftwareVideoDecoder) ?? false;
   Future<void> setSoftwareVideoDecoder(bool v) =>
@@ -150,8 +158,7 @@ class SettingsRepository {
   // allow ("newBufferCount 21 > 14" on the Tanix W2): their start failed
   // and ExoPlayer fell back to Google's software decoder, which drops most
   // frames at 1080p. Only read by the TV UI (tvSwitches).
-  bool getCompatVideoSurface() =>
-      _prefs.getBool(_kCompatVideoSurface) ?? true;
+  bool getCompatVideoSurface() => _prefs.getBool(_kCompatVideoSurface) ?? true;
   Future<void> setCompatVideoSurface(bool v) =>
       _prefs.setBool(_kCompatVideoSurface, v);
 

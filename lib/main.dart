@@ -4,7 +4,8 @@ import 'dart:io';
 import 'package:flutter/foundation.dart';
 // ignore: deprecated_member_use, material_ui migration pending (docs/FLUTTER_UPGRADE.md)
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart' show KeyDownEvent, KeyEvent, LogicalKeyboardKey, appFlavor;
+import 'package:flutter/services.dart'
+    show KeyDownEvent, KeyEvent, LogicalKeyboardKey, appFlavor;
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:window_manager/window_manager.dart';
 
@@ -144,6 +145,8 @@ void main() async {
   lowPowerUi = settings.getLowPowerMode();
   tvUi = true;
   applyAndroidVideoSettings(settings, tvSwitches: true);
+  // The TV UI also runs on a desktop (Linux/Windows) through mpv.
+  applyDesktopVideoSettings(settings);
   if (lowPowerUi) {
     PaintingBinding.instance.imageCache.maximumSizeBytes = 40 << 20;
     PaintingBinding.instance.imageCache.maximumSize = 140;

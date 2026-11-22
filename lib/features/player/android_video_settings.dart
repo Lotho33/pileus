@@ -15,3 +15,11 @@ void applyAndroidVideoSettings(SettingsRepository s,
     stats: kPerfDiagnostics,
   );
 }
+
+/// Same for the desktop (mpv) player — at startup and on toggle.
+void applyDesktopVideoSettings(SettingsRepository s) {
+  PlayerEngine.configureDesktopVideo(
+    linuxHardware: s.getLinuxHardwareVideo(),
+    stats: kPerfDiagnostics,
+  );
+}
