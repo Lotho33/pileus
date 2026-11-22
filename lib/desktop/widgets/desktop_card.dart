@@ -140,7 +140,8 @@ class _DesktopCardState extends State<DesktopCard> {
                               // CachedNetworkImage call site in the app sets this.
                               imageRenderMethodForWeb:
                                   ImageRenderMethodForWeb.HttpGet,
-                              imageUrl: posterSrc(widget.item.posterUrl, imgW),
+                              imageUrl: posterSrc(widget.item.posterUrl, imgW,
+                                  proxy: true),
                               memCacheWidth: imgW,
                               fit: BoxFit.cover,
                               fadeInDuration: const Duration(milliseconds: 160),

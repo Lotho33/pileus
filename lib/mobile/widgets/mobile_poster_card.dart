@@ -64,7 +64,8 @@ class MobilePosterCard extends StatelessWidget {
                             // CachedNetworkImage call site in the app sets this.
                             imageRenderMethodForWeb:
                                 ImageRenderMethodForWeb.HttpGet,
-                            imageUrl: posterSrc(item.posterUrl, imgW),
+                            imageUrl:
+                                posterSrc(item.posterUrl, imgW, proxy: true),
                             memCacheWidth: imgW,
                             fit: BoxFit.cover,
                             fadeInDuration: const Duration(milliseconds: 180),

@@ -77,8 +77,7 @@ class _DesktopHeroState extends State<DesktopHero>
     if (old.item.id != widget.item.id) {
       _reset();
       _enrich();
-    } else if (widget.item.hasLogoMeta() &&
-        widget.item.logoUrl == _logoUrl) {
+    } else if (widget.item.hasLogoMeta() && widget.item.logoUrl == _logoUrl) {
       // The row was re-read with the logo measured (same title, new data).
       _logoMeta = widget.item.logoMeta;
     }
@@ -213,7 +212,7 @@ class _DesktopHeroState extends State<DesktopHero>
                   // "ImageRenderMethodForWeb.HttpGet" section for why every
                   // CachedNetworkImage call site in the app sets this.
                   imageRenderMethodForWeb: ImageRenderMethodForWeb.HttpGet,
-                  imageUrl: backdropSrc(_backdrop, imgW),
+                  imageUrl: backdropSrc(_backdrop, imgW, proxy: true),
                   memCacheWidth: imgW,
                   fit: BoxFit.cover,
                   alignment: const Alignment(0.2, -0.2),
@@ -268,8 +267,8 @@ class _DesktopHeroState extends State<DesktopHero>
                         meta: _logoMeta,
                         maxWidth: logoW,
                         maxHeight: logoH,
-                        fallback: _TitleText(it.title,
-                            size: widget.bp.heroTitleSize),
+                        fallback:
+                            _TitleText(it.title, size: widget.bp.heroTitleSize),
                       )
                     else if (_enriched)
                       _TitleText(it.title, size: widget.bp.heroTitleSize),
