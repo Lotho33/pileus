@@ -28,6 +28,8 @@ class PlayerOverlay extends StatefulWidget {
   final int episodeCount;
   final VoidCallback onBack;
   final VoidCallback onOpenSettings;
+  // The (i) button: the info panel (player_info_panel.dart). Null hides it.
+  final VoidCallback? onOpenInfo;
   final VoidCallback? onPrevEpisode;
   final VoidCallback? onNextEpisode;
   // Forwarded to PlayerSeekBar — see its own onActivity doc.
@@ -73,6 +75,7 @@ class PlayerOverlay extends StatefulWidget {
     required this.engine,
     required this.onBack,
     required this.onOpenSettings,
+    this.onOpenInfo,
     this.title,
     this.episodeIndex = -1,
     this.episodeCount = 0,

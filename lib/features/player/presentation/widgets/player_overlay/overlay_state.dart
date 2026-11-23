@@ -7,6 +7,7 @@ class PlayerOverlayState extends State<PlayerOverlay> {
   // Top row (left → right): back … settings.
   final _backFn = FocusNode();
   final _settingsFn = FocusNode();
+  final _infoFn = FocusNode();
   // Center row (left → right): prevEp?, skipBack, playPause, skipFwd, nextEp?
   FocusNode? _prevEpFn;
   final _skipBackFn = FocusNode();
@@ -92,6 +93,7 @@ class PlayerOverlayState extends State<PlayerOverlay> {
     _optimisticClearTimer?.cancel();
     _backFn.dispose();
     _settingsFn.dispose();
+    _infoFn.dispose();
     _prevEpFn?.dispose();
     _skipBackFn.dispose();
     _playPauseFn.dispose();
@@ -165,6 +167,7 @@ class PlayerOverlayState extends State<PlayerOverlay> {
         _playPauseFn,
         _skipFwdFn,
         if (_nextEpFn != null) _nextEpFn!,
+        if (widget.onOpenInfo != null) _infoFn,
         _settingsFn,
       ];
 
@@ -382,6 +385,13 @@ class PlayerOverlayState extends State<PlayerOverlay> {
                               onPressed: widget.onNextEpisode),
                         ],
                         const Spacer(),
+                        if (widget.onOpenInfo != null) ...[
+                          rowButton(_infoFn,
+                              icon: Icons.info_outline_rounded,
+                              semantic: 'Informazioni sul titolo',
+                              onPressed: widget.onOpenInfo),
+                          gap,
+                        ],
                         rowButton(_settingsFn,
                             icon: Icons.settings_rounded,
                             semantic: 'Impostazioni di riproduzione',

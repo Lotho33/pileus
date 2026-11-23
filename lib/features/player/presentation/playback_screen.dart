@@ -33,6 +33,7 @@ import '../bloc/player_ui_state.dart';
 import '../audio_lang_pref.dart';
 import '../content_view_mode.dart';
 import '../cw_progress.dart';
+import '../player_info.dart';
 import '../engine/player_engine.dart';
 import '../episode_poster.dart';
 import '../episode_nav.dart' show stepToAdjacentSeason;
@@ -52,6 +53,7 @@ import '../source_continuity.dart';
 import '../live_failover.dart';
 import '../source_preference.dart';
 import 'widgets/player_audio_artwork.dart';
+import 'widgets/player_info_panel.dart';
 import 'widgets/player_overlay.dart';
 import 'widgets/player_settings_panel.dart';
 import 'widgets/skip_intro_button.dart';
@@ -86,7 +88,8 @@ class PlaybackScreen extends StatelessWidget {
             resolveStartPositionSec(isLive: args.isLive, seekTo: args.seekTo);
         if (args.directUrl != null && args.directUrl!.isNotEmpty) {
           bloc.add(UseDirectUrlEvent(
-              url: args.directUrl!, httpHeaders: args.directUrlHeaders,
+              url: args.directUrl!,
+              httpHeaders: args.directUrlHeaders,
               format: args.directUrlFormat));
         } else if (args.directStreamId != null &&
             args.directStreamId!.isNotEmpty) {

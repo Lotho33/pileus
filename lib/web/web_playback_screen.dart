@@ -16,6 +16,8 @@ import '../core/utils/perf_log.dart' show kPerfDiagnostics;
 import '../core/grpc/clients/media_client.dart' show StreamSource;
 import '../features/media/data/media_repository.dart';
 import '../features/settings/data/settings_repository.dart';
+import '../features/player/player_info.dart';
+import '../features/player/presentation/widgets/player_info_panel.dart';
 import '../features/player/bloc/playback_bloc.dart';
 import '../features/player/bloc/playback_event.dart';
 import '../features/player/bloc/playback_state.dart';
@@ -445,6 +447,7 @@ class _ViewState extends State<_View> {
     }
     _resolveEpisodeListIfMissing();
   }
+
   // A Continue Watching resume carries only this episode: rebuild the list
   // around it so prev/next and auto-advance work — same shared helper as
   // the other players (playback_episode_list.dart). Every save reads _nav
@@ -483,7 +486,6 @@ class _ViewState extends State<_View> {
       // best-effort — no prev/next this session
     }
   }
-
 
   /// `HtmlElementView.fromTagName`'s creation callback — fires once, with the
   /// freshly created `<video>`, before it's attached to the DOM. Replaces the
@@ -1354,6 +1356,43 @@ class _ViewState extends State<_View> {
       _cw.markStarted(position: Duration(seconds: _resumeSeek.targetSec));
 
   /// What Continue Watching stores for the item playing right now.
+  // ── Info panel ((i) button): what is playing, the video going on beside.
+  PlayerInfo? _info;
+  Future<PlayerInfo>? _infoDetails;
+
+  void _openInfo() {
+    final s = _cwSnapshot();
+    final a = widget.args;
+    final base = playerInfoBase(
+      title: _curTitle,
+      showTitle: a.showTitle,
+      seasonNumber: s.seasonNumber,
+      episodeNumber: s.episodeNumber,
+      year: s.year,
+      rating: s.rating,
+      durationSeconds: a.durationSeconds,
+      genres: a.genres,
+      plot: a.plot,
+      isLive: a.isLive,
+    );
+    final idx = _nav.episodeIndex;
+    final live = a.isLive && a.liveMediaId.isNotEmpty;
+    setState(() {
+      _info = base;
+      _infoDetails = loadPlayerInfo(getIt<MediaRepository>(), base,
+          pluginId:
+              live && a.livePluginId.isNotEmpty ? a.livePluginId : a.epPluginId,
+          itemId: live
+              ? a.liveMediaId
+              : (idx >= 0 && idx < _nav.episodeList.length)
+                  ? _nav.episodeList[idx]
+                  : _curMediaId,
+          seriesId: a.parentId);
+    });
+  }
+
+  void _closeInfo() => setState(() => _info = null);
+
   CwSnapshot _cwSnapshot() {
     final a = widget.args;
     return CwSnapshot(
@@ -1593,6 +1632,12 @@ class _ViewState extends State<_View> {
                                   ),
                               ],
                             ),
+                          IconButton(
+                            tooltip: 'Informazioni',
+                            icon: const Icon(Icons.info_outline_rounded,
+                                color: Colors.white70),
+                            onPressed: _openInfo,
+                          ),
                           if (_audioTracks.length >= 2 || _subTracks.isNotEmpty)
                             PopupMenuButton<(bool, int)>(
                               tooltip: 'Tracce',
@@ -1746,6 +1791,15 @@ class _ViewState extends State<_View> {
                     _nextEpisodeDismissed = true;
                     _skipDismissed = true;
                   }),
+                ),
+              ),
+            if (_info != null)
+              GestureDetector(
+                onTap: () {},
+                child: PlayerInfoPanel(
+                  base: _info!,
+                  details: _infoDetails,
+                  onClose: _closeInfo,
                 ),
               ),
           ],

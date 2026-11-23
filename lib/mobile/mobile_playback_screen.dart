@@ -15,6 +15,8 @@ import '../core/perf_profile.dart';
 import '../core/theme/app_theme.dart';
 import '../features/media/bloc/plugin_bloc.dart';
 import '../features/media/data/media_repository.dart';
+import '../features/player/player_info.dart';
+import '../features/player/presentation/widgets/player_info_panel.dart';
 import '../features/player/bloc/playback_bloc.dart';
 import '../features/player/bloc/playback_event.dart';
 import '../features/player/bloc/playback_state.dart';
@@ -707,6 +709,33 @@ class _MobilePlayerViewState extends State<_MobilePlayerView> {
     }
   }
 
+  // ── Info panel ((i) button): what is playing, the video going on beside.
+  PlayerInfo? _info;
+  Future<PlayerInfo>? _infoDetails;
+
+  void _openInfo() {
+    final args = _currentArgs();
+    final base = playerInfoFromArgs(args);
+    final idx = _curEpisodeIndex;
+    final live = widget.args.isLive && widget.args.liveMediaId.isNotEmpty;
+    setState(() {
+      _controlsVisible = false;
+      _info = base;
+      _infoDetails = loadPlayerInfo(getIt<MediaRepository>(), base,
+          pluginId: live && widget.args.livePluginId.isNotEmpty
+              ? widget.args.livePluginId
+              : widget.args.epPluginId,
+          itemId: live
+              ? widget.args.liveMediaId
+              : (idx >= 0 && idx < _curEpisodeList.length)
+                  ? _curEpisodeList[idx]
+                  : _curMediaId,
+          seriesId: widget.args.parentId);
+    });
+  }
+
+  void _closeInfo() => setState(() => _info = null);
+
   /// The PiP window's buttons (see Pip.onAction).
   void _onPipAction(String action) {
     if (!mounted) return;
@@ -1242,6 +1271,17 @@ class _MobilePlayerViewState extends State<_MobilePlayerView> {
 
   @override
   Widget build(BuildContext context) {
+    // System Back closes the info panel first.
+    return PopScope(
+      canPop: _info == null,
+      onPopInvokedWithResult: (didPop, _) {
+        if (!didPop) _closeInfo();
+      },
+      child: _scaffold(context),
+    );
+  }
+
+  Widget _scaffold(BuildContext context) {
     return Scaffold(
       backgroundColor: Colors.black,
       body: BlocListener<PlaybackBloc, PlaybackState>(
@@ -1277,7 +1317,7 @@ class _MobilePlayerViewState extends State<_MobilePlayerView> {
           }
         },
         child: GestureDetector(
-          onTap: _toggleControls,
+          onTap: () => _info != null ? _closeInfo() : _toggleControls(),
           behavior: HitTestBehavior.opaque,
           child: Stack(
             fit: StackFit.expand,
@@ -1466,6 +1506,17 @@ class _MobilePlayerViewState extends State<_MobilePlayerView> {
                           ),
                         ),
                       ),
+                    if (_info != null)
+                      // Taps inside the panel stay there (scroll, close),
+                      // not the screen's show/hide.
+                      GestureDetector(
+                        onTap: () {},
+                        child: PlayerInfoPanel(
+                          base: _info!,
+                          details: _infoDetails,
+                          onClose: _closeInfo,
+                        ),
+                      ),
                   ],
                 ),
               ),
@@ -1534,6 +1585,12 @@ class _MobilePlayerViewState extends State<_MobilePlayerView> {
                             _goToNextEpisode();
                           },
                   ),
+                IconButton(
+                  icon: const Icon(Icons.info_outline_rounded,
+                      color: Colors.white),
+                  tooltip: 'Informazioni sul titolo',
+                  onPressed: _openInfo,
+                ),
                 IconButton(
                   icon: const Icon(Icons.tune_rounded, color: Colors.white),
                   tooltip: 'Video, audio e sottotitoli',

@@ -18,6 +18,8 @@ class PlayerLiveOverlay extends StatefulWidget {
   final String liveMediaId;
   final VoidCallback onBack;
   final VoidCallback onOpenSettings;
+  // The (i) button: the info panel. Null hides it.
+  final VoidCallback? onOpenInfo;
   final void Function(String srcId, String srcLabel) onSwitchSource;
   // Tears the whole player engine down and rebuilds it in place, reopening
   // the same source (see _PlaybackViewState._restartPlayerInPlace) — the
@@ -36,6 +38,7 @@ class PlayerLiveOverlay extends StatefulWidget {
     super.key,
     required this.onBack,
     required this.onOpenSettings,
+    this.onOpenInfo,
     required this.onSwitchSource,
     required this.onRestart,
     this.title,
@@ -62,6 +65,7 @@ class PlayerLiveOverlayState extends State<PlayerLiveOverlay> {
   FocusNode? _swapFn;
   final _restartFn = FocusNode();
   final _settingsFn = FocusNode();
+  final _infoFn = FocusNode();
 
   @override
   void initState() {
@@ -95,6 +99,7 @@ class PlayerLiveOverlayState extends State<PlayerLiveOverlay> {
     _swapFn?.dispose();
     _restartFn.dispose();
     _settingsFn.dispose();
+    _infoFn.dispose();
     super.dispose();
   }
 
@@ -105,8 +110,12 @@ class PlayerLiveOverlayState extends State<PlayerLiveOverlay> {
 
   // The bottom row, left to right: source switch (more than one source),
   // then "Riavvia" and settings at the far right.
-  List<FocusNode> get _chain =>
-      [if (_swapFn != null) _swapFn!, _restartFn, _settingsFn];
+  List<FocusNode> get _chain => [
+        if (_swapFn != null) _swapFn!,
+        _restartFn,
+        if (widget.onOpenInfo != null) _infoFn,
+        _settingsFn,
+      ];
 
   void _moveIn(FocusNode self, int dir) {
     final chain = _chain;
@@ -249,6 +258,13 @@ class PlayerLiveOverlayState extends State<PlayerLiveOverlay> {
                       semantic: 'Riavvia la diretta',
                       onPressed: widget.onRestart),
                   SizedBox(width: 16 * u),
+                  if (widget.onOpenInfo != null) ...[
+                    rowButton(_infoFn,
+                        icon: Icons.info_outline_rounded,
+                        semantic: 'Informazioni sulla diretta',
+                        onPressed: widget.onOpenInfo),
+                    SizedBox(width: 16 * u),
+                  ],
                   rowButton(_settingsFn,
                       icon: Icons.settings_rounded,
                       semantic: 'Impostazioni di riproduzione',

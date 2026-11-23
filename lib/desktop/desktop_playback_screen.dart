@@ -16,6 +16,8 @@ import '../core/perf_profile.dart';
 import '../core/theme/app_theme.dart';
 import '../core/utils/metrics.dart';
 import '../features/media/data/media_repository.dart';
+import '../features/player/player_info.dart';
+import '../features/player/presentation/widgets/player_info_panel.dart';
 import '../features/player/bloc/playback_bloc.dart';
 import '../features/player/bloc/playback_event.dart';
 import '../features/player/bloc/playback_state.dart';
@@ -342,7 +344,9 @@ class _ViewState extends State<_View> with WindowListener {
           pluginId: _nav.pluginId,
           episodeId: _nav.episodeList[_nav.episodeIndex],
           streamId: stream);
-      if (mounted && label != null && _curSourceLabel.isEmpty &&
+      if (mounted &&
+          label != null &&
+          _curSourceLabel.isEmpty &&
           _curStreamId == stream) {
         _curSourceLabel = label;
       }
@@ -1025,6 +1029,36 @@ class _ViewState extends State<_View> with WindowListener {
     }
   }
 
+  // ── Info panel ((i) button / I key): what is playing, video going on.
+  PlayerInfo? _info;
+  Future<PlayerInfo>? _infoDetails;
+
+  void _openInfo() {
+    final base = playerInfoFromArgs(_currentArgs());
+    final idx = _nav.episodeIndex;
+    final live = widget.args.isLive && widget.args.liveMediaId.isNotEmpty;
+    setState(() {
+      _tracksPanel = false;
+      _info = base;
+      _infoDetails = loadPlayerInfo(getIt<MediaRepository>(), base,
+          pluginId: live && widget.args.livePluginId.isNotEmpty
+              ? widget.args.livePluginId
+              : widget.args.epPluginId,
+          itemId: live
+              ? widget.args.liveMediaId
+              : (idx >= 0 && idx < _nav.episodeList.length)
+                  ? _nav.episodeList[idx]
+                  : _curMediaId,
+          seriesId: _nav.parentId);
+    });
+  }
+
+  void _closeInfo() {
+    if (_info == null) return;
+    setState(() => _info = null);
+    _focus.requestFocus();
+  }
+
   KeyEventResult _onKey(FocusNode _, KeyEvent e) {
     if (e is! KeyDownEvent && e is! KeyRepeatEvent) {
       return KeyEventResult.ignored;
@@ -1046,8 +1080,12 @@ class _ViewState extends State<_View> with WindowListener {
       _toggleMute();
     } else if (k == LogicalKeyboardKey.keyF) {
       _toggleFullscreen();
+    } else if (k == LogicalKeyboardKey.keyI || k == LogicalKeyboardKey.info) {
+      if (e is KeyDownEvent) _info == null ? _openInfo() : _closeInfo();
     } else if (k == LogicalKeyboardKey.escape) {
-      if (_tracksPanel) {
+      if (_info != null) {
+        _closeInfo();
+      } else if (_tracksPanel) {
         setState(() => _tracksPanel = false);
       } else if (_fullscreen) {
         _toggleFullscreen();
@@ -1221,6 +1259,7 @@ class _ViewState extends State<_View> with WindowListener {
                                   });
                                   _hideTimer?.cancel();
                                 },
+                                onInfo: _openInfo,
                                 hasPrevEpisode: _nav.hasPrevious,
                                 hasNextEpisode: _nav.hasNext,
                                 resolvingEpisode: _resolvingEpisode,
@@ -1316,6 +1355,17 @@ class _ViewState extends State<_View> with WindowListener {
                       _switchLanguage(src);
                     },
                   ),
+                if (_info != null)
+                  // Clicks inside stay in the panel (no play/pause under it).
+                  GestureDetector(
+                    onTap: () {},
+                    onDoubleTap: () {},
+                    child: PlayerInfoPanel(
+                      base: _info!,
+                      details: _infoDetails,
+                      onClose: _closeInfo,
+                    ),
+                  ),
               ],
             ),
           ),
@@ -1345,6 +1395,7 @@ class _ControlsLayer extends StatelessWidget {
   final VoidCallback onToggleMute;
   final VoidCallback onFullscreen;
   final VoidCallback onTracks;
+  final VoidCallback onInfo;
   final bool hasPrevEpisode;
   final bool hasNextEpisode;
   final bool resolvingEpisode;
@@ -1366,6 +1417,7 @@ class _ControlsLayer extends StatelessWidget {
     required this.onToggleMute,
     required this.onFullscreen,
     required this.onTracks,
+    required this.onInfo,
     required this.hasPrevEpisode,
     required this.hasNextEpisode,
     required this.resolvingEpisode,
@@ -1494,6 +1546,11 @@ class _ControlsLayer extends StatelessWidget {
                       onToggleMute: onToggleMute,
                     ),
                     const Spacer(),
+                    _CtlBtn(
+                      icon: Icons.info_outline_rounded,
+                      tooltip: 'Informazioni (I)',
+                      onTap: onInfo,
+                    ),
                     _CtlBtn(
                       icon: Icons.tune_rounded,
                       tooltip: 'Tracce',
@@ -1703,8 +1760,8 @@ class _TracksPanelState extends State<_TracksPanel> {
                     if (widget.showSpeed) ...[
                       const _PanelHeader('Velocità'),
                       for (final v in kPlaybackSpeeds)
-                        tile(playbackSpeedLabel(v),
-                            (e.speed - v).abs() < 0.001, () => e.setSpeed(v)),
+                        tile(playbackSpeedLabel(v), (e.speed - v).abs() < 0.001,
+                            () => e.setSpeed(v)),
                     ],
                   ],
                 ),

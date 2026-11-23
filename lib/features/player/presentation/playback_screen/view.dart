@@ -46,6 +46,10 @@ class _PlaybackViewState extends State<_PlaybackView> {
   final _overlayKey = GlobalKey<PlayerOverlayState>();
   final _liveOverlayKey = GlobalKey<PlayerLiveOverlayState>();
   final _settingsPanelKey = GlobalKey<PlayerSettingsPanelState>();
+  // The info panel ((i) button / remote Info key): what is playing, with the
+  // video going on beside it. [_infoDetails] completes it from the plugin.
+  PlayerInfo? _info;
+  Future<PlayerInfo>? _infoDetails;
   final _skipIntroKey = GlobalKey<SkipIntroButtonState>();
   final _nextEpisodeKey = GlobalKey<_NextEpisodeBannerState>();
   final _errorOverlayKey = GlobalKey<_InPlayerErrorOverlayState>();
@@ -1617,6 +1621,55 @@ class _PlaybackViewState extends State<_PlaybackView> {
     _reresolveCurrent(startSec: at);
   }
 
+  void _openInfo() {
+    final s = _cwSnapshot();
+    final base = playerInfoBase(
+      title: _currentTitle ?? '',
+      showTitle: _showTitle,
+      seasonNumber: s.seasonNumber,
+      episodeNumber: s.episodeNumber,
+      year: _year,
+      rating: _rating,
+      durationSeconds: widget.args.durationSeconds > 0
+          ? widget.args.durationSeconds
+          : _engine.duration.inSeconds,
+      genres: _genres,
+      plot: _plot,
+      isLive: widget.args.isLive,
+    );
+    final idx = _currentEpisodeIndex;
+    final itemId = widget.args.isLive && widget.args.liveMediaId.isNotEmpty
+        ? widget.args.liveMediaId
+        : (idx >= 0 && idx < _currentEpisodeList.length)
+            ? _currentEpisodeList[idx]
+            : _currentMediaId;
+    _uiCubit.hideOverlay();
+    setState(() {
+      _info = base;
+      _infoDetails = loadPlayerInfo(getIt<MediaRepository>(), base,
+          pluginId: widget.args.isLive && widget.args.livePluginId.isNotEmpty
+              ? widget.args.livePluginId
+              : widget.args.epPluginId,
+          itemId: itemId,
+          seriesId: _parentId);
+    });
+  }
+
+  // Back to the controls, focus on them (the panel took it with it).
+  void _closeInfo() {
+    if (_info == null) return;
+    setState(() => _info = null);
+    _uiCubit.showOverlay();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      if (widget.args.isLive) {
+        _liveOverlayKey.currentState?.requestInitialFocus();
+      } else {
+        _overlayKey.currentState?.requestInitialFocus();
+      }
+    });
+  }
+
   void _openSettings() {
     unawaited(_loadLanguages());
     _uiCubit.openSettings();
@@ -1772,6 +1825,10 @@ class _PlaybackViewState extends State<_PlaybackView> {
 
     if (key == LogicalKeyboardKey.escape || key == LogicalKeyboardKey.goBack) {
       if (!consumeBackEvent()) return KeyEventResult.handled;
+      if (_info != null) {
+        _closeInfo();
+        return KeyEventResult.handled;
+      }
       if (_uiCubit.state.settingsOpen) {
         _closeSettings();
         return KeyEventResult.handled;
@@ -1785,6 +1842,14 @@ class _PlaybackViewState extends State<_PlaybackView> {
       return KeyEventResult.handled;
     }
 
+    // The remote's Info key: the info panel, from anywhere in the player.
+    if (key == LogicalKeyboardKey.info && !blocked) {
+      _info == null ? _openInfo() : _closeInfo();
+      return KeyEventResult.handled;
+    }
+    // The panel keeps its own keys (↑/↓ scroll); nothing else reaches the
+    // player while it's open.
+    if (_info != null) return KeyEventResult.handled;
     if (_uiCubit.state.settingsOpen) return KeyEventResult.ignored;
 
     // Belt-and-suspenders alongside _ErrorButton's own onLeft/onRight
@@ -1940,7 +2005,9 @@ class _PlaybackViewState extends State<_PlaybackView> {
             onKeyEvent: _onKey,
             child: GestureDetector(
               onTap: () {
-                if (_uiCubit.state.settingsOpen) {
+                if (_info != null) {
+                  _closeInfo();
+                } else if (_uiCubit.state.settingsOpen) {
                   _closeSettings();
                 } else {
                   _uiCubit.showOverlay();
@@ -2019,10 +2086,11 @@ class _PlaybackViewState extends State<_PlaybackView> {
                             // during resolve/buffering hid the spinner too.
                             // Once the video actually starts, normal
                             // show/hide-on-activity behavior takes back over.
-                            final visible = loading ||
-                                (ready &&
-                                    uiState.overlayVisible &&
-                                    !uiState.settingsOpen);
+                            final visible = _info == null &&
+                                (loading ||
+                                    (ready &&
+                                        uiState.overlayVisible &&
+                                        !uiState.settingsOpen));
 
                             final overlay = widget.args.isLive
                                 ? PlayerLiveOverlay(
@@ -2038,6 +2106,7 @@ class _PlaybackViewState extends State<_PlaybackView> {
                                     onSwitchSource: (srcId, srcLabel) =>
                                         _switchLiveSourceTo(srcId),
                                     onOpenSettings: _openSettings,
+                                    onOpenInfo: _openInfo,
                                     onRestart: _restartPlayerInPlace,
                                     // Initial load AND any mid-stream
                                     // rebuffer — the live overlay has no
@@ -2062,6 +2131,7 @@ class _PlaybackViewState extends State<_PlaybackView> {
                                     episodeCount: _currentEpisodeList.length,
                                     onBack: _exitPlayer,
                                     onOpenSettings: _openSettings,
+                                    onOpenInfo: _openInfo,
                                     onActivity: () => _uiCubit.showOverlay(),
                                     onNavigateToSkip: (_activeSkip != null &&
                                             !_skipDismissed &&
@@ -2268,6 +2338,15 @@ class _PlaybackViewState extends State<_PlaybackView> {
                       );
                     },
                   ),
+
+                  // ── Info panel ────────────────────────────────────────
+                  if (_info != null)
+                    PlayerInfoPanel(
+                      base: _info!,
+                      details: _infoDetails,
+                      tv: true,
+                      onClose: _closeInfo,
+                    ),
 
                   // ── In-player error overlay ───────────────────────────
                   if (_playbackError != null)
