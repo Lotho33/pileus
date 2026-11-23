@@ -97,8 +97,14 @@ jobs:
 
       - name: Build and sign
         run: |
-          flatpak remote-add --if-not-exists flathub https://dl.flathub.org/repo/flathub.flatpakrepo
-          flatpak-builder --disable-rofiles-fuse --force-clean \
+          # Runtimes go into a user installation inside the workspace, not
+          # the image's system one: when flathub has a newer SDK than the one
+          # baked into the image, updating it in place fails ("Invalid
+          # cross-device link", the staging dir and the install sit on
+          # different overlay layers) and flatpak-builder then segfaults.
+          export FLATPAK_USER_DIR="$GITHUB_WORKSPACE/.flatpak-user"
+          flatpak remote-add --user --if-not-exists flathub https://dl.flathub.org/repo/flathub.flatpakrepo
+          flatpak-builder --user --disable-rofiles-fuse --force-clean \
             --install-deps-from=flathub --default-branch=stable \
             --repo=repo --gpg-sign="$GPG_FPR" \
             build-dir "$MANIFEST"
