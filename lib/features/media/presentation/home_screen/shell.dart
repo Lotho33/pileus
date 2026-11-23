@@ -56,7 +56,27 @@ class _StandardHomeShellState extends State<_StandardHomeShell> {
   // resolution instead of starting on catalog 0 and never revisiting it.
   bool _initialCWCheckDone = false;
   // Indices of catalogs confirmed empty after load — skip when navigating
+  // (see _isSkippable: only while they really still are).
   final Set<int> _emptyCatalogs = {};
+  // Catalog ids already given their one delayed retry (onCatalogEmpty).
+  final Set<String> _emptyRetried = {};
+  final List<Timer> _emptyRetryTimers = [];
+
+  // A catalog that came back empty is skipped by Up/Down — but only while
+  // its bloc still says so. A plugin answering empty for a moment (a slow
+  // upstream at the first load) used to lose that row for the whole
+  // session: down jumped over it, hasNext ignored it, even once it filled.
+  bool _isSkippable(int i) {
+    if (!_emptyCatalogs.contains(i)) return false;
+    if (i < widget.sectionBlocs.length) {
+      final s = widget.sectionBlocs[i].state;
+      if (s is DiscoveryLoaded && s.items.isNotEmpty) {
+        _emptyCatalogs.remove(i);
+        return false;
+      }
+    }
+    return true;
+  }
 
   // SafeFocusRef (see lib/shared/utils/safe_focus.dart) — same rationale
   // as _PluginPageBodyState._firstCardFocus above: a catalog/row switch
@@ -142,6 +162,9 @@ class _StandardHomeShellState extends State<_StandardHomeShell> {
   @override
   void dispose() {
     _carouselHoldTimer?.cancel();
+    for (final t in _emptyRetryTimers) {
+      t.cancel();
+    }
     _switchParkFn.dispose();
     super.dispose();
   }
@@ -447,6 +470,7 @@ class _StandardHomeShellState extends State<_StandardHomeShell> {
   void onCatalogEmpty(int index) {
     if (_emptyCatalogs.contains(index)) return;
     setState(() => _emptyCatalogs.add(index));
+    _retryEmptyOnce(index);
     if (_activeCatalog != index) return;
     // Try forward, then backward, then escape upward if all catalogs are
     // empty — nextFocusableIndex (lib/shared/utils/safe_focus.dart) is the
@@ -457,7 +481,7 @@ class _StandardHomeShellState extends State<_StandardHomeShell> {
       from: _activeCatalog,
       direction: 1,
       length: length,
-      isSkippable: (i) => _emptyCatalogs.contains(i),
+      isSkippable: _isSkippable,
     );
     if (forward != null) {
       setState(() {
@@ -469,7 +493,7 @@ class _StandardHomeShellState extends State<_StandardHomeShell> {
       from: _activeCatalog,
       direction: -1,
       length: length,
-      isSkippable: (i) => _emptyCatalogs.contains(i),
+      isSkippable: _isSkippable,
     );
     if (backward != null) {
       setState(() {
@@ -486,6 +510,32 @@ class _StandardHomeShellState extends State<_StandardHomeShell> {
     }
     WidgetsBinding.instance
         .addPostFrameCallback((_) => widget.onAllCatalogsEmpty());
+  }
+
+  // One more try, a little later, for a catalog that came back empty: the
+  // row comes back (and Down reaches it again) if the plugin now has items.
+  void _retryEmptyOnce(int index) {
+    if (index >= widget.plugin.catalogs.length ||
+        index >= widget.sectionBlocs.length) {
+      return;
+    }
+    final cat = widget.plugin.catalogs[index];
+    if (!_emptyRetried.add(cat.id)) return;
+    final bloc = widget.sectionBlocs[index];
+    _emptyRetryTimers.add(Timer(const Duration(seconds: 15), () {
+      if (!mounted || bloc.isClosed) return;
+      bloc.stream
+          .firstWhere((s) => s is DiscoveryLoaded || s is DiscoveryError)
+          .then((_) {
+        if (mounted) setState(() {}); // hasNext / Down see the new state
+      }, onError: (_) {});
+      bloc.add(LoadCatalogEvent(
+        pluginId: widget.plugin.pluginId,
+        catalogId: cat.id,
+        cacheTtlSeconds: cat.cacheTtlSeconds,
+        forceRefresh: true,
+      ));
+    }));
   }
 
   // Guards row-to-row switching against native key-repeat (~20-30
@@ -546,7 +596,7 @@ class _StandardHomeShellState extends State<_StandardHomeShell> {
       }
       return;
     }
-    while (next >= 0 && next <= max && _emptyCatalogs.contains(next)) {
+    while (next >= 0 && next <= max && _isSkippable(next)) {
       next += dir;
     }
     if (next < 0 || next > max) return;
@@ -562,8 +612,8 @@ class _StandardHomeShellState extends State<_StandardHomeShell> {
   // escape once already on CW, nothing sits above it).
   bool _upWouldEscapeToSearch() {
     if (_activeCatalog == -1) return true;
-    final hasPrev = List.generate(_activeCatalog, (i) => i)
-        .any((i) => !_emptyCatalogs.contains(i));
+    final hasPrev =
+        List.generate(_activeCatalog, (i) => i).any((i) => !_isSkippable(i));
     if (hasPrev) return false;
     return !_hasCW;
   }
@@ -582,7 +632,7 @@ class _StandardHomeShellState extends State<_StandardHomeShell> {
     final max = widget.plugin.catalogs.length - 1;
     if (_activeCatalog >= max) return true;
     return !List.generate(max - _activeCatalog, (i) => _activeCatalog + 1 + i)
-        .any((i) => !_emptyCatalogs.contains(i));
+        .any((i) => !_isSkippable(i));
   }
 
   // Single entry point for Up from any focused card in this plugin's rows
@@ -1137,7 +1187,7 @@ class _StandardHomeShellState extends State<_StandardHomeShell> {
     final hasNext = isShowingCW
         ? true
         : List.generate(maxIdx - _activeCatalog, (i) => _activeCatalog + 1 + i)
-            .any((i) => !_emptyCatalogs.contains(i));
+            .any((i) => !_isSkippable(i));
     return LayoutBuilder(
       builder: (context, constraints) {
         final screenW = constraints.maxWidth;
