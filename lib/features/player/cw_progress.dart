@@ -191,7 +191,7 @@ class ContinueWatchingTracker {
   void _checkElsewhere(ProgressResponse? resp) {
     if (_elsewhereReported || resp == null || !resp.playbackElsewhere) return;
     _elsewhereReported = true;
-    onPlaybackElsewhere?.call(resp.playingOn);
+    onPlaybackElsewhere?.call(bareDeviceLabel(resp.playingOn));
   }
 
   /// End-of-title handling, run on every position tick:
@@ -296,4 +296,17 @@ class ContinueWatchingTracker {
     } catch (_) {}
     await repo.deleteProgress(providerID: s.pluginId, playableID: s.cwId);
   }
+}
+
+/// The other device's name without the «» some servers already put around
+/// it: the players quote it themselves ("spostata su «TV salotto»"), and
+/// the two together read ««TV salotto»».
+String bareDeviceLabel(String label) {
+  var s = label.trim();
+  while (s.length >= 2 &&
+      ((s.startsWith('«') && s.endsWith('»')) ||
+          (s.startsWith('"') && s.endsWith('"')))) {
+    s = s.substring(1, s.length - 1).trim();
+  }
+  return s;
 }
