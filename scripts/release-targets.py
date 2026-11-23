@@ -4,6 +4,7 @@
     scripts/release-targets.py                     # HEAD vs the latest tag
     scripts/release-targets.py --base v1.6.7 --head v1.6.8
     scripts/release-targets.py --force webos       # always count webos as changed
+    scripts/release-targets.py --only mobile       # every other target unchanged
     scripts/release-targets.py --github-output     # also append to $GITHUB_OUTPUT
 
 Targets (and the stores they feed):
@@ -20,6 +21,11 @@ not follow that one edge — otherwise every mobile-only change would ship
 the TV apps too. Non-Dart inputs per target are listed in EXTRA below.
 pubspec.yaml counts only when something other than its `version:` line
 changed (every release bumps that).
+
+--only keeps the other targets out whatever changed (a fix for one store
+that touches shared code, e.g. third_party/). When --head is an annotated
+tag whose message has a line "only: mobile" (scripts/release.sh writes it
+from PILEUS_ONLY), that is the default --only, so CI follows it.
 """
 
 import argparse
@@ -117,8 +123,15 @@ def main():
     ap.add_argument("--base", help="previous release (default: latest tag before --head)")
     ap.add_argument("--head", default="HEAD")
     ap.add_argument("--force", default="", help="comma list of targets, or 'all'")
+    ap.add_argument("--only", default=None, help="comma list: publish just these targets")
     ap.add_argument("--github-output", action="store_true")
     args = ap.parse_args()
+    only_arg = args.only if args.only is not None else _tag_only(args.head)
+    only = {t.strip() for t in only_arg.split(",") if t.strip()}
+    if only - set(ENTRIES):
+        sys.exit(f"unknown target(s) in --only: {', '.join(sorted(only - set(ENTRIES)))}")
+    if only:
+        print(f"only: {', '.join(sorted(only))}")
 
     base = args.base
     if not base:
@@ -153,6 +166,8 @@ def main():
             result[target] = bool(reasons)
         if target in forced and not result[target]:
             result[target], reasons = True, ["--force"]
+        if only and target not in only:
+            result[target], reasons = False, ["left out (only)"] if result[target] else []
         state = "CHANGED" if result[target] else "unchanged"
         print(f"  {target:7s} {state}")
         for r in reasons[:8]:
@@ -174,6 +189,16 @@ def _is_tag(ref):
         return True
     except subprocess.CalledProcessError:
         return False
+
+
+def _tag_only(ref):
+    """The "only: a,b" line of annotated tag `ref`'s message, or ''."""
+    try:
+        msg = git("for-each-ref", f"refs/tags/{ref}", "--format=%(contents)")
+    except subprocess.CalledProcessError:
+        return ""
+    m = re.search(r"^only:\s*(.+)$", msg, re.M)
+    return m.group(1).strip() if m else ""
 
 
 def _json_list(items):

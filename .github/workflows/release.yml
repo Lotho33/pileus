@@ -82,6 +82,10 @@ jobs:
 
       - id: t
         run: |
+          # The annotated tag (checkout leaves a bare one): its "only:" line
+          # limits the targets (scripts/release.sh, PILEUS_ONLY).
+          tag="${{ github.event.inputs.tag || github.ref_name }}"
+          git fetch -q --force origin "refs/tags/$tag:refs/tags/$tag" || true
           python3 scripts/release-targets.py --github-output \
             --head "${{ github.event.inputs.tag || github.ref_name }}" \
             --force "${{ github.event.inputs.force }}"

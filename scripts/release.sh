@@ -50,6 +50,12 @@
 #   PILEUS_VEGA_DIR            pileus-vega checkout   (default: ~/Dev/ReactNative/pileus-vega)
 #   PILEUS_VEGA_VERSION        Vega version to release (default: last tag's patch + 1)
 #   PILEUS_SKIP_VEGA           set to 1 to leave Vega out of this release
+#   PILEUS_ONLY                store targets to publish, comma list of tv,mobile,
+#                              webos (e.g. PILEUS_ONLY=mobile for a phone-only
+#                              fix in shared code): the others are left out
+#                              whatever changed, and so are the Linux/Windows
+#                              builds and Vega. Written in the tag message
+#                              ("only: mobile"), which release.yml follows.
 set -euo pipefail
 
 REMOTE=${PILEUS_RELEASE_REMOTE:-origin}
@@ -60,6 +66,12 @@ SKIP_WINDOWS=${PILEUS_SKIP_WINDOWS_BUILD:-0}
 SKIP_STORE=${PILEUS_SKIP_STORE_BUILD:-0}
 VEGA_DIR=${PILEUS_VEGA_DIR:-$HOME/Dev/ReactNative/pileus-vega}
 SKIP_VEGA=${PILEUS_SKIP_VEGA:-0}
+ONLY=${PILEUS_ONLY:-}
+if [[ -n "$ONLY" ]]; then
+  SKIP_LINUX=1
+  SKIP_WINDOWS=1
+  SKIP_VEGA=1
+fi
 
 ver=${1:-}
 dry=false
@@ -101,7 +113,7 @@ echo "commit + tag $tag, then push '$BRANCH' and '$tag' to '$REMOTE'"
 echo
 targets_out=$(mktemp)
 trap 'rm -f "$targets_out"' EXIT
-GITHUB_OUTPUT="$targets_out" python3 -I scripts/release-targets.py --github-output
+GITHUB_OUTPUT="$targets_out" python3 -I scripts/release-targets.py --github-output --only "$ONLY"
 target() { grep -q "^$1=true$" "$targets_out"; }
 echo
 target tv && echo "  -> Amazon Appstore + Play (Android TV): build, upload, submit for review"
@@ -181,6 +193,8 @@ git commit -m "$tag"
 # the .vpkg still has to be added to it by hand.
 tag_msg="$tag"
 [[ -n "$vega_ver" ]] && tag_msg="$tag"$'\n\n'"vega: $vega_ver"
+# "only: mobile" — release.yml's targets job publishes just those.
+[[ -n "$ONLY" ]] && tag_msg="$tag_msg"$'\n\n'"only: $ONLY"
 git tag -a "$tag" -m "$tag_msg"
 
 git push "$REMOTE" "$BRANCH"
