@@ -79,6 +79,11 @@ the verbatim upstream backport (3):
     the video while it kept playing; now it pauses, and a transient loss
     (call, assistant) resumes it afterwards.
 
+16. `BetterPlayerController.play`: allowed while the app is `inactive`, not
+    only `resumed`. A picture-in-picture window keeps the activity paused
+    (Flutter: inactive), so upstream silently dropped play() there — the
+    window's pause button worked, its play button never did.
+
 Upgrading to 2.0.0+: patch 3 is upstream there; re-apply all the others.
 Upgrading: re-copy the new upstream release here and re-apply both patches
 (or drop the fork once upstream fixes 1.).

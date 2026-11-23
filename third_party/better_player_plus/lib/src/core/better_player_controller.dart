@@ -599,7 +599,11 @@ class BetterPlayerController {
       throw StateError('The data source has not been initialized');
     }
 
-    if (_appLifecycleState == AppLifecycleState.resumed) {
+    // Pileus patch 16: also while `inactive` — the activity in a
+    // picture-in-picture window is paused but visible, and its play button
+    // must work. Still never in the background (paused/hidden/detached).
+    if (_appLifecycleState == AppLifecycleState.resumed ||
+        _appLifecycleState == AppLifecycleState.inactive) {
       await videoPlayerController!.play();
       _hasCurrentDataSourceStarted = true;
       _wasPlayingBeforePause = null;
