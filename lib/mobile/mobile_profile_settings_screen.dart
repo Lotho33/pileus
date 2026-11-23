@@ -11,7 +11,7 @@ import '../features/auth/bloc/auth_state.dart';
 import '../features/settings/bloc/profile_management_cubit.dart';
 import '../features/settings/bloc/profile_management_state.dart';
 import '../shared/widgets/avatar_picker_dialog.dart';
-import '../shared/widgets/default_avatars.dart';
+import '../shared/widgets/profile_avatar.dart';
 import '../shared/widgets/native_pin_dialogs.dart';
 import 'mobile_router.dart';
 import '../shared/widgets/text_prompt_dialog.dart';
@@ -73,10 +73,8 @@ class _Body extends StatelessWidget {
                   width: 44,
                   height: 44,
                   child: ClipOval(
-                    child: isDefaultAvatarUrl(p.avatarUrl)
-                        ? DefaultAvatarView(
-                            index: defaultAvatarIndex(p.avatarUrl), size: 44)
-                        : const ColoredBox(color: AppTheme.surface2),
+                    child: ProfileAvatar(
+                        url: p.avatarUrl, name: p.profileName, size: 44),
                   ),
                 ),
                 title: Text(p.profileName,
@@ -113,11 +111,13 @@ class _Body extends StatelessWidget {
               ),
               const Divider(color: AppTheme.border),
               ListTile(
-                leading: const Icon(Icons.pin_outlined, color: AppTheme.textMid),
+                leading:
+                    const Icon(Icons.pin_outlined, color: AppTheme.textMid),
                 title: Text(p.pinProtected ? 'Cambia PIN' : 'Imposta PIN',
                     style: const TextStyle(color: AppTheme.textHigh)),
                 subtitle: Text(p.pinProtected ? 'Attivo' : 'Non impostato',
-                    style: const TextStyle(color: AppTheme.textLow, fontSize: 12)),
+                    style:
+                        const TextStyle(color: AppTheme.textLow, fontSize: 12)),
                 onTap: () => _managePin(context, cubit, p),
               ),
               if (p.pinProtected)

@@ -1,4 +1,3 @@
-import 'package:cached_network_image/cached_network_image.dart';
 import 'dart:io' show Platform;
 
 import 'package:flutter/foundation.dart' show kIsWeb;
@@ -26,13 +25,10 @@ import '../features/settings/data/settings_repository.dart';
 import '../features/settings/presentation/server_info_dialog.dart';
 import '../core/grpc/clients/media_client.dart' show PluginInfo;
 import '../shared/widgets/avatar_picker_dialog.dart';
-import '../shared/widgets/default_avatars.dart';
 import '../shared/widgets/metrics_dialog.dart';
 import '../shared/widgets/native_pin_dialogs.dart';
 import '../shared/widgets/text_prompt_dialog.dart';
-import '../shared/widgets/profile_avatar_cache.dart';
-import 'package:cached_network_image_platform_interface/cached_network_image_platform_interface.dart'
-    show ImageRenderMethodForWeb;
+import '../shared/widgets/profile_avatar.dart';
 
 /// Native desktop settings: a left section list + the section content on the
 /// right. Migrated from the mobile Preferenze / Plugin / Profilo screens.
@@ -573,7 +569,8 @@ class _ProfileSection extends StatelessWidget {
                   child: SizedBox(
                     width: 88,
                     height: 88,
-                    child: _Avatar(url: p.avatarUrl, name: p.profileName),
+                    child: ProfileAvatar(
+                        url: p.avatarUrl, name: p.profileName, size: 88),
                   ),
                 ),
                 const SizedBox(width: 20),
@@ -752,52 +749,6 @@ Future<void> _confirmForgetDevice(
     ),
   );
   if (yes == true) cubit.forgetDevice();
-}
-
-class _Avatar extends StatelessWidget {
-  final String url;
-  final String name;
-  const _Avatar({required this.url, required this.name});
-
-  Widget _initial() => DecoratedBox(
-        decoration: BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-            colors: [
-              AppTheme.primary.withValues(alpha: 0.8),
-              AppTheme.primary.withValues(alpha: 0.3),
-            ],
-          ),
-        ),
-        child: Center(
-          child: Text(
-            name.trim().isNotEmpty ? name.trim()[0].toUpperCase() : '?',
-            style: const TextStyle(
-                color: Colors.white, fontSize: 36, fontWeight: FontWeight.w700),
-          ),
-        ),
-      );
-
-  @override
-  Widget build(BuildContext context) {
-    if (isDefaultAvatarUrl(url)) {
-      return DefaultAvatarView(index: defaultAvatarIndex(url), size: 88);
-    }
-    if (url.isEmpty) return _initial();
-    return CachedNetworkImage(
-      // Web-only, no-op on every other platform — see image_sizing.dart's
-      // "ImageRenderMethodForWeb.HttpGet" section for why every
-      // CachedNetworkImage call site in the app sets this.
-      imageRenderMethodForWeb: ImageRenderMethodForWeb.HttpGet,
-      imageUrl: url,
-      cacheManager: profileAvatarCache,
-      cacheKey: profileAvatarCacheKey(url),
-      memCacheWidth: 200,
-      fit: BoxFit.cover,
-      errorWidget: (_, __, ___) => _initial(),
-    );
-  }
 }
 
 // ── Avanzate ───────────────────────────────────────────────────────────────

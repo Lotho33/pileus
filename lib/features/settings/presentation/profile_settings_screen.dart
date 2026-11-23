@@ -11,6 +11,7 @@ import '../../../shared/widgets/ambient_glow_background.dart';
 import '../../../shared/widgets/avatar_picker_dialog.dart';
 import '../../../shared/widgets/default_avatars.dart';
 import '../../../shared/widgets/pileus_spinner.dart';
+import '../../../shared/widgets/profile_avatar.dart';
 import '../../../shared/widgets/settings/dialog_action_button.dart';
 import '../../../shared/widgets/settings/settings_header.dart';
 import '../../../shared/widgets/settings/settings_nav_row.dart';
@@ -177,6 +178,11 @@ class _ProfileSettingsBodyState extends State<_ProfileSettingsBody> {
         ),
         SettingsNavRow(
           icon: Icons.image_rounded,
+          // The avatar itself, not a generic icon (as the profile picker).
+          iconBuilder: (size, _) => ClipOval(
+            child: ProfileAvatar(
+                url: profile.avatarUrl, name: profile.profileName, size: size),
+          ),
           label: 'Avatar',
           subtitle: isDefaultAvatarUrl(profile.avatarUrl)
               ? 'Predefinito'
