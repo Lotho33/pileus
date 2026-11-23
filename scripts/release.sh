@@ -188,7 +188,8 @@ fi
 sed -i -E "s/^version:.*/${new_line}/" pubspec.yaml
 
 git add pubspec.yaml
-git commit -m "$tag"
+# Re-cutting a withdrawn tag: the version is already bumped, nothing to commit.
+git diff --cached --quiet || git commit -m "$tag"
 # "vega: X.Y.Z" tells release.yml's amazon-submit not to submit the edit:
 # the .vpkg still has to be added to it by hand.
 tag_msg="$tag"
