@@ -142,22 +142,37 @@ class _ProfileSelectionViewState extends State<_ProfileSelectionView> {
   void initState() {
     super.initState();
     _rebuildFns(widget.profiles.length);
+    // The row's highlight follows _focusedIndex, which stays put while
+    // "Cambia server" has focus (↑ goes back there): repaint so the card
+    // drops its highlight meanwhile — only one thing looks focused.
+    _changeServerFn.addListener(_onChangeServerFocus);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted && _fns.isNotEmpty) _fns[0].requestFocus();
     });
+  }
+
+  void _onChangeServerFocus() {
+    if (mounted) setState(() {});
   }
 
   @override
   void didUpdateWidget(_ProfileSelectionView old) {
     super.didUpdateWidget(old);
     if (old.profiles.length != widget.profiles.length) {
+      // A profile just created: focus lands on it (OK enters it), as on
+      // Vega. Otherwise (one removed) back to the first.
+      final known = {for (final p in old.profiles) p.profileId};
+      final added =
+          widget.profiles.indexWhere((p) => !known.contains(p.profileId));
+      final target = added >= 0 ? added : 0;
       setState(() {
-        _focusedIndex = 0;
+        _focusedIndex = target;
         _rebuildFns(widget.profiles.length);
       });
       WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted && _fns.isNotEmpty) _fns[0].requestFocus();
+        if (mounted && _fns.length > target) _fns[target].requestFocus();
       });
+      WidgetsBinding.instance.scheduleFrame();
     }
   }
 
@@ -166,6 +181,7 @@ class _ProfileSelectionViewState extends State<_ProfileSelectionView> {
     for (final f in _fns) {
       f.dispose();
     }
+    _changeServerFn.removeListener(_onChangeServerFocus);
     _changeServerFn.dispose();
     super.dispose();
   }
@@ -252,7 +268,8 @@ class _ProfileSelectionViewState extends State<_ProfileSelectionView> {
                     builder: (context, animatedCardSize, _) => _ProfileRow(
                       profiles: widget.profiles,
                       fns: _fns,
-                      focusedIndex: _focusedIndex,
+                      focusedIndex:
+                          _changeServerFn.hasFocus ? -1 : _focusedIndex,
                       onFocused: (i) => setState(() => _focusedIndex = i),
                       isWide: isWide,
                       cardSize: animatedCardSize,
@@ -261,9 +278,8 @@ class _ProfileSelectionViewState extends State<_ProfileSelectionView> {
                   SizedBox(height: AppScale.space(context, 32)),
                   TvFocusable(
                     focusNode: _changeServerFn,
-                    onActivate: () => context
-                        .read<AuthBloc>()
-                        .add(const ChangeServerEvent()),
+                    onActivate: () =>
+                        context.read<AuthBloc>().add(const ChangeServerEvent()),
                     onUp: () => _fns[_focusedIndex].requestFocus(),
                     builder: (context, focused) => Text(
                       'Cambia server',
@@ -281,6 +297,19 @@ class _ProfileSelectionViewState extends State<_ProfileSelectionView> {
       ),
     );
   }
+}
+
+/// Which accent a profile's tile gets: a 31-multiplier hash of its name in
+/// 32-bit signed arithmetic — the same as pileus-vega (ProfilesScreen.tsx
+/// accentFor), so a profile has one color everywhere. String.hashCode was
+/// not that: it differs between the VM and the web, and across Dart
+/// releases.
+int profileAccentIndex(String name, int count) {
+  var h = 0;
+  for (final r in name.runes) {
+    h = (h * 31 + r).toSigned(32);
+  }
+  return h.abs() % count;
 }
 
 // ─── Profile row ──────────────────────────────────────────────────────────────
@@ -373,7 +402,8 @@ class _ProfileCard extends StatelessWidget {
       const Color(0xFF26A69A),
       const Color(0xFFEF5350),
     ];
-    final accent = colors[profile.profileName.hashCode.abs() % colors.length];
+    final accent =
+        colors[profileAccentIndex(profile.profileName, colors.length)];
 
     return Focus(
       focusNode: focusNode,
@@ -432,7 +462,8 @@ class _ProfileCard extends StatelessWidget {
                                         ImageRenderMethodForWeb.HttpGet,
                                     imageUrl: profile.avatarUrl,
                                     cacheManager: profileAvatarCache,
-                                    cacheKey: profileAvatarCacheKey(profile.avatarUrl),
+                                    cacheKey: profileAvatarCacheKey(
+                                        profile.avatarUrl),
                                     width: cardSize,
                                     height: cardSize,
                                     fit: BoxFit.cover,
@@ -474,8 +505,8 @@ class _ProfileCard extends StatelessWidget {
                           decoration: BoxDecoration(
                             shape: BoxShape.circle,
                             color: const Color(0xFF1C1C2E),
-                            border: Border.all(
-                                color: Colors.white24, width: 1.5),
+                            border:
+                                Border.all(color: Colors.white24, width: 1.5),
                           ),
                           child: const Icon(Icons.lock,
                               size: 16, color: Colors.white70),
@@ -736,8 +767,7 @@ class _AddProfileDialogState extends State<_AddProfileDialog> {
                             padding: const EdgeInsets.only(bottom: 6),
                             decoration: const BoxDecoration(
                               border: Border(
-                                  bottom:
-                                      BorderSide(color: Colors.white24)),
+                                  bottom: BorderSide(color: Colors.white24)),
                             ),
                             child: Text(
                               _nameCtrl.text,
