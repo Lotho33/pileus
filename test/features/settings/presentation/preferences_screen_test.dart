@@ -30,9 +30,7 @@ void main() {
     await t.pumpWidget(const MaterialApp(home: PreferencesScreen()));
     await t.pumpAndSettle();
     expect(find.text('32'), findsOneWidget);
-    // Focus the size row: Down from the header.
-    await t.sendKeyEvent(LogicalKeyboardKey.arrowDown);
-    await t.pumpAndSettle();
+    // The size row has focus once the settings are loaded.
     await t.sendKeyEvent(LogicalKeyboardKey.arrowRight);
     await t.pumpAndSettle();
     expect(find.text('34'), findsOneWidget);

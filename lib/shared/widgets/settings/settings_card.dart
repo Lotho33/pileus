@@ -104,6 +104,7 @@ class SettingsStepperRow extends StatelessWidget {
   final VoidCallback onLeft;
   final VoidCallback onRight;
   final VoidCallback? onActivate;
+  final FocusNode? focusNode;
 
   const SettingsStepperRow({
     super.key,
@@ -114,11 +115,13 @@ class SettingsStepperRow extends StatelessWidget {
     this.caption,
     this.fraction,
     this.onActivate,
+    this.focusNode,
   });
 
   @override
   Widget build(BuildContext context) {
     return TvFocusable(
+      focusNode: focusNode,
       onLeft: onLeft,
       onRight: onRight,
       onActivate: onActivate,

@@ -45,11 +45,25 @@ class _PreferencesBody extends StatefulWidget {
 
 class _PreferencesBodyState extends State<_PreferencesBody> {
   final _backFn = FocusNode();
+  // The first row takes focus once the settings have loaded (as every
+  // other settings page starts on its first entry), not the header's ←.
+  final _firstFn = FocusNode();
+  bool _focusedFirst = false;
 
   @override
   void dispose() {
     _backFn.dispose();
+    _firstFn.dispose();
     super.dispose();
+  }
+
+  void _focusFirstOnce() {
+    if (_focusedFirst) return;
+    _focusedFirst = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _firstFn.requestFocus();
+    });
+    WidgetsBinding.instance.scheduleFrame();
   }
 
   @override
@@ -71,6 +85,7 @@ class _PreferencesBodyState extends State<_PreferencesBody> {
             Expanded(
               child: BlocBuilder<SettingsCubit, SettingsState>(
                 builder: (context, state) {
+                  if (state is SettingsLoaded) _focusFirstOnce();
                   return PileusLoadingSwitcher(
                     isLoading: state is! SettingsLoaded,
                     spinnerSize: AppScale.spinnerL(context),
@@ -97,6 +112,7 @@ class _PreferencesBodyState extends State<_PreferencesBody> {
       children: [
         const SettingsSectionHeader('Sottotitoli'),
         SettingsStepperRow(
+          focusNode: _firstFn,
           label: 'Dimensione',
           value: '${data.subtitleFontSize.round()}',
           fraction: (data.subtitleFontSize - 16) / (64 - 16),
