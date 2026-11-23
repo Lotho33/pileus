@@ -265,6 +265,7 @@ class _MobilePlayerViewState extends State<_MobilePlayerView> {
   void initState() {
     super.initState();
     _settings = getIt<SettingsRepository>();
+    Pip.onAction = _onPipAction;
     // Silence the home's 30s plugin-status poll for the whole playback
     // session (battery + mobile data) — same as the TV player.
     getIt<PluginBloc>().pausePolling();
@@ -408,6 +409,7 @@ class _MobilePlayerViewState extends State<_MobilePlayerView> {
   @override
   void dispose() {
     Pip.setEligible(false);
+    if (Pip.onAction == _onPipAction) Pip.onAction = null;
     // Restore portrait + chrome FIRST — if the engine teardown below throws
     // (platform-view races on some devices) the screen must still not leave
     // the whole app stuck landscape / fullscreen.
@@ -448,12 +450,14 @@ class _MobilePlayerViewState extends State<_MobilePlayerView> {
     final playing = _engine.playing;
     var needsRebuild = false;
 
-    // Leaving the app while a video plays keeps it in a PiP window.
+    // Leaving the app while a video plays keeps it in a PiP window; a
+    // video paused from the window's own button stays in it.
     final size = _engine.videoSize;
     Pip.setEligible(
-      playing && _started && !widget.args.isAudio,
+      (playing || Pip.active.value) && _started && !widget.args.isAudio,
       width: (size?.width ?? 16).round(),
       height: (size?.height ?? 9).round(),
+      playing: playing,
     );
 
     // Wakelock is a platform-channel call — flip it only on an actual
@@ -700,6 +704,19 @@ class _MobilePlayerViewState extends State<_MobilePlayerView> {
         startPositionSec: startPositionSec,
         takeOver: takeOver,
       ));
+    }
+  }
+
+  /// The PiP window's buttons (see Pip.onAction).
+  void _onPipAction(String action) {
+    if (!mounted) return;
+    switch (action) {
+      case 'rewind':
+        _seekBy(-10);
+      case 'forward':
+        _seekBy(10);
+      case 'toggle':
+        _engine.playOrPause();
     }
   }
 

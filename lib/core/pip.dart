@@ -16,6 +16,10 @@ class Pip {
   /// True while the app is shown in the PiP window.
   static final active = ValueNotifier<bool>(false);
 
+  /// The window's buttons: "rewind" (−10 s), "toggle" (play/pause),
+  /// "forward" (+10 s). Set by the player while it is on screen.
+  static void Function(String action)? onAction;
+
   static bool get _enabled =>
       !kIsWeb && Platform.isAndroid && appFlavor == 'mobile';
 
@@ -26,21 +30,27 @@ class Pip {
     if (!_enabled) return;
     _channel.setMethodCallHandler((call) async {
       if (call.method == 'pipChanged') active.value = call.arguments == true;
+      if (call.method == 'pipAction' && call.arguments is String) {
+        onAction?.call(call.arguments as String);
+      }
     });
   }
 
   /// Whether leaving the app now should keep the video in a PiP window.
-  /// [width]/[height]: the video's proportions (16:9 when unknown). Cheap
-  /// to call on every player tick: an unchanged request isn't resent.
-  static void setEligible(bool eligible, {int width = 16, int height = 9}) {
+  /// [width]/[height]: the video's proportions (16:9 when unknown).
+  /// [playing]: the window's middle button shows pause (true) or play.
+  /// Cheap to call on every player tick: an unchanged request isn't resent.
+  static void setEligible(bool eligible,
+      {int width = 16, int height = 9, bool playing = true}) {
     if (!_enabled) return;
-    final key = '$eligible:$width:$height';
+    final key = '$eligible:$width:$height:$playing';
     if (key == _last) return;
     _last = key;
     unawaited(_channel.invokeMethod('setEligible', {
       'eligible': eligible,
       'width': width,
       'height': height,
+      'playing': playing,
     }).catchError((Object _) => null));
   }
 }
