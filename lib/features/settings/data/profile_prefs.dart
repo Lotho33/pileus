@@ -16,8 +16,15 @@ import '../../media/data/plugin_prefs.dart';
 ///   "plugins": { "order": ["pluginA","pluginB"],
 ///                "hiddenPlugins": ["pluginC"],
 ///                "catalogs": { "pluginA": {"order":[...], "hidden":[...]} } },
-///   "playback": { "language": "it" } }
+///   "playback": { "language": "it" },
+///   "deviceSubtitles": { "<deviceId>": { "fontSize": 40.0, … } } }
 /// ```
+///
+/// Subtitles are per device AND profile: a TV across the room and a phone
+/// in the hand want different sizes. Each paired device writes its own
+/// entry under "deviceSubtitles" (keyed by its device id); the profile-level
+/// "subtitles" block is only read, as the starting point for a device that
+/// has none yet (and kept for older app versions, which still use it).
 ///
 /// Every field is nullable/defaults-to-unset: absent means "not set on this
 /// profile, fall back to the local value / app default". Person-scoped only
@@ -49,6 +56,8 @@ class ProfilePrefs {
   final PluginPrefs pluginPrefs;
   // "it" | "original" — see PreferredLanguage in source_preference.dart.
   final String? preferredLanguage;
+  // deviceId → its own subtitle block (same keys as "subtitles").
+  final Map<String, Map<String, dynamic>> deviceSubtitles;
   final Map<String, dynamic> _unknownBlocks;
 
   const ProfilePrefs({
@@ -59,8 +68,33 @@ class ProfilePrefs {
     this.pluginOrder = const [],
     this.pluginPrefs = const PluginPrefs(),
     this.preferredLanguage,
+    this.deviceSubtitles = const {},
     Map<String, dynamic> unknownBlocks = const {},
   }) : _unknownBlocks = unknownBlocks;
+
+  /// This device's own subtitle block ("fontSize", "colorArgb",
+  /// "bgEnabled", "bottomPadding"), empty when it has none.
+  Map<String, dynamic> subtitlesFor(String deviceId) =>
+      deviceSubtitles[deviceId] ?? const {};
+
+  /// With [key] set to [value] in [deviceId]'s own subtitle block.
+  ProfilePrefs withDeviceSubtitle(String deviceId, String key, Object value) {
+    final next = {
+      for (final e in deviceSubtitles.entries) e.key: Map.of(e.value),
+    };
+    (next[deviceId] ??= {})[key] = value;
+    return ProfilePrefs(
+      subtitleFontSize: subtitleFontSize,
+      subtitleColorArgb: subtitleColorArgb,
+      subtitleBgEnabled: subtitleBgEnabled,
+      subtitleBottomPadding: subtitleBottomPadding,
+      pluginOrder: pluginOrder,
+      pluginPrefs: pluginPrefs,
+      preferredLanguage: preferredLanguage,
+      deviceSubtitles: next,
+      unknownBlocks: _unknownBlocks,
+    );
+  }
 
   static const empty = ProfilePrefs();
 
@@ -71,7 +105,8 @@ class ProfilePrefs {
       subtitleBottomPadding == null &&
       pluginOrder.isEmpty &&
       pluginPrefs.isEmpty &&
-      preferredLanguage == null;
+      preferredLanguage == null &&
+      deviceSubtitles.isEmpty;
 
   /// Tolerant: "", "{}", `{"v":1}`, malformed JSON, or an unexpected shape
   /// all yield [empty] rather than throwing.
@@ -88,12 +123,20 @@ class ProfilePrefs {
           : const <String, dynamic>{};
       final playback = root['playback'];
       final pb = playback is Map ? playback : const <dynamic, dynamic>{};
+      final ds = root['deviceSubtitles'];
+      final deviceSubs = <String, Map<String, dynamic>>{
+        if (ds is Map)
+          for (final e in ds.entries)
+            if (e.value is Map)
+              e.key.toString(): (e.value as Map).cast<String, dynamic>(),
+      };
       final unknown = <String, dynamic>{
         for (final e in root.entries)
           if (e.key != 'v' &&
               e.key != 'subtitles' &&
               e.key != 'plugins' &&
-              e.key != 'playback')
+              e.key != 'playback' &&
+              e.key != 'deviceSubtitles')
             e.key.toString(): e.value,
       };
       return ProfilePrefs(
@@ -107,6 +150,7 @@ class ProfilePrefs {
         // it ignores keys it doesn't know.
         pluginPrefs: p.isEmpty ? const PluginPrefs() : PluginPrefs.fromJson(p),
         preferredLanguage: pb['language'] as String?,
+        deviceSubtitles: deviceSubs,
         unknownBlocks: unknown,
       );
     } catch (_) {
@@ -136,6 +180,7 @@ class ProfilePrefs {
     if (sub.isEmpty &&
         plugins.isEmpty &&
         playback.isEmpty &&
+        deviceSubtitles.isEmpty &&
         _unknownBlocks.isEmpty) {
       return '{}';
     }
@@ -144,6 +189,7 @@ class ProfilePrefs {
       if (sub.isNotEmpty) 'subtitles': sub,
       if (plugins.isNotEmpty) 'plugins': plugins,
       if (playback.isNotEmpty) 'playback': playback,
+      if (deviceSubtitles.isNotEmpty) 'deviceSubtitles': deviceSubtitles,
       ..._unknownBlocks,
     });
   }
@@ -166,6 +212,7 @@ class ProfilePrefs {
         pluginOrder: pluginOrder ?? this.pluginOrder,
         pluginPrefs: pluginPrefs ?? this.pluginPrefs,
         preferredLanguage: preferredLanguage ?? this.preferredLanguage,
+        deviceSubtitles: deviceSubtitles,
         unknownBlocks: _unknownBlocks,
       );
 }

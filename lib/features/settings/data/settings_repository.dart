@@ -4,6 +4,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../../../core/db/models/device_session.dart';
 import '../../../core/grpc/auth_interceptor.dart';
 import '../../media/data/plugin_prefs.dart';
 import 'profile_prefs.dart';
@@ -327,13 +328,37 @@ class SettingsRepository {
   Future<void> setPreferredLanguage(String v) =>
       _updateBlob((b) => b.copyWith(preferredLanguage: v));
 
-  // Read order for the four subtitle settings: server-synced blob → local
-  // per-profile copy → old unscoped key (pre-per-profile) → hardcoded
-  // default (matches playback_screen.dart's original values, so first-run
-  // behaviour is unchanged until the user opens Preferenze).
+  // Subtitles are per device AND profile, saved on the server in the
+  // profile's blob under this device's id (ProfilePrefs.deviceSubtitles):
+  // a TV and a phone of the same person want different sizes. Read order:
+  // this device's server entry → this device's local per-profile copy (what
+  // it had set before, also the offline copy) → the profile-level block
+  // (what every device shared until now, so nothing changes on upgrade) →
+  // old unscoped key → hardcoded default (playback_screen.dart's originals).
+  String get _deviceId {
+    try {
+      return DeviceSession.readFrom(_prefs)?.deviceId ?? '';
+    } catch (_) {
+      return '';
+    }
+  }
+
+  Object? _deviceSub(String key) {
+    final id = _deviceId;
+    return id.isEmpty ? null : _blob.subtitlesFor(id)[key];
+  }
+
+  Future<void> _setDeviceSub(String key, Object value) async {
+    final id = _deviceId;
+    // Not paired yet (no device id): the local copy above is all there is.
+    if (id.isEmpty) return;
+    await _updateBlob((b) => b.withDeviceSubtitle(id, key, value));
+  }
+
   double getSubtitleFontSize() =>
-      _blob.subtitleFontSize ??
+      (_deviceSub('fontSize') as num?)?.toDouble() ??
       _prefs.getDouble(_scoped(_kSubtitleFontSize)) ??
+      _blob.subtitleFontSize ??
       _prefs.getDouble(_kSubtitleFontSize) ??
       32.0;
   // Whole pixels: the phone/desktop sliders are continuous and handed over
@@ -342,37 +367,41 @@ class SettingsRepository {
   Future<void> setSubtitleFontSize(double v) async {
     v = v.roundToDouble();
     await _prefs.setDouble(_scoped(_kSubtitleFontSize), v);
-    await _updateBlob((b) => b.copyWith(subtitleFontSize: v));
+    await _setDeviceSub('fontSize', v);
   }
 
-  Color getSubtitleColor() => Color(_blob.subtitleColorArgb ??
-      _prefs.getInt(_scoped(_kSubtitleColorArgb)) ??
-      _prefs.getInt(_kSubtitleColorArgb) ??
-      Colors.white.toARGB32());
+  Color getSubtitleColor() =>
+      Color((_deviceSub('colorArgb') as num?)?.toInt() ??
+          _prefs.getInt(_scoped(_kSubtitleColorArgb)) ??
+          _blob.subtitleColorArgb ??
+          _prefs.getInt(_kSubtitleColorArgb) ??
+          Colors.white.toARGB32());
   Future<void> setSubtitleColor(Color c) async {
     await _prefs.setInt(_scoped(_kSubtitleColorArgb), c.toARGB32());
-    await _updateBlob((b) => b.copyWith(subtitleColorArgb: c.toARGB32()));
+    await _setDeviceSub('colorArgb', c.toARGB32());
   }
 
   bool getSubtitleBgEnabled() =>
-      _blob.subtitleBgEnabled ??
+      (_deviceSub('bgEnabled') as bool?) ??
       _prefs.getBool(_scoped(_kSubtitleBgEnabled)) ??
+      _blob.subtitleBgEnabled ??
       _prefs.getBool(_kSubtitleBgEnabled) ??
       true;
   Future<void> setSubtitleBgEnabled(bool v) async {
     await _prefs.setBool(_scoped(_kSubtitleBgEnabled), v);
-    await _updateBlob((b) => b.copyWith(subtitleBgEnabled: v));
+    await _setDeviceSub('bgEnabled', v);
   }
 
   double getSubtitleBottomPadding() =>
-      _blob.subtitleBottomPadding ??
+      (_deviceSub('bottomPadding') as num?)?.toDouble() ??
       _prefs.getDouble(_scoped(_kSubtitleBottomPadding)) ??
+      _blob.subtitleBottomPadding ??
       _prefs.getDouble(_kSubtitleBottomPadding) ??
       80.0;
   Future<void> setSubtitleBottomPadding(double v) async {
     v = v.roundToDouble();
     await _prefs.setDouble(_scoped(_kSubtitleBottomPadding), v);
-    await _updateBlob((b) => b.copyWith(subtitleBottomPadding: v));
+    await _setDeviceSub('bottomPadding', v);
   }
 
   // ── Plugin order/visibility (server-synced, same blob as subtitles) ────
