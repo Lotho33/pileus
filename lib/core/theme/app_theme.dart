@@ -97,8 +97,15 @@ abstract final class AppTheme {
           backgroundColor: surface,
           shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.all(Radius.circular(16))),
+          // Replaces the inherited style outright: without the family it
+          // fell back to the system font (AlertDialog titles, e.g. the
+          // avatar picker's).
           titleTextStyle: TextStyle(
-              color: textHigh, fontSize: 22, fontWeight: FontWeight.w700),
+              fontFamily: bodyFont,
+              fontFamilyFallback: fontFallback,
+              color: textHigh,
+              fontSize: 22,
+              fontWeight: FontWeight.w700),
         ),
       );
 }
