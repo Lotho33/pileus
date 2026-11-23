@@ -527,7 +527,11 @@ internal class BetterPlayer(
         )
         exoPlayer?.let { videoOutput.attach(it) }
         frozenHandler.postDelayed(frozenRunnable, FROZEN_CHECK_INTERVAL_MS)
-        setAudioAttributes(exoPlayer, true)
+        // Pileus patch 15: audio focus handled (upstream passed `true`, i.e.
+        // mix with others = no focus): a phone call, the assistant or
+        // another app's audio pauses the video (and a transient loss
+        // resumes it), instead of the system just muting it.
+        setAudioAttributes(exoPlayer, false)
         exoPlayer?.addListener(object : Player.Listener {
             override fun onPlaybackStateChanged(playbackState: Int) {
                 when (playbackState) {

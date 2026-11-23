@@ -73,6 +73,12 @@ the verbatim upstream backport (3):
     live is more than `target + max(target, 12s)` behind the edge, at most
     once every 10s.
 
+15. `BetterPlayer.kt`: `setAudioAttributes(exoPlayer, false)` at creation —
+    ExoPlayer handles audio focus. Upstream created every player with
+    `mixWithOthers = true` (no focus handling), so a phone call only muted
+    the video while it kept playing; now it pauses, and a transient loss
+    (call, assistant) resumes it afterwards.
+
 Upgrading to 2.0.0+: patch 3 is upstream there; re-apply all the others.
 Upgrading: re-copy the new upstream release here and re-apply both patches
 (or drop the fork once upstream fixes 1.).
