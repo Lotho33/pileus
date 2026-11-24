@@ -275,9 +275,16 @@ message BrowseResponse {
 
 message StreamSource {
   string id      = 1;
-  string label   = 2;
+  string label   = 2;  // full name, for a flat list ("Channel A · Server 2")
   string quality = 3;
   bool   is_live = 4;
+  // Where the source sits in a tree of choices, outermost first, ending with
+  // its own name: ["Channel A", "Server 2"]. Empty = a flat list. Sources
+  // sharing a prefix are siblings; the list order is the plugin's order of
+  // preference, so a client falling back after a failure tries the next
+  // source, i.e. the rest of the same group before the next one. Opaque to
+  // the server: any depth, any meaning.
+  repeated string path = 5;
 }
 message StreamsRequest {
   string plugin_id = 1;

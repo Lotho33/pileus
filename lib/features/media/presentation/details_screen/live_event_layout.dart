@@ -100,6 +100,7 @@ class _LiveEventLayoutState extends State<_LiveEventLayout> {
         'isLive': true,
         'liveSources': allIds,
         'liveSourceLabels': allLabels,
+        'liveSourcePaths': _sources.map((s) => s.path.toList()).toList(),
         'livePluginId': widget.pluginId,
         'liveMediaId': item.id,
       },

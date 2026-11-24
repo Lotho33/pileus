@@ -15,6 +15,7 @@ import '../core/perf_profile.dart';
 import '../core/theme/app_theme.dart';
 import '../features/media/bloc/plugin_bloc.dart';
 import '../features/media/data/media_repository.dart';
+import '../features/player/source_tree_list.dart';
 import '../features/player/player_info.dart';
 import '../features/player/presentation/widgets/player_info_panel.dart';
 import '../features/player/bloc/playback_bloc.dart';
@@ -1823,18 +1824,20 @@ class _MobilePlayerViewState extends State<_MobilePlayerView> {
                 ],
                 if (liveSources.length > 1) ...[
                   const _SheetHeader('Sorgente'),
-                  for (var i = 0; i < liveSources.length; i++)
-                    tile(
-                      i < widget.args.liveSourceLabels.length &&
-                              widget.args.liveSourceLabels[i].isNotEmpty
-                          ? widget.args.liveSourceLabels[i]
-                          : 'Sorgente ${i + 1}',
-                      liveSources[i] == _curStreamId,
-                      () {
-                        if (!popIfCurrent(ctx)) return;
-                        _switchLiveSource(i);
-                      },
-                    ),
+                  SourceTreeList(
+                    paths: widget.args.liveSourcePaths,
+                    labels: List.generate(
+                        liveSources.length,
+                        (i) => i < widget.args.liveSourceLabels.length
+                            ? widget.args.liveSourceLabels[i]
+                            : ''),
+                    current: liveSources.indexOf(_curStreamId ?? ''),
+                    dense: true,
+                    onPick: (i) {
+                      if (!popIfCurrent(ctx)) return;
+                      _switchLiveSource(i);
+                    },
+                  ),
                 ],
                 if (video.length > 1) ...[
                   const _SheetHeader('Qualità video'),

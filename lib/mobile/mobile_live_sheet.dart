@@ -9,6 +9,7 @@ import '../core/theme/app_theme.dart';
 import '../core/utils/image_sizing.dart';
 import '../features/media/data/media_repository.dart';
 import '../features/player/resolve_and_play.dart' show PlayerLaunchGuard;
+import '../features/player/source_tree_list.dart';
 import '../shared/sdui/sport_theme.dart'
     show isLiveNow, liveStartAt, liveWhenLabel, livePlotWithoutStatus;
 import 'package:cached_network_image_platform_interface/cached_network_image_platform_interface.dart'
@@ -95,6 +96,7 @@ class _LiveSheetState extends State<_LiveSheet> {
         'isLive': true,
         'liveSources': ids,
         'liveSourceLabels': labels,
+        'liveSourcePaths': _sources.map((s) => s.path.toList()).toList(),
         'livePluginId': widget.pluginId,
         'liveMediaId': widget.item.id,
       },
@@ -256,27 +258,19 @@ class _LiveSheetState extends State<_LiveSheet> {
               )
             else
               Flexible(
-                child: ListView.builder(
-                  shrinkWrap: true,
-                  itemCount: _sources.length,
-                  itemBuilder: (_, i) {
-                    final s = _sources[i];
-                    return ListTile(
-                      contentPadding: EdgeInsets.zero,
-                      leading: const Icon(Icons.play_arrow_rounded,
-                          color: AppTheme.textHigh),
-                      title: Text(s.label,
-                          style: const TextStyle(color: AppTheme.textHigh)),
-                      trailing: i == 0
+                child: SingleChildScrollView(
+                  child: SourceTreeList(
+                    paths: _sources.map((s) => s.path.toList()).toList(),
+                    labels: _sources.map((s) => s.label).toList(),
+                    trailing: (i) => i == 0
                           ? const Text('MIGLIORE',
                               style: TextStyle(
                                   color: AppTheme.textLow,
                                   fontSize: 10,
                                   letterSpacing: 1))
-                          : null,
-                      onTap: () => _play(s),
-                    );
-                  },
+                        : null,
+                    onPick: (i) => _play(_sources[i]),
+                  ),
                 ),
               ),
           ],

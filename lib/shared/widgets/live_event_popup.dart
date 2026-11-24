@@ -19,6 +19,7 @@ import '../sdui/sport_theme.dart'
         livePlotWithoutStatus;
 import 'pileus_spinner.dart';
 import 'tv_focusable.dart';
+import '../../features/player/source_tree.dart';
 import 'package:cached_network_image_platform_interface/cached_network_image_platform_interface.dart'
     show ImageRenderMethodForWeb;
 
@@ -120,6 +121,7 @@ class _LiveEventPopupState extends State<_LiveEventPopup> {
         'isLive': true,
         'liveSources': allIds,
         'liveSourceLabels': allLabels,
+        'liveSourcePaths': _sources.map((s) => s.path.toList()).toList(),
         'livePluginId': widget.pluginId,
         'liveMediaId': item.id,
       },
@@ -571,6 +573,10 @@ class _SourceRows extends StatefulWidget {
 
 class _SourceRowsState extends State<_SourceRows> {
   int _focused = 0;
+  // source_tree.dart: the open group (the first source's to start with).
+  late List<String> _open = groupOf(_paths, 0);
+  List<List<String>> get _paths =>
+      widget.sources.map((s) => s.path.toList()).toList();
   final _scroll = ScrollController();
   // One node per row beyond the first (index 0 always reuses widget.
   // firstFocus when the caller supplies one) — without this, Up/Down
@@ -621,11 +627,16 @@ class _SourceRowsState extends State<_SourceRows> {
                 fontSize: AppScale.space(context, 10),
                 letterSpacing: 1.5)),
         const SizedBox(height: 8),
-        ...List.generate(widget.sources.length, (i) {
-          final src = widget.sources[i];
+        ...() {
+          final paths = _paths;
+          final tree = sourceRows(
+              paths, widget.sources.map((s) => s.label).toList(),
+              open: hasSourceGroups(paths) ? _open : null);
+          return List.generate(tree.length, (i) {
+          final r = tree[i];
           final focused = _focused == i;
           return Padding(
-            padding: const EdgeInsets.only(bottom: 7),
+            padding: EdgeInsets.only(bottom: 7, left: 14.0 * r.depth),
             child: TvFocusable(
               focusNode: _rowFn(i),
               onFocusChange: (v) {
@@ -635,11 +646,13 @@ class _SourceRowsState extends State<_SourceRows> {
                       .addPostFrameCallback((_) => _scrollToItem(i));
                 }
               },
-              onActivate: () => widget.onPlay(src),
+              onActivate: () => r.isGroup
+                  ? setState(() => _open = toggleGroup(_open, r.group))
+                  : widget.onPlay(widget.sources[r.index!]),
               onUp: i == 0
                   ? () => widget.onNavigateUp?.call()
                   : () => _rowFn(i - 1).requestFocus(),
-              onDown: i < widget.sources.length - 1
+              onDown: i < tree.length - 1
                   ? () => _rowFn(i + 1).requestFocus()
                   : null,
               builder: (context, _) => AnimatedContainer(
@@ -659,12 +672,17 @@ class _SourceRowsState extends State<_SourceRows> {
                 ),
                 child: Row(
                   children: [
-                    Icon(Icons.play_arrow_rounded,
+                    Icon(
+                        r.isGroup
+                            ? (groupIsOpen(_open, r.group)
+                                ? Icons.expand_more_rounded
+                                : Icons.chevron_right_rounded)
+                            : Icons.play_arrow_rounded,
                         color: focused ? Colors.white : Colors.white54,
                         size: AppScale.space(context, 20)),
                     const SizedBox(width: 10),
                     Expanded(
-                      child: Text(src.label,
+                      child: Text(r.isGroup ? '${r.title} (${r.count})' : r.title,
                           style: TextStyle(
                             color: focused ? Colors.white : Colors.white70,
                             fontSize: AppScale.space(context, 14),
@@ -672,7 +690,7 @@ class _SourceRowsState extends State<_SourceRows> {
                                 focused ? FontWeight.w600 : FontWeight.normal,
                           )),
                     ),
-                    if (i == 0)
+                    if (r.index == 0)
                       Container(
                         padding: const EdgeInsets.symmetric(
                             horizontal: 6, vertical: 2),
@@ -692,7 +710,8 @@ class _SourceRowsState extends State<_SourceRows> {
               ),
             ),
           );
-        }),
+        });
+        }(),
       ],
     );
 

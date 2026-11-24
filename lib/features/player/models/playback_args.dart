@@ -51,6 +51,9 @@ class PlaybackArgs {
   final int seasonIndex;
   final List<String> liveSources;
   final List<String> liveSourceLabels;
+  // Each live source's path (source_tree.dart), parallel to liveSources;
+  // empty when the plugin gives none.
+  final List<List<String>> liveSourcePaths;
   final String livePluginId;
   final String liveMediaId;
   final String poster;
@@ -103,6 +106,7 @@ class PlaybackArgs {
     this.seasonIndex = 0,
     this.liveSources = const [],
     this.liveSourceLabels = const [],
+    this.liveSourcePaths = const [],
     this.poster = '',
     this.seriesPoster = '',
     this.seriesCoverUrl = '',
@@ -153,6 +157,9 @@ class PlaybackArgs {
       liveSources: (extra?['liveSources'] as List?)?.cast<String>() ?? const [],
       liveSourceLabels:
           (extra?['liveSourceLabels'] as List?)?.cast<String>() ?? const [],
+      liveSourcePaths: ((extra?['liveSourcePaths'] as List?) ?? const [])
+          .map((p) => (p as List?)?.cast<String>() ?? const <String>[])
+          .toList(),
       livePluginId: extra?['livePluginId'] as String? ?? pluginId,
       liveMediaId: extra?['liveMediaId'] as String? ?? mediaId,
       poster: extra?['poster'] as String? ?? '',
@@ -221,6 +228,7 @@ class PlaybackArgs {
       seasonIndex: base.seasonIndex,
       liveSources: base.liveSources,
       liveSourceLabels: base.liveSourceLabels,
+      liveSourcePaths: base.liveSourcePaths,
       poster: base.poster,
       seriesPoster: base.seriesPoster,
       seriesCoverUrl: base.seriesCoverUrl,
@@ -275,6 +283,7 @@ class PlaybackArgs {
       seasonIndex: seasonIndex ?? this.seasonIndex,
       liveSources: liveSources,
       liveSourceLabels: liveSourceLabels,
+      liveSourcePaths: liveSourcePaths,
       poster: (poster != null && poster.isNotEmpty) ? poster : this.poster,
       seriesPoster: seriesPoster,
       seriesCoverUrl: seriesCoverUrl,

@@ -2939,12 +2939,14 @@ class StreamSource extends $pb.GeneratedMessage {
     $core.String? label,
     $core.String? quality,
     $core.bool? isLive,
+    $core.Iterable<$core.String>? path,
   }) {
     final result = StreamSource._();
     if (id != null) result.id = id;
     if (label != null) result.label = label;
     if (quality != null) result.quality = quality;
     if (isLive != null) result.isLive = isLive;
+    if (path != null) result.path.addAll(path);
     return result;
   }
 
@@ -2965,6 +2967,7 @@ class StreamSource extends $pb.GeneratedMessage {
     ..aOS(2, _omitFieldNames ? '' : 'label')
     ..aOS(3, _omitFieldNames ? '' : 'quality')
     ..aOB(4, _omitFieldNames ? '' : 'isLive')
+    ..pPS(5, _omitFieldNames ? '' : 'path')
     ..hasRequiredFields = false;
 
   @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
@@ -3024,6 +3027,9 @@ class StreamSource extends $pb.GeneratedMessage {
   $core.bool hasIsLive() => $_has(3);
   @$pb.TagNumber(4)
   void clearIsLive() => $_clearField(4);
+
+  @$pb.TagNumber(5)
+  $pb.PbList<$core.String> get path => $_getList(4);
 }
 
 class StreamsRequest extends $pb.GeneratedMessage {

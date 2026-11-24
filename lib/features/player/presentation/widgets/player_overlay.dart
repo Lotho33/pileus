@@ -12,6 +12,7 @@ import '../../../../shared/widgets/tv_focusable.dart';
 import '../../engine/player_engine.dart';
 import '../../models/skip_interval.dart';
 import 'player_seek_bar.dart';
+import '../../source_tree.dart';
 
 part 'player_overlay/overlay_state.dart';
 part 'player_overlay/buttons.dart';

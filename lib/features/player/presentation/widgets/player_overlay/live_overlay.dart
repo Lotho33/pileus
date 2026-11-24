@@ -14,6 +14,7 @@ class PlayerLiveOverlay extends StatefulWidget {
   final String sourceLabel;
   final List<String> liveSources;
   final List<String> liveSourceLabels;
+  final List<List<String>> liveSourcePaths;
   final String livePluginId;
   final String liveMediaId;
   final VoidCallback onBack;
@@ -45,6 +46,7 @@ class PlayerLiveOverlay extends StatefulWidget {
     this.sourceLabel = '',
     this.liveSources = const [],
     this.liveSourceLabels = const [],
+    this.liveSourcePaths = const [],
     this.livePluginId = '',
     this.liveMediaId = '',
     this.loading = false,
@@ -282,6 +284,8 @@ class PlayerLiveOverlayState extends State<PlayerLiveOverlay> {
             child: _LiveSourcePanel(
               sources: widget.liveSources,
               labels: widget.liveSourceLabels,
+              paths: widget.liveSourcePaths,
+              current: widget.liveSourceLabels.indexOf(widget.sourceLabel),
               focusedIndex: _focusedSource,
               onFocusChanged: (i) => setState(() => _focusedSource = i),
               onSelect: (i) {
@@ -381,6 +385,10 @@ class _LiveLoadingCenter extends StatelessWidget {
 class _LiveSourcePanel extends StatefulWidget {
   final List<String> sources;
   final List<String> labels;
+  // source_tree.dart: groups to open with OK; empty = the flat list.
+  final List<List<String>> paths;
+  // The source playing (its group opens first), -1 when unknown.
+  final int current;
   final int focusedIndex;
   final void Function(int) onFocusChanged;
   final void Function(int) onSelect;
@@ -389,6 +397,8 @@ class _LiveSourcePanel extends StatefulWidget {
   const _LiveSourcePanel({
     required this.sources,
     required this.labels,
+    this.paths = const [],
+    this.current = -1,
     required this.focusedIndex,
     required this.onFocusChanged,
     required this.onSelect,
@@ -400,33 +410,49 @@ class _LiveSourcePanel extends StatefulWidget {
 }
 
 class _LiveSourcePanelState extends State<_LiveSourcePanel> {
-  late List<FocusNode> _fns =
-      List.generate(widget.sources.length, (_) => FocusNode());
+  late List<String> _open =
+      groupOf(widget.paths, widget.current >= 0 ? widget.current : 0);
+  // One node per visible row, rebuilt when a group opens or closes.
+  List<FocusNode> _fns = [];
+  int _focusedRow = 0;
 
-  @override
-  void didUpdateWidget(_LiveSourcePanel old) {
-    super.didUpdateWidget(old);
-    if (old.sources.length != widget.sources.length) {
-      // Disposing a focused FocusNode doesn't transfer focus anywhere else —
-      // the D-pad would silently stop responding. Same failure mode already
-      // guarded against in _PlayerLiveOverlayState._syncEpisodeNodes above;
-      // not currently reachable (sources are fixed for the screen's
-      // lifetime) but kept consistent in case that ever changes.
-      final hadFocus = anyHasFocus(_fns);
-      for (final n in _fns) {
-        n.dispose();
+  List<SourceRow> get _rows => sourceRows(
+      widget.paths,
+      List.generate(widget.sources.length,
+          (i) => i < widget.labels.length ? widget.labels[i] : widget.sources[i]),
+      open: hasSourceGroups(widget.paths) ? _open : null);
+
+  // A new node per visible row when their number changes. The old nodes are
+  // disposed after the frame (the rows being replaced still hold them), and
+  // focus goes back to the row it was on: a disposed focused node would leave
+  // the D-pad with nothing to move.
+  void _syncNodes(int n) {
+    if (_fns.length == n) return;
+    final old = _fns;
+    final hadFocus = old.isEmpty ? _refocus : anyHasFocus(old);
+    _refocus = false;
+    _fns = List.generate(n, (_) => FocusNode());
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      for (final f in old) {
+        f.dispose();
       }
-      _fns = List.generate(widget.sources.length, (_) => FocusNode());
-      if (hadFocus) {
-        if (_fns.isNotEmpty) {
-          WidgetsBinding.instance.addPostFrameCallback((_) {
-            if (mounted) _fns.first.requestFocus();
-          });
-        } else {
-          widget.onClose();
-        }
+      if (!mounted || !hadFocus) return;
+      if (_fns.isEmpty) {
+        widget.onClose();
+      } else {
+        _fns[_focusedRow.clamp(0, _fns.length - 1)].requestFocus();
       }
-    }
+    });
+  }
+
+  bool _refocus = false;
+
+  void _toggle(SourceRow r, int rowIndex) {
+    setState(() {
+      _open = toggleGroup(_open, r.group);
+      _focusedRow = rowIndex; // the header stays where it was
+      _refocus = anyHasFocus(_fns);
+    });
   }
 
   @override
@@ -439,16 +465,11 @@ class _LiveSourcePanelState extends State<_LiveSourcePanel> {
 
   @override
   Widget build(BuildContext context) {
-    // This panel is Positioned(top: 72, right: 16) with no left/bottom
-    // bound — a bare fixed width had nothing stopping it from extending
-    // past the left edge of a narrow player window, and an unbounded
-    // height meant a source list long enough to reach the bottom of the
-    // screen just overflowed off it with no way to scroll to or reach the
-    // rows below the edge. Capping both against the real screen size
-    // (minus the panel's own offset and a symmetric margin) keeps it
-    // fully on-screen and scrollable instead.
+    final rows = _rows;
+    _syncNodes(rows.length);
+    // Capped to the screen and scrollable (a long list used to run off it).
     final screenSize = MediaQuery.sizeOf(context);
-    final maxW = (screenSize.width - 32.0).clamp(0.0, 280.0);
+    final maxW = (screenSize.width - 32.0).clamp(0.0, 300.0);
     final maxH = (screenSize.height - 72.0 - 16.0).clamp(0.0, double.infinity);
     return Material(
       color: Colors.transparent,
@@ -465,10 +486,7 @@ class _LiveSourcePanelState extends State<_LiveSourcePanel> {
           crossAxisAlignment: CrossAxisAlignment.start,
           mainAxisSize: MainAxisSize.min,
           children: [
-            // No close ("X") button here — on a remote-only interface it
-            // would be unreachable by D-pad (nothing wires an arrow key to
-            // it) and is redundant anyway: every source row below already
-            // closes the panel on escape/back.
+            // No close button: unreachable by D-pad; back closes the panel.
             Text('SORGENTI',
                 style: TextStyle(
                     color: Colors.white54,
@@ -481,8 +499,8 @@ class _LiveSourcePanelState extends State<_LiveSourcePanel> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    for (var i = 0; i < widget.sources.length; i++)
-                      _buildRow(context, i),
+                    for (var i = 0; i < rows.length; i++)
+                      _buildRow(context, rows[i], i, rows.length),
                   ],
                 ),
               ),
@@ -493,30 +511,35 @@ class _LiveSourcePanelState extends State<_LiveSourcePanel> {
     );
   }
 
-  Widget _buildRow(BuildContext context, int i) {
-    final isFocused = widget.focusedIndex == i;
-    final label =
-        i < widget.labels.length ? widget.labels[i] : widget.sources[i];
+  Widget _buildRow(BuildContext context, SourceRow r, int i, int n) {
+    final isFocused = _focusedRow == i;
+    final isCurrent = !r.isGroup && r.index == widget.current;
+    final open = r.isGroup && groupIsOpen(_open, r.group);
     return TvFocusable(
       focusNode: _fns[i],
       autofocus: i == 0,
       onFocusChange: (v) {
-        if (v) widget.onFocusChanged(i);
+        if (!v) return;
+        setState(() => _focusedRow = i);
+        if (!r.isGroup) widget.onFocusChanged(r.index!);
       },
-      onActivate: () => widget.onSelect(i),
+      onActivate: () =>
+          r.isGroup ? _toggle(r, i) : widget.onSelect(r.index!),
       onUp: i > 0 ? () => _fns[i - 1].requestFocus() : null,
-      onDown: i < _fns.length - 1 ? () => _fns[i + 1].requestFocus() : null,
+      onDown: i < n - 1 ? () => _fns[i + 1].requestFocus() : null,
       onEsc: widget.onClose,
       builder: (context, focused) => AnimatedContainer(
         duration: const Duration(milliseconds: 100),
-        margin: EdgeInsets.only(bottom: AppScale.space(context, 6)),
+        margin: EdgeInsets.only(
+            bottom: AppScale.space(context, 6),
+            left: AppScale.space(context, 14) * r.depth),
         padding: EdgeInsets.symmetric(
             horizontal: AppScale.space(context, 12),
             vertical: AppScale.space(context, 10)),
         decoration: BoxDecoration(
           color: isFocused
               ? AppTheme.primary.withValues(alpha: 0.18)
-              : Colors.white.withValues(alpha: 0.04),
+              : Colors.white.withValues(alpha: r.isGroup ? 0.08 : 0.04),
           borderRadius: BorderRadius.circular(8),
           border: Border.all(
             color: isFocused ? AppTheme.primary : Colors.transparent,
@@ -525,24 +548,32 @@ class _LiveSourcePanelState extends State<_LiveSourcePanel> {
         ),
         child: Row(
           children: [
-            Icon(Icons.play_arrow_rounded,
-                color: isFocused ? Colors.white : Colors.white54,
+            Icon(
+                r.isGroup
+                    ? (open
+                        ? Icons.expand_more_rounded
+                        : Icons.chevron_right_rounded)
+                    : (isCurrent
+                        ? Icons.check_rounded
+                        : Icons.play_arrow_rounded),
+                color: isFocused || isCurrent ? Colors.white : Colors.white54,
                 size: AppScale.iconS(context)),
             SizedBox(width: AppScale.space(context, 8)),
             Expanded(
-              child: Text(label,
+              child: Text(r.title,
                   style: TextStyle(
                     color: isFocused ? Colors.white : Colors.white70,
                     fontSize: AppScale.space(context, 14),
-                    fontWeight: isFocused ? FontWeight.w600 : FontWeight.normal,
+                    fontWeight: isFocused || r.isGroup
+                        ? FontWeight.w600
+                        : FontWeight.normal,
                   )),
             ),
-            if (i == 0)
-              Text('HD',
+            if (r.isGroup)
+              Text('${r.count}',
                   style: TextStyle(
                       color: Colors.white38,
-                      fontSize: AppScale.caption(context),
-                      letterSpacing: 1)),
+                      fontSize: AppScale.caption(context))),
           ],
         ),
       ),

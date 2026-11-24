@@ -14,6 +14,7 @@ import '../../features/player/resume_lookup.dart';
 import '../../shared/widgets/my_list_button.dart';
 import '../../features/player/episode_poster.dart';
 import '../../features/player/resolve_and_play.dart';
+import '../../features/player/source_tree_list.dart';
 import '../../shared/widgets/open_catalog_item.dart';
 import '../../shared/utils/tap_guard.dart';
 import 'meta_line.dart';
@@ -361,6 +362,7 @@ class _LivePanelState extends State<_LivePanel> {
         'isLive': true,
         'liveSources': ids,
         'liveSourceLabels': labels,
+        'liveSourcePaths': _sources.map((s) => s.path.toList()).toList(),
         'livePluginId': widget.pluginId,
         'liveMediaId': widget.item.id,
       },
@@ -443,21 +445,12 @@ class _LivePanelState extends State<_LivePanel> {
                 style: TextStyle(color: AppTheme.textMid))
           else
             Flexible(
-              child: ListView.builder(
-                shrinkWrap: true,
-                itemCount: _sources.length,
-                itemBuilder: (_, i) {
-                  final s = _sources[i];
-                  return ListTile(
-                    contentPadding: EdgeInsets.zero,
-                    leading: const Icon(Icons.play_arrow_rounded,
-                        color: AppTheme.textHigh),
-                    title: Text(s.label,
-                        style: const TextStyle(color: AppTheme.textHigh)),
-                    hoverColor: Colors.white10,
-                    onTap: () => _play(s),
-                  );
-                },
+              child: SingleChildScrollView(
+                child: SourceTreeList(
+                  paths: _sources.map((s) => s.path.toList()).toList(),
+                  labels: _sources.map((s) => s.label).toList(),
+                  onPick: (i) => _play(_sources[i]),
+                ),
               ),
             ),
         ],

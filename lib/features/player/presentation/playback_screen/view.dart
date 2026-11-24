@@ -2100,6 +2100,8 @@ class _PlaybackViewState extends State<_PlaybackView> {
                                     liveSources: widget.args.liveSources,
                                     liveSourceLabels:
                                         widget.args.liveSourceLabels,
+                                    liveSourcePaths:
+                                        widget.args.liveSourcePaths,
                                     livePluginId: widget.args.livePluginId,
                                     liveMediaId: widget.args.liveMediaId,
                                     onBack: _exitPlayer,
