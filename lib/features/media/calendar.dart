@@ -105,8 +105,10 @@ String calendarSubtitle(CalendarEntry e) {
   return [badge, ownTitle].where((s) => s.isNotEmpty).join(' · ');
 }
 
-bool calendarIsEpisode(CalendarEntry e) =>
-    e.item.mediaType == 'episode' || e.seriesId.isNotEmpty;
+/// The row's picture is an episode still (landscape) only for an episode
+/// item; a plugin may send the series' own card (its portrait poster) with
+/// `series_id` and the episode number instead.
+bool calendarLandscapeThumb(CalendarEntry e) => e.item.mediaType == 'episode';
 
 /// What a tap opens: the series of an episode, or the title itself — only
 /// once it's available ("Previsto" opens nothing: a date is a plan).

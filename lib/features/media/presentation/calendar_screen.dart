@@ -354,7 +354,7 @@ class _Row extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final e = entry;
-    final episode = calendarIsEpisode(e);
+    final episode = calendarLandscapeThumb(e);
     // A phone: no time column (the time leads the small line) and
     // "Previsto" under the text instead of at the far right.
     final compact = MediaQuery.sizeOf(context).width < 600;
