@@ -157,6 +157,12 @@ class _FixedCarouselViewState extends State<_FixedCarouselView> {
           ? _kVisibleCardsFeatured
           : _kVisibleCards);
 
+  // A Top 10: the cards keep the size of the other rows' and each slot also
+  // holds the number, so fewer slots fit; [_slotW] is the slot's width.
+  bool get _ranked => widget.block.ranked;
+  double _slotW = 0;
+  int _visibleSlots = 0;
+
   // Recomputed every build (cheap arithmetic, no side effects) rather than
   // cached via didChangeDependencies — a host that hands in
   // availableWidthOverride (e.g. the home screen's quick-search panel,
@@ -196,6 +202,10 @@ class _FixedCarouselViewState extends State<_FixedCarouselView> {
     _hPad = hPad;
     _cardH = _cardW * 3 / 2;
     _scaleOvf = _cardH * 0.10;
+    _slotW = _ranked ? rankedSlotWidth(_cardW) : _cardW;
+    _visibleSlots = _ranked
+        ? ((avail + _cardGap) / (_slotW + _cardGap)).floor().clamp(1, 99)
+        : _visibleCards;
   }
 
   @override
@@ -247,22 +257,32 @@ class _FixedCarouselViewState extends State<_FixedCarouselView> {
     }
   }
 
+  // The card as is, or beside its number in a Top 10.
+  Widget _rankedOr(SduiCardItem item, Widget card) => _ranked
+      ? RankedCardSlot(
+          rank: item.rank,
+          cardWidth: _cardW,
+          cardHeight: _cardH,
+          slotHeight: _cardH,
+          card: card)
+      : card;
+
   @override
   Widget build(BuildContext context) {
     _computeDims();
     final items = widget.block.items;
     final slots = _slotCount;
     final scrollIdx =
-        _focusedIndex.clamp(0, (slots - _visibleCards).clamp(0, 9999));
-    final translateX = scrollIdx * (_cardW + _cardGap);
+        _focusedIndex.clamp(0, (slots - _visibleSlots).clamp(0, 9999));
+    final translateX = scrollIdx * (_slotW + _cardGap);
 
     // Windowed rendering: build only visible cards + a small buffer on each side.
     // Single-step navigation always targets an index inside this window, so no
     // frame-delay workaround is needed.
     const kBuf = 3;
     final winStart = (scrollIdx - kBuf).clamp(0, slots);
-    final winEnd = (scrollIdx + _visibleCards + kBuf).clamp(0, slots);
-    final winOffX = winStart * (_cardW + _cardGap);
+    final winEnd = (scrollIdx + _visibleSlots + kBuf).clamp(0, slots);
+    final winOffX = winStart * (_slotW + _cardGap);
 
     final row = Padding(
       padding: EdgeInsets.only(left: _hPad + winOffX),
@@ -274,23 +294,27 @@ class _FixedCarouselViewState extends State<_FixedCarouselView> {
             if (i < items.length)
               RepaintBoundary(
                 key: ValueKey('${widget.block.pluginId}_${items[i].id}_$i'),
-                child: _PosterCardView(
-                  focusNode: _fnAt(i),
-                  item: items[i],
-                  width: _cardW,
-                  height: _cardH,
-                  onTap: () => widget.interaction.onItemTap?.call(items[i].id),
-                  onLongPress: () =>
-                      widget.interaction.onItemLongPress?.call(items[i].id),
-                  onFocused: () => _onCardFocused(i),
-                  onLeft: () => _navigateLeft(i),
-                  onLeftRepeat: () => _navigateLeftRepeat(i),
-                  onRight: () => _navigateRight(i),
-                  onUp: widget.interaction.onNavigateUp,
-                  onDown: widget.interaction.onNavigateDown,
-                  onHoldChanged: widget.interaction.onNavigateHoldChanged,
-                  onEsc: widget.interaction.onEsc ?? widget.interaction.onBack,
-                ),
+                child: _rankedOr(
+                    items[i],
+                    _PosterCardView(
+                      focusNode: _fnAt(i),
+                      item: items[i],
+                      width: _cardW,
+                      height: _cardH,
+                      onTap: () =>
+                          widget.interaction.onItemTap?.call(items[i].id),
+                      onLongPress: () =>
+                          widget.interaction.onItemLongPress?.call(items[i].id),
+                      onFocused: () => _onCardFocused(i),
+                      onLeft: () => _navigateLeft(i),
+                      onLeftRepeat: () => _navigateLeftRepeat(i),
+                      onRight: () => _navigateRight(i),
+                      onUp: widget.interaction.onNavigateUp,
+                      onDown: widget.interaction.onNavigateDown,
+                      onHoldChanged: widget.interaction.onNavigateHoldChanged,
+                      onEsc:
+                          widget.interaction.onEsc ?? widget.interaction.onBack,
+                    )),
               )
             else
               RepaintBoundary(

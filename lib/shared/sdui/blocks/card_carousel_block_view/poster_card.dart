@@ -309,6 +309,10 @@ class _PosterCardViewState extends State<_PosterCardView> {
                       : _PosterFallback(title: widget.item.title),
                   ..._langBadge(widget.item.lang, widget.item.subs),
                   ..._subtypeBadge(widget.item.subtype),
+                  ...cardBadgeOverlay(widget.item.badge,
+                      fontSize:
+                          (MediaQuery.sizeOf(context).height * (11.0 / 1080.0))
+                              .clamp(8.0, 28.0)),
                 ],
               ),
             ),

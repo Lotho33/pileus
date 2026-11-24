@@ -47,6 +47,8 @@ class SduiCardItem {
   final bool isLive; // live-variant "LIVE" badge
   final String sportCat; // live-variant accent color/emoji key
   final DateTime? startsAt; // live-variant, not on air yet: when it starts
+  final String badge; // 'new' | 'new_episode' — card_badge.dart
+  final int rank; // ranked rows: the number beside the card (0 = none)
 
   const SduiCardItem({
     required this.id,
@@ -59,7 +61,24 @@ class SduiCardItem {
     this.isLive = false,
     this.sportCat = '',
     this.startsAt,
+    this.badge = '',
+    this.rank = 0,
   });
+
+  SduiCardItem withRank(int rank) => SduiCardItem(
+        id: id,
+        title: title,
+        imageUrl: imageUrl,
+        lang: lang,
+        subs: subs,
+        subtype: subtype,
+        subtitle: subtitle,
+        isLive: isLive,
+        sportCat: sportCat,
+        startsAt: startsAt,
+        badge: badge,
+        rank: rank,
+      );
 }
 
 class CardCarouselBlock extends SduiBlock {
@@ -76,6 +95,10 @@ class CardCarouselBlock extends SduiBlock {
   /// recognized style_hint value — bigger cards, fewer per row.
   final bool featured;
 
+  /// A Top 10 (`style_hint == "ranked"`): each poster card drawn beside its
+  /// [SduiCardItem.rank], at most kRankedMaxItems cards.
+  final bool ranked;
+
   const CardCarouselBlock({
     required this.sectionId,
     required this.pluginId,
@@ -83,6 +106,7 @@ class CardCarouselBlock extends SduiBlock {
     required this.items,
     required this.isFirstSection,
     this.featured = false,
+    this.ranked = false,
   });
 }
 

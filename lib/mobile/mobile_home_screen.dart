@@ -21,8 +21,10 @@ import '../features/media/bloc/discovery_bloc.dart';
 import '../features/media/bloc/discovery_event.dart';
 import '../features/media/presentation/live_rows_refresher.dart';
 import '../features/media/bloc/discovery_state.dart';
+import '../features/media/catalog_ranking.dart';
 import '../features/media/paging.dart';
 import '../shared/widgets/more_items_tile.dart';
+import '../shared/widgets/rank_number.dart';
 import '../features/media/bloc/plugin_bloc.dart';
 import '../features/media/bloc/plugin_event.dart';
 import '../features/media/bloc/plugin_state.dart';
@@ -545,7 +547,11 @@ class _CatalogRow extends StatelessWidget {
   Widget build(BuildContext context) {
     final landscape = def.cardLayout == 'landscape' || def.type == 'live';
     final cardW = landscape ? 240.0 : 124.0;
-    final rowH = (landscape ? cardW * 9 / 16 : cardW * 3 / 2) + 44;
+    final imgH = landscape ? cardW * 9 / 16 : cardW * 3 / 2;
+    final rowH = imgH + 44;
+    // A Top 10: the first kRankedMaxItems, each beside its number, no more
+    // pages — and its #1 stays even when the hero shows it too.
+    final ranked = isRankedCatalog(def);
 
     return BlocBuilder<DiscoveryBloc, DiscoveryState>(
       bloc: bloc,
@@ -555,18 +561,23 @@ class _CatalogRow extends StatelessWidget {
           var items = s.items;
           // Drop the item promoted to the hero — even when it's the only one
           // in this catalog (else it shows both as hero and as a lone card).
-          if (skipFirst && items.isNotEmpty) items = items.sublist(1);
+          if (ranked) {
+            items = items.take(kRankedMaxItems).toList();
+          } else if (skipFirst && items.isNotEmpty) {
+            items = items.sublist(1);
+          }
           if (items.isEmpty) return const SizedBox.shrink();
           // Further pages load by themselves as the row is scrolled (the
           // list builds cards just before they show), up to kHomeRowMaxItems.
-          final more = showsMoreSlot(s, cap: kHomeRowMaxItems);
+          final more = !ranked && showsMoreSlot(s, cap: kHomeRowMaxItems);
           body = ListView.separated(
             scrollDirection: Axis.horizontal,
             padding: const EdgeInsets.symmetric(horizontal: 16),
             itemCount: items.length + (more ? 1 : 0),
             separatorBuilder: (_, __) => const SizedBox(width: 12),
             itemBuilder: (_, i) {
-              if (nearEnd(i, items.length) &&
+              if (!ranked &&
+                  nearEnd(i, items.length) &&
                   canAutoLoadMore(s, cap: kHomeRowMaxItems)) {
                 bloc.add(LoadMoreCatalogEvent(
                     pluginId: pluginId, catalogId: def.id));
@@ -580,12 +591,19 @@ class _CatalogRow extends StatelessWidget {
                       pluginId: pluginId, catalogId: def.id)),
                 );
               }
-              return MobilePosterCard(
+              final card = MobilePosterCard(
                 pluginId: pluginId,
                 item: items[i],
                 width: cardW,
                 landscape: landscape,
               );
+              return ranked
+                  ? RankedCardSlot(
+                      rank: rankFor(catalogItemRank(items[i]), i),
+                      cardWidth: cardW,
+                      cardHeight: imgH,
+                      card: card)
+                  : card;
             },
           );
         } else if (s is DiscoveryError) {

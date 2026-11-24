@@ -8,6 +8,8 @@ import '../../core/utils/image_sizing.dart';
 import '../../shared/sdui/sport_theme.dart'
     show isLiveNow, liveStartAt, liveWhenShort;
 import '../../shared/widgets/open_catalog_item.dart';
+import '../../features/media/catalog_ranking.dart';
+import '../../shared/widgets/card_badge.dart';
 import '../../shared/widgets/language_badge.dart';
 import '../mobile_item_sheet.dart';
 import '../mobile_live_sheet.dart';
@@ -91,6 +93,7 @@ class MobilePosterCard extends StatelessWidget {
                           subs: item.extra['subs'] ?? '',
                           direction: Axis.vertical),
                     ),
+                    ...cardBadgeOverlay(catalogItemBadge(item), fontSize: 10),
                   ],
                 ),
               ),

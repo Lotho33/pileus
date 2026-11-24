@@ -8,6 +8,8 @@ import '../../core/utils/image_sizing.dart';
 import '../../features/player/episode_poster.dart';
 import '../../features/player/resolve_and_play.dart';
 import '../../shared/widgets/open_catalog_item.dart';
+import '../../features/media/catalog_ranking.dart';
+import '../../shared/widgets/card_badge.dart';
 import '../../shared/widgets/language_badge.dart';
 import 'desktop_dialogs.dart';
 import 'package:cached_network_image_platform_interface/cached_network_image_platform_interface.dart'
@@ -160,6 +162,7 @@ class _DesktopCardState extends State<DesktopCard> {
                                 subs: widget.item.extra['subs'] ?? '',
                                 direction: Axis.vertical),
                           ),
+                          ...cardBadgeOverlay(catalogItemBadge(widget.item)),
                           AnimatedOpacity(
                             opacity: _hover ? 1 : 0,
                             duration: const Duration(milliseconds: 130),

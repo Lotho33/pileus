@@ -310,16 +310,18 @@ class _CatalogSection extends StatelessWidget {
               SduiBlockView(
                 key: ValueKey('carousel_${pluginId}_${catalogDef.id}'),
                 block: block,
-                // Further pages load by themselves, up to kHomeRowMaxItems.
-                carouselLoadMore: showsMoreSlot(state, cap: kHomeRowMaxItems)
-                    ? CarouselLoadMore(
-                        isLoading: state.isLoadingMore,
-                        failed: state.loadMoreFailed,
-                        loadAhead: kLoadAheadItems,
-                        onLoad: () => bloc.add(LoadMoreCatalogEvent(
-                            pluginId: pluginId, catalogId: catalogDef.id)),
-                      )
-                    : null,
+                // Further pages load by themselves, up to kHomeRowMaxItems
+                // (a Top 10 never asks for more).
+                carouselLoadMore:
+                    !block.ranked && showsMoreSlot(state, cap: kHomeRowMaxItems)
+                        ? CarouselLoadMore(
+                            isLoading: state.isLoadingMore,
+                            failed: state.loadMoreFailed,
+                            loadAhead: kLoadAheadItems,
+                            onLoad: () => bloc.add(LoadMoreCatalogEvent(
+                                pluginId: pluginId, catalogId: catalogDef.id)),
+                          )
+                        : null,
                 carouselInteraction: CardCarouselInteraction(
                   onItemFocused: (id) {
                     final item = _findItem(state.items, id);

@@ -18,7 +18,9 @@ import '../features/media/bloc/discovery_event.dart';
 import '../features/media/presentation/live_rows_refresher.dart';
 import '../features/media/bloc/discovery_state.dart';
 import '../features/media/paging.dart';
+import '../features/media/catalog_ranking.dart';
 import '../shared/widgets/more_items_tile.dart';
+import '../shared/widgets/rank_number.dart';
 import '../features/media/data/continue_watching_item.dart';
 import '../features/media/data/media_repository.dart';
 import '../features/player/continue_watching_launch.dart';
@@ -259,6 +261,10 @@ class _CatalogRowView extends StatelessWidget {
     final capH = captionBoxHeight(context, bp.cardTitleSize);
     // + 8 gap + 24 headroom so the hover scale / shadow isn't clipped.
     final rowH = imgH + 8 + capH + 24;
+    // A Top 10: the first kRankedMaxItems, each beside its number, no more
+    // pages — and its #1 stays even when the hero shows it too.
+    final ranked = isRankedCatalog(def);
+    final slotW = ranked ? rankedSlotWidth(cardW) : cardW;
 
     return BlocBuilder<DiscoveryBloc, DiscoveryState>(
       bloc: bloc,
@@ -274,11 +280,15 @@ class _CatalogRowView extends StatelessWidget {
           );
         }
         var items = s.items;
-        if (skipFirst && items.isNotEmpty) items = items.sublist(1);
+        if (ranked) {
+          items = items.take(kRankedMaxItems).toList();
+        } else if (skipFirst && items.isNotEmpty) {
+          items = items.sublist(1);
+        }
         if (items.isEmpty) return const SizedBox.shrink();
         // Further pages load by themselves as the row is scrolled (the list
         // builds cards just before they show), up to kHomeRowMaxItems.
-        final more = showsMoreSlot(s, cap: kHomeRowMaxItems);
+        final more = !ranked && showsMoreSlot(s, cap: kHomeRowMaxItems);
         void loadMore() => bloc
             .add(LoadMoreCatalogEvent(pluginId: pluginId, catalogId: def.id));
         return Padding(
@@ -286,12 +296,13 @@ class _CatalogRowView extends StatelessWidget {
           child: MediaRow(
             title: def.name,
             rowHeight: rowH,
-            pageStep: cardW + 14,
+            pageStep: slotW + 14,
             gutter: bp.gutter,
             titleSize: bp.rowTitleSize,
             itemCount: items.length + (more ? 1 : 0),
             itemBuilder: (_, i) {
-              if (nearEnd(i, items.length) &&
+              if (!ranked &&
+                  nearEnd(i, items.length) &&
                   canAutoLoadMore(s, cap: kHomeRowMaxItems)) {
                 loadMore();
               }
@@ -303,7 +314,7 @@ class _CatalogRowView extends StatelessWidget {
                   onRetry: loadMore,
                 );
               }
-              return DesktopCard(
+              final card = DesktopCard(
                 pluginId: pluginId,
                 item: items[i],
                 width: cardW,
@@ -311,6 +322,13 @@ class _CatalogRowView extends StatelessWidget {
                 titleSize: bp.cardTitleSize,
                 captionHeight: capH,
               );
+              return ranked
+                  ? RankedCardSlot(
+                      rank: rankFor(catalogItemRank(items[i]), i),
+                      cardWidth: cardW,
+                      cardHeight: imgH,
+                      card: card)
+                  : card;
             },
           ),
         );

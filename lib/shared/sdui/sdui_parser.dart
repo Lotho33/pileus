@@ -1,4 +1,5 @@
 import '../../core/grpc/generated/media.pb.dart' show CatalogDef, CatalogItem;
+import '../../features/media/catalog_ranking.dart';
 import 'sdui_block.dart';
 import 'sport_theme.dart' show liveStartAt;
 
@@ -31,13 +32,21 @@ CardCarouselBlock sduiSchemaForCatalogDef(
   required List<CatalogItem> items,
   required bool isFirstSection,
 }) {
+  final ranked = isRankedCatalog(catalogDef);
   return CardCarouselBlock(
     sectionId: '${pluginId}_${catalogDef.id}',
     pluginId: pluginId,
     variant: _variantFor(catalogDef),
-    items: items.map(sduiCardItemFromCatalogItem).toList(growable: false),
+    items: ranked
+        ? [
+            for (var i = 0; i < items.length && i < kRankedMaxItems; i++)
+              sduiCardItemFromCatalogItem(items[i])
+                  .withRank(rankFor(catalogItemRank(items[i]), i)),
+          ]
+        : items.map(sduiCardItemFromCatalogItem).toList(growable: false),
     isFirstSection: isFirstSection,
     featured: isFeaturedCatalog(catalogDef),
+    ranked: ranked,
   );
 }
 
@@ -101,5 +110,6 @@ SduiCardItem sduiCardItemFromCatalogItem(CatalogItem item) {
     isLive: item.extra['is_live'] == '1',
     sportCat: item.extra['sport_cat'] ?? '',
     startsAt: item.extra['is_live'] == '1' ? null : liveStartAt(item.extra),
+    badge: catalogItemBadge(item),
   );
 }
