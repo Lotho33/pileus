@@ -46,6 +46,21 @@ void main() {
     expect(plain.items.first.rank, 0);
   });
 
+  test("the plugin's rank and badge reach the cards", () {
+    final block =
+        sduiSchemaForCatalogDef(CatalogDef(id: 'top', styleHint: 'ranked'),
+            pluginId: 'p',
+            items: [
+              CatalogItem(id: 'a', rank: 2, badge: 'new'),
+              CatalogItem(id: 'b', rank: 3),
+              CatalogItem(id: 'c'),
+            ],
+            isFirstSection: false);
+    expect(block.items.map((i) => i.rank), [2, 3, 3]);
+    expect(block.items.first.badge, 'new');
+    expect(catalogItemBadge(CatalogItem(badge: 'new_episode')), 'new_episode');
+  });
+
   testWidgets('the TV row lays out a Top 10 with its numbers', (t) async {
     t.view.physicalSize = const Size(1920, 1080);
     t.view.devicePixelRatio = 1;

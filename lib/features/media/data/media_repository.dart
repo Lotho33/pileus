@@ -1488,6 +1488,8 @@ class MediaRepository {
               'subs': i.extra['subs'] ?? '',
               'subtype': i.extra['subtype'] ?? '',
               'logo_url': i.logoUrl,
+              'rank': i.rank,
+              'badge': i.badge,
               // Every extra key, not just the ones above: a live row read
               // back from here had lost is_live/sport_cat/the start time —
               // no LIVE badge and no "starts in" until the network answered.
@@ -1541,6 +1543,8 @@ class MediaRepository {
           isDir: m['is_dir'] as bool? ?? false,
           year: m['year'] as int? ?? 0,
           rating: (m['rating'] as num?)?.toDouble() ?? 0.0,
+          rank: m['rank'] as int? ?? 0,
+          badge: m['badge'] as String? ?? '',
           extra: {
             'fanart_url': fanartUrl,
             'genres': genres,

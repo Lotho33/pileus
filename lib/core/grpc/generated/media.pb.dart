@@ -40,6 +40,8 @@ class CatalogItem extends $pb.GeneratedMessage {
     $core.String? logoUrl,
     $core.String? bannerUrl,
     LogoMeta? logoMeta,
+    $core.int? rank,
+    $core.String? badge,
   }) {
     final result = CatalogItem._();
     if (id != null) result.id = id;
@@ -60,6 +62,8 @@ class CatalogItem extends $pb.GeneratedMessage {
     if (logoUrl != null) result.logoUrl = logoUrl;
     if (bannerUrl != null) result.bannerUrl = bannerUrl;
     if (logoMeta != null) result.logoMeta = logoMeta;
+    if (rank != null) result.rank = rank;
+    if (badge != null) result.badge = badge;
     return result;
   }
 
@@ -99,6 +103,8 @@ class CatalogItem extends $pb.GeneratedMessage {
     ..aOS(17, _omitFieldNames ? '' : 'bannerUrl')
     ..aOM<LogoMeta>(18, _omitFieldNames ? '' : 'logoMeta',
         subBuilder: LogoMeta.$_createMessage)
+    ..aI(19, _omitFieldNames ? '' : 'rank')
+    ..aOS(20, _omitFieldNames ? '' : 'badge')
     ..hasRequiredFields = false;
 
   @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
@@ -286,6 +292,30 @@ class CatalogItem extends $pb.GeneratedMessage {
   void clearLogoMeta() => $_clearField(18);
   @$pb.TagNumber(18)
   LogoMeta ensureLogoMeta() => $_ensure(17);
+
+  /// Position in a ranked catalog (style_hint "ranked"), 1-based; 0 = use the
+  /// item's place in the list. Explicit because a plugin may drop items
+  /// already shown in an earlier row, which shifts the places.
+  @$pb.TagNumber(19)
+  $core.int get rank => $_getIZ(18);
+  @$pb.TagNumber(19)
+  set rank($core.int value) => $_setSignedInt32(18, value);
+  @$pb.TagNumber(19)
+  $core.bool hasRank() => $_has(18);
+  @$pb.TagNumber(19)
+  void clearRank() => $_clearField(19);
+
+  /// A label for the card. Documented values: "new" (added recently),
+  /// "new_episode" (a new episode came out recently). Clients ignore values
+  /// they don't know.
+  @$pb.TagNumber(20)
+  $core.String get badge => $_getSZ(19);
+  @$pb.TagNumber(20)
+  set badge($core.String value) => $_setString(19, value);
+  @$pb.TagNumber(20)
+  $core.bool hasBadge() => $_has(19);
+  @$pb.TagNumber(20)
+  void clearBadge() => $_clearField(20);
 }
 
 /// LogoMeta describes a logo_url image, measured by the core the first time
@@ -1635,6 +1665,87 @@ class MovieDetails extends $pb.GeneratedMessage {
   LogoMeta ensureLogoMeta() => $_ensure(13);
 }
 
+class LatestEpisode extends $pb.GeneratedMessage {
+  factory LatestEpisode({
+    $core.int? seasonNumber,
+    $core.int? episodeNumber,
+    $core.String? airDate,
+  }) {
+    final result = LatestEpisode._();
+    if (seasonNumber != null) result.seasonNumber = seasonNumber;
+    if (episodeNumber != null) result.episodeNumber = episodeNumber;
+    if (airDate != null) result.airDate = airDate;
+    return result;
+  }
+
+  LatestEpisode._();
+
+  factory LatestEpisode.fromBuffer($core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      LatestEpisode()..mergeFromBuffer(data, registry);
+  factory LatestEpisode.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      LatestEpisode()..mergeFromJson(json, registry);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'LatestEpisode',
+      package: const $pb.PackageName(_omitMessageNames ? '' : 'mycelium'),
+      createEmptyInstance: LatestEpisode.$_createMessage)
+    ..aI(1, _omitFieldNames ? '' : 'seasonNumber')
+    ..aI(2, _omitFieldNames ? '' : 'episodeNumber')
+    ..aOS(3, _omitFieldNames ? '' : 'airDate')
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  LatestEpisode clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  LatestEpisode copyWith(void Function(LatestEpisode) updates) =>
+      super.copyWith((message) => updates(message as LatestEpisode))
+          as LatestEpisode;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  @$core.Deprecated('Use LatestEpisode() / LatestEpisode.new instead')
+  static LatestEpisode create() => LatestEpisode._();
+  static $pb.GeneratedMessage $_createMessage() => LatestEpisode._();
+  @$core.override
+  LatestEpisode createEmptyInstance() => LatestEpisode._();
+  @$core.pragma('dart2js:noInline')
+  static LatestEpisode getDefault() =>
+      _defaultInstance ??= $pb.GeneratedMessage.$_defaultFor<LatestEpisode>(
+          LatestEpisode.$_createMessage);
+  static LatestEpisode? _defaultInstance;
+
+  @$pb.TagNumber(1)
+  $core.int get seasonNumber => $_getIZ(0);
+  @$pb.TagNumber(1)
+  set seasonNumber($core.int value) => $_setSignedInt32(0, value);
+  @$pb.TagNumber(1)
+  $core.bool hasSeasonNumber() => $_has(0);
+  @$pb.TagNumber(1)
+  void clearSeasonNumber() => $_clearField(1);
+
+  @$pb.TagNumber(2)
+  $core.int get episodeNumber => $_getIZ(1);
+  @$pb.TagNumber(2)
+  set episodeNumber($core.int value) => $_setSignedInt32(1, value);
+  @$pb.TagNumber(2)
+  $core.bool hasEpisodeNumber() => $_has(1);
+  @$pb.TagNumber(2)
+  void clearEpisodeNumber() => $_clearField(2);
+
+  @$pb.TagNumber(3)
+  $core.String get airDate => $_getSZ(2);
+  @$pb.TagNumber(3)
+  set airDate($core.String value) => $_setString(2, value);
+  @$pb.TagNumber(3)
+  $core.bool hasAirDate() => $_has(2);
+  @$pb.TagNumber(3)
+  void clearAirDate() => $_clearField(3);
+}
+
 class SeriesDetails extends $pb.GeneratedMessage {
   factory SeriesDetails({
     $core.String? plot,
@@ -1653,6 +1764,7 @@ class SeriesDetails extends $pb.GeneratedMessage {
     $core.Iterable<SeasonInfo>? seasons,
     $core.String? logoUrl,
     LogoMeta? logoMeta,
+    LatestEpisode? latestEpisode,
   }) {
     final result = SeriesDetails._();
     if (plot != null) result.plot = plot;
@@ -1671,6 +1783,7 @@ class SeriesDetails extends $pb.GeneratedMessage {
     if (seasons != null) result.seasons.addAll(seasons);
     if (logoUrl != null) result.logoUrl = logoUrl;
     if (logoMeta != null) result.logoMeta = logoMeta;
+    if (latestEpisode != null) result.latestEpisode = latestEpisode;
     return result;
   }
 
@@ -1705,6 +1818,8 @@ class SeriesDetails extends $pb.GeneratedMessage {
     ..aOS(15, _omitFieldNames ? '' : 'logoUrl')
     ..aOM<LogoMeta>(16, _omitFieldNames ? '' : 'logoMeta',
         subBuilder: LogoMeta.$_createMessage)
+    ..aOM<LatestEpisode>(17, _omitFieldNames ? '' : 'latestEpisode',
+        subBuilder: LatestEpisode.$_createMessage)
     ..hasRequiredFields = false;
 
   @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
@@ -1850,6 +1965,19 @@ class SeriesDetails extends $pb.GeneratedMessage {
   void clearLogoMeta() => $_clearField(16);
   @$pb.TagNumber(16)
   LogoMeta ensureLogoMeta() => $_ensure(15);
+
+  /// The latest episode out (unset when the plugin doesn't say): lets the
+  /// server tell a profile following the series that a new one is there.
+  @$pb.TagNumber(17)
+  LatestEpisode get latestEpisode => $_getN(16);
+  @$pb.TagNumber(17)
+  set latestEpisode(LatestEpisode value) => $_setField(17, value);
+  @$pb.TagNumber(17)
+  $core.bool hasLatestEpisode() => $_has(16);
+  @$pb.TagNumber(17)
+  void clearLatestEpisode() => $_clearField(17);
+  @$pb.TagNumber(17)
+  LatestEpisode ensureLatestEpisode() => $_ensure(16);
 }
 
 class EpisodeDetails extends $pb.GeneratedMessage {
@@ -3028,6 +3156,12 @@ class StreamSource extends $pb.GeneratedMessage {
   @$pb.TagNumber(4)
   void clearIsLive() => $_clearField(4);
 
+  /// Where the source sits in a tree of choices, outermost first, ending with
+  /// its own name: ["Channel A", "Server 2"]. Empty = a flat list. Sources
+  /// sharing a prefix are siblings; the list order is the plugin's order of
+  /// preference, so a client falling back after a failure tries the next
+  /// source, i.e. the rest of the same group before the next one. Opaque to
+  /// the server: any depth, any meaning.
   @$pb.TagNumber(5)
   $pb.PbList<$core.String> get path => $_getList(4);
 }
@@ -4211,6 +4345,7 @@ class ContinueWatchingItem extends $pb.GeneratedMessage {
     $core.int? year,
     $core.int? seasonNumber,
     $core.int? episodeNumber,
+    $core.String? badge,
   }) {
     final result = ContinueWatchingItem._();
     if (pluginId != null) result.pluginId = pluginId;
@@ -4228,6 +4363,7 @@ class ContinueWatchingItem extends $pb.GeneratedMessage {
     if (year != null) result.year = year;
     if (seasonNumber != null) result.seasonNumber = seasonNumber;
     if (episodeNumber != null) result.episodeNumber = episodeNumber;
+    if (badge != null) result.badge = badge;
     return result;
   }
 
@@ -4259,6 +4395,7 @@ class ContinueWatchingItem extends $pb.GeneratedMessage {
     ..aI(13, _omitFieldNames ? '' : 'year')
     ..aI(14, _omitFieldNames ? '' : 'seasonNumber')
     ..aI(15, _omitFieldNames ? '' : 'episodeNumber')
+    ..aOS(16, _omitFieldNames ? '' : 'badge')
     ..hasRequiredFields = false;
 
   @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
@@ -4412,6 +4549,17 @@ class ContinueWatchingItem extends $pb.GeneratedMessage {
   $core.bool hasEpisodeNumber() => $_has(14);
   @$pb.TagNumber(15)
   void clearEpisodeNumber() => $_clearField(15);
+
+  /// "new_episode" when the series got an episode after this profile last
+  /// watched it (see GetNewEpisodes); empty otherwise.
+  @$pb.TagNumber(16)
+  $core.String get badge => $_getSZ(15);
+  @$pb.TagNumber(16)
+  set badge($core.String value) => $_setString(15, value);
+  @$pb.TagNumber(16)
+  $core.bool hasBadge() => $_has(15);
+  @$pb.TagNumber(16)
+  void clearBadge() => $_clearField(16);
 }
 
 class ContinueWatchingRequest extends $pb.GeneratedMessage {
@@ -7281,6 +7429,7 @@ class MyListItem extends $pb.GeneratedMessage {
     $fixnum.Int64? addedAt,
     $core.Iterable<$core.MapEntry<$core.String, $core.String>>? extra,
     LogoMeta? logoMeta,
+    $core.String? badge,
   }) {
     final result = MyListItem._();
     if (pluginId != null) result.pluginId = pluginId;
@@ -7295,6 +7444,7 @@ class MyListItem extends $pb.GeneratedMessage {
     if (addedAt != null) result.addedAt = addedAt;
     if (extra != null) result.extra.addEntries(extra);
     if (logoMeta != null) result.logoMeta = logoMeta;
+    if (badge != null) result.badge = badge;
     return result;
   }
 
@@ -7328,6 +7478,7 @@ class MyListItem extends $pb.GeneratedMessage {
         packageName: const $pb.PackageName('mycelium'))
     ..aOM<LogoMeta>(12, _omitFieldNames ? '' : 'logoMeta',
         subBuilder: LogoMeta.$_createMessage)
+    ..aOS(13, _omitFieldNames ? '' : 'badge')
     ..hasRequiredFields = false;
 
   @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
@@ -7455,6 +7606,17 @@ class MyListItem extends $pb.GeneratedMessage {
   void clearLogoMeta() => $_clearField(12);
   @$pb.TagNumber(12)
   LogoMeta ensureLogoMeta() => $_ensure(11);
+
+  /// "new_episode" for a series with an episode out since it was added or
+  /// last watched (see GetNewEpisodes); empty otherwise.
+  @$pb.TagNumber(13)
+  $core.String get badge => $_getSZ(12);
+  @$pb.TagNumber(13)
+  set badge($core.String value) => $_setString(12, value);
+  @$pb.TagNumber(13)
+  $core.bool hasBadge() => $_has(12);
+  @$pb.TagNumber(13)
+  void clearBadge() => $_clearField(13);
 }
 
 /// Empty plugin_id = every plugin, most recently added first.
@@ -7699,6 +7861,245 @@ class SetMyListItemResponse extends $pb.GeneratedMessage {
   $core.bool hasOk() => $_has(0);
   @$pb.TagNumber(1)
   void clearOk() => $_clearField(1);
+}
+
+/// New episodes of the series this profile follows (in its list, or watched):
+/// the server checks each followed series once a day (the plugin's
+/// SeriesDetails.latest_episode) and lists the ones with an episode out after
+/// the profile last watched them — or added them, if never watched — and
+/// past where it got to. An entry stays NEW_EPISODES_DAYS (14) days, or until
+/// the profile watches that episode.
+class NewEpisodesRequest extends $pb.GeneratedMessage {
+  factory NewEpisodesRequest() => NewEpisodesRequest._();
+
+  NewEpisodesRequest._();
+
+  factory NewEpisodesRequest.fromBuffer($core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      NewEpisodesRequest()..mergeFromBuffer(data, registry);
+  factory NewEpisodesRequest.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      NewEpisodesRequest()..mergeFromJson(json, registry);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'NewEpisodesRequest',
+      package: const $pb.PackageName(_omitMessageNames ? '' : 'mycelium'),
+      createEmptyInstance: NewEpisodesRequest.$_createMessage)
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  NewEpisodesRequest clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  NewEpisodesRequest copyWith(void Function(NewEpisodesRequest) updates) =>
+      super.copyWith((message) => updates(message as NewEpisodesRequest))
+          as NewEpisodesRequest;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  @$core.Deprecated('Use NewEpisodesRequest() / NewEpisodesRequest.new instead')
+  static NewEpisodesRequest create() => NewEpisodesRequest._();
+  static $pb.GeneratedMessage $_createMessage() => NewEpisodesRequest._();
+  @$core.override
+  NewEpisodesRequest createEmptyInstance() => NewEpisodesRequest._();
+  @$core.pragma('dart2js:noInline')
+  static NewEpisodesRequest getDefault() => _defaultInstance ??=
+      $pb.GeneratedMessage.$_defaultFor<NewEpisodesRequest>(
+          NewEpisodesRequest.$_createMessage);
+  static NewEpisodesRequest? _defaultInstance;
+}
+
+class NewEpisode extends $pb.GeneratedMessage {
+  factory NewEpisode({
+    $core.String? pluginId,
+    $core.String? seriesId,
+    $core.String? title,
+    $core.String? posterUrl,
+    $core.int? seasonNumber,
+    $core.int? episodeNumber,
+    $core.String? airDate,
+    $fixnum.Int64? foundAt,
+  }) {
+    final result = NewEpisode._();
+    if (pluginId != null) result.pluginId = pluginId;
+    if (seriesId != null) result.seriesId = seriesId;
+    if (title != null) result.title = title;
+    if (posterUrl != null) result.posterUrl = posterUrl;
+    if (seasonNumber != null) result.seasonNumber = seasonNumber;
+    if (episodeNumber != null) result.episodeNumber = episodeNumber;
+    if (airDate != null) result.airDate = airDate;
+    if (foundAt != null) result.foundAt = foundAt;
+    return result;
+  }
+
+  NewEpisode._();
+
+  factory NewEpisode.fromBuffer($core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      NewEpisode()..mergeFromBuffer(data, registry);
+  factory NewEpisode.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      NewEpisode()..mergeFromJson(json, registry);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'NewEpisode',
+      package: const $pb.PackageName(_omitMessageNames ? '' : 'mycelium'),
+      createEmptyInstance: NewEpisode.$_createMessage)
+    ..aOS(1, _omitFieldNames ? '' : 'pluginId')
+    ..aOS(2, _omitFieldNames ? '' : 'seriesId')
+    ..aOS(3, _omitFieldNames ? '' : 'title')
+    ..aOS(4, _omitFieldNames ? '' : 'posterUrl')
+    ..aI(5, _omitFieldNames ? '' : 'seasonNumber')
+    ..aI(6, _omitFieldNames ? '' : 'episodeNumber')
+    ..aOS(7, _omitFieldNames ? '' : 'airDate')
+    ..aInt64(8, _omitFieldNames ? '' : 'foundAt')
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  NewEpisode clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  NewEpisode copyWith(void Function(NewEpisode) updates) =>
+      super.copyWith((message) => updates(message as NewEpisode)) as NewEpisode;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  @$core.Deprecated('Use NewEpisode() / NewEpisode.new instead')
+  static NewEpisode create() => NewEpisode._();
+  static $pb.GeneratedMessage $_createMessage() => NewEpisode._();
+  @$core.override
+  NewEpisode createEmptyInstance() => NewEpisode._();
+  @$core.pragma('dart2js:noInline')
+  static NewEpisode getDefault() => _defaultInstance ??=
+      $pb.GeneratedMessage.$_defaultFor<NewEpisode>(NewEpisode.$_createMessage);
+  static NewEpisode? _defaultInstance;
+
+  @$pb.TagNumber(1)
+  $core.String get pluginId => $_getSZ(0);
+  @$pb.TagNumber(1)
+  set pluginId($core.String value) => $_setString(0, value);
+  @$pb.TagNumber(1)
+  $core.bool hasPluginId() => $_has(0);
+  @$pb.TagNumber(1)
+  void clearPluginId() => $_clearField(1);
+
+  @$pb.TagNumber(2)
+  $core.String get seriesId => $_getSZ(1);
+  @$pb.TagNumber(2)
+  set seriesId($core.String value) => $_setString(1, value);
+  @$pb.TagNumber(2)
+  $core.bool hasSeriesId() => $_has(1);
+  @$pb.TagNumber(2)
+  void clearSeriesId() => $_clearField(2);
+
+  @$pb.TagNumber(3)
+  $core.String get title => $_getSZ(2);
+  @$pb.TagNumber(3)
+  set title($core.String value) => $_setString(2, value);
+  @$pb.TagNumber(3)
+  $core.bool hasTitle() => $_has(2);
+  @$pb.TagNumber(3)
+  void clearTitle() => $_clearField(3);
+
+  @$pb.TagNumber(4)
+  $core.String get posterUrl => $_getSZ(3);
+  @$pb.TagNumber(4)
+  set posterUrl($core.String value) => $_setString(3, value);
+  @$pb.TagNumber(4)
+  $core.bool hasPosterUrl() => $_has(3);
+  @$pb.TagNumber(4)
+  void clearPosterUrl() => $_clearField(4);
+
+  @$pb.TagNumber(5)
+  $core.int get seasonNumber => $_getIZ(4);
+  @$pb.TagNumber(5)
+  set seasonNumber($core.int value) => $_setSignedInt32(4, value);
+  @$pb.TagNumber(5)
+  $core.bool hasSeasonNumber() => $_has(4);
+  @$pb.TagNumber(5)
+  void clearSeasonNumber() => $_clearField(5);
+
+  @$pb.TagNumber(6)
+  $core.int get episodeNumber => $_getIZ(5);
+  @$pb.TagNumber(6)
+  set episodeNumber($core.int value) => $_setSignedInt32(5, value);
+  @$pb.TagNumber(6)
+  $core.bool hasEpisodeNumber() => $_has(5);
+  @$pb.TagNumber(6)
+  void clearEpisodeNumber() => $_clearField(6);
+
+  @$pb.TagNumber(7)
+  $core.String get airDate => $_getSZ(6);
+  @$pb.TagNumber(7)
+  set airDate($core.String value) => $_setString(6, value);
+  @$pb.TagNumber(7)
+  $core.bool hasAirDate() => $_has(6);
+  @$pb.TagNumber(7)
+  void clearAirDate() => $_clearField(7);
+
+  @$pb.TagNumber(8)
+  $fixnum.Int64 get foundAt => $_getI64(7);
+  @$pb.TagNumber(8)
+  set foundAt($fixnum.Int64 value) => $_setInt64(7, value);
+  @$pb.TagNumber(8)
+  $core.bool hasFoundAt() => $_has(7);
+  @$pb.TagNumber(8)
+  void clearFoundAt() => $_clearField(8);
+}
+
+class NewEpisodesResponse extends $pb.GeneratedMessage {
+  factory NewEpisodesResponse({
+    $core.Iterable<NewEpisode>? items,
+  }) {
+    final result = NewEpisodesResponse._();
+    if (items != null) result.items.addAll(items);
+    return result;
+  }
+
+  NewEpisodesResponse._();
+
+  factory NewEpisodesResponse.fromBuffer($core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      NewEpisodesResponse()..mergeFromBuffer(data, registry);
+  factory NewEpisodesResponse.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      NewEpisodesResponse()..mergeFromJson(json, registry);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'NewEpisodesResponse',
+      package: const $pb.PackageName(_omitMessageNames ? '' : 'mycelium'),
+      createEmptyInstance: NewEpisodesResponse.$_createMessage)
+    ..pPM<NewEpisode>(1, _omitFieldNames ? '' : 'items',
+        subBuilder: NewEpisode.$_createMessage)
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  NewEpisodesResponse clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  NewEpisodesResponse copyWith(void Function(NewEpisodesResponse) updates) =>
+      super.copyWith((message) => updates(message as NewEpisodesResponse))
+          as NewEpisodesResponse;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  @$core
+      .Deprecated('Use NewEpisodesResponse() / NewEpisodesResponse.new instead')
+  static NewEpisodesResponse create() => NewEpisodesResponse._();
+  static $pb.GeneratedMessage $_createMessage() => NewEpisodesResponse._();
+  @$core.override
+  NewEpisodesResponse createEmptyInstance() => NewEpisodesResponse._();
+  @$core.pragma('dart2js:noInline')
+  static NewEpisodesResponse getDefault() => _defaultInstance ??=
+      $pb.GeneratedMessage.$_defaultFor<NewEpisodesResponse>(
+          NewEpisodesResponse.$_createMessage);
+  static NewEpisodesResponse? _defaultInstance;
+
+  @$pb.TagNumber(1)
+  $pb.PbList<NewEpisode> get items => $_getList(0);
 }
 
 const $core.bool _omitFieldNames =

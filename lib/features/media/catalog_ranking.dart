@@ -12,13 +12,9 @@ const kRankedMaxItems = 10;
 
 bool isRankedCatalog(CatalogDef def) => def.styleHint == 'ranked';
 
-/// The item's `rank` field. 0 until the bindings are regenerated from the
-/// 2.0.1 media.proto — then `item.rank`.
-int catalogItemRank(CatalogItem item) => 0;
+int catalogItemRank(CatalogItem item) => item.rank;
 
-/// The item's `badge` field. '' until the bindings are regenerated from the
-/// 2.0.1 media.proto — then `item.badge`.
-String catalogItemBadge(CatalogItem item) => '';
+String catalogItemBadge(CatalogItem item) => item.badge;
 
 /// The number to draw for the item at [index] (0-based) of a ranked row.
 int rankFor(int rank, int index) => rank > 0 ? rank : index + 1;

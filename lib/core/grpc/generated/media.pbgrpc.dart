@@ -305,6 +305,13 @@ class MediaPipelineClient extends $grpc.Client {
     return $createUnaryCall(_$setMyListItem, request, options: options);
   }
 
+  $grpc.ResponseFuture<$0.NewEpisodesResponse> getNewEpisodes(
+    $0.NewEpisodesRequest request, {
+    $grpc.CallOptions? options,
+  }) {
+    return $createUnaryCall(_$getNewEpisodes, request, options: options);
+  }
+
   // method descriptors
 
   static final _$getCatalog =
@@ -417,6 +424,11 @@ class MediaPipelineClient extends $grpc.Client {
           '/mycelium.MediaPipeline/SetMyListItem',
           ($0.SetMyListItemRequest value) => value.writeToBuffer(),
           $0.SetMyListItemResponse.fromBuffer);
+  static final _$getNewEpisodes =
+      $grpc.ClientMethod<$0.NewEpisodesRequest, $0.NewEpisodesResponse>(
+          '/mycelium.MediaPipeline/GetNewEpisodes',
+          ($0.NewEpisodesRequest value) => value.writeToBuffer(),
+          $0.NewEpisodesResponse.fromBuffer);
 }
 
 @$pb.GrpcServiceName('mycelium.MediaPipeline')
@@ -601,6 +613,15 @@ abstract class MediaPipelineServiceBase extends $grpc.Service {
             ($core.List<$core.int> value) =>
                 $0.SetMyListItemRequest.fromBuffer(value),
             ($0.SetMyListItemResponse value) => value.writeToBuffer()));
+    $addMethod(
+        $grpc.ServiceMethod<$0.NewEpisodesRequest, $0.NewEpisodesResponse>(
+            'GetNewEpisodes',
+            getNewEpisodes_Pre,
+            false,
+            false,
+            ($core.List<$core.int> value) =>
+                $0.NewEpisodesRequest.fromBuffer(value),
+            ($0.NewEpisodesResponse value) => value.writeToBuffer()));
   }
 
   $async.Future<$0.CatalogResponse> getCatalog_Pre($grpc.ServiceCall $call,
@@ -790,4 +811,13 @@ abstract class MediaPipelineServiceBase extends $grpc.Service {
 
   $async.Future<$0.SetMyListItemResponse> setMyListItem(
       $grpc.ServiceCall call, $0.SetMyListItemRequest request);
+
+  $async.Future<$0.NewEpisodesResponse> getNewEpisodes_Pre(
+      $grpc.ServiceCall $call,
+      $async.Future<$0.NewEpisodesRequest> $request) async {
+    return getNewEpisodes($call, await $request);
+  }
+
+  $async.Future<$0.NewEpisodesResponse> getNewEpisodes(
+      $grpc.ServiceCall call, $0.NewEpisodesRequest request);
 }
