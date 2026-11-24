@@ -1252,6 +1252,22 @@ class MediaRepository {
   /// server — or queued because the server didn't answer (see
   /// [_cwPendingPrefix]); false only when the session or the profile lock
   /// refused it, which nothing queued could fix.
+  /// The release calendar from today for [days] days, every plugin
+  /// (calendar.dart). Errors are the caller's to show.
+  Future<CalendarResponse> getCalendar(
+      {int days = 14, bool followedOnly = false}) {
+    String ymd(DateTime d) => '${d.year.toString().padLeft(4, '0')}-'
+        '${d.month.toString().padLeft(2, '0')}-'
+        '${d.day.toString().padLeft(2, '0')}';
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    return _client.getCalendar(CalendarRequest(
+      from: ymd(today),
+      to: ymd(DateTime(today.year, today.month, today.day + days - 1)),
+      followedOnly: followedOnly,
+    ));
+  }
+
   /// The profile's "La mia lista", most recently added first.
   Future<List<MyListItem>> getMyList() async =>
       (await _client.getMyList(MyListRequest())).items;

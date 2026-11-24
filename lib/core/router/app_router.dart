@@ -18,6 +18,7 @@ import '../../features/media/presentation/browse_screen.dart';
 import '../../features/media/presentation/details_screen.dart';
 import '../../features/media/presentation/episode_detail_screen.dart';
 import '../../features/media/presentation/home_screen.dart';
+import '../../features/media/presentation/calendar_screen.dart';
 import '../../features/media/presentation/my_list_screen.dart';
 import '../../features/media/presentation/plugin_settings_screen.dart';
 import '../../features/media/presentation/search_screen.dart';
@@ -174,6 +175,10 @@ final GoRouter appRouter = GoRouter(
     GoRoute(
       path: '/mylist',
       pageBuilder: (_, state) => _fadePage(state, const MyListScreen()),
+    ),
+    GoRoute(
+      path: '/calendar',
+      pageBuilder: (_, state) => _fadePage(state, const CalendarScreen()),
     ),
     GoRoute(
       path: '/settings',

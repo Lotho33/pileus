@@ -210,13 +210,14 @@ class PluginNav extends StatefulWidget {
 class _PluginNavState extends State<PluginNav> {
   final FocusNode _settingsFn = FocusNode();
   final FocusNode _myListFn = FocusNode();
+  final FocusNode _calendarFn = FocusNode();
 
-  // The entries under the plugin list; "La mia lista" is absent on a server
-  // without the feature.
+  // The entries under the plugin list: "La mia lista" (absent on a server
+  // without the feature), "Calendario", "Impostazioni".
   void _focusBelowPlugins() =>
-      (MyList.instance.supported ? _myListFn : _settingsFn).requestFocus();
+      (MyList.instance.supported ? _myListFn : _calendarFn).requestFocus();
 
-  void _focusAboveSettings() {
+  void _focusAboveCalendar() {
     if (MyList.instance.supported) {
       _myListFn.requestFocus();
     } else if (widget.pluginFocusNodes.isNotEmpty) {
@@ -224,10 +225,13 @@ class _PluginNavState extends State<PluginNav> {
     }
   }
 
+  void _focusAboveSettings() => _calendarFn.requestFocus();
+
   @override
   void dispose() {
     _settingsFn.dispose();
     _myListFn.dispose();
+    _calendarFn.dispose();
     super.dispose();
   }
 
@@ -343,10 +347,20 @@ class _PluginNavState extends State<PluginNav> {
                   onFocusUp: widget.pluginFocusNodes.isNotEmpty
                       ? () => widget.pluginFocusNodes.last.requestFocus()
                       : null,
-                  onFocusDown: () => _settingsFn.requestFocus(),
+                  onFocusDown: () => _calendarFn.requestFocus(),
                   onNavigateRight: widget.onClose,
                   onEsc: widget.onClose,
                 ),
+        ),
+        _NavAction(
+          icon: Icons.event_rounded,
+          label: 'Calendario',
+          focusNode: _calendarFn,
+          onTap: () => context.push('/calendar'),
+          onFocusUp: _focusAboveCalendar,
+          onFocusDown: () => _settingsFn.requestFocus(),
+          onNavigateRight: widget.onClose,
+          onEsc: widget.onClose,
         ),
         _NavAction(
           icon: Icons.settings_rounded,

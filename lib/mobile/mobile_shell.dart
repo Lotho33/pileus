@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 
 import '../core/theme/app_theme.dart';
 import '../core/utils/metrics.dart';
+import '../features/media/presentation/calendar_screen.dart';
 import '../shared/widgets/offline_banner.dart';
 import 'mobile_home_screen.dart';
 import 'mobile_search_screen.dart';
@@ -23,6 +24,10 @@ class MobileShell extends StatefulWidget {
 
 class _MobileShellState extends State<MobileShell> {
   late int _tab = widget.initialTab;
+  // The calendar tab is built when first opened (no request at start-up)
+  // and reloads each time it's selected again.
+  static const _calendarTab = 3;
+  int _calendarVisits = 0;
   DateTime? _lastBack;
 
   @override
@@ -68,6 +73,10 @@ class _MobileShellState extends State<MobileShell> {
                 const MobileHomeScreen(),
                 MobileSearchScreen(visible: _tab == 1),
                 const MobileMyListScreen(),
+                _calendarVisits == 0
+                    ? const SizedBox.shrink()
+                    : CalendarScreen(
+                        key: ValueKey(_calendarVisits), embedded: true),
                 const MobileSettingsScreen(),
               ],
             ),
@@ -93,7 +102,10 @@ class _MobileShellState extends State<MobileShell> {
           child: NavigationBar(
             height: 62,
             selectedIndex: _tab,
-            onDestinationSelected: (i) => setState(() => _tab = i),
+            onDestinationSelected: (i) => setState(() {
+              if (i == _calendarTab) _calendarVisits++;
+              _tab = i;
+            }),
             destinations: const [
               NavigationDestination(
                 icon: Icon(Icons.home_outlined, color: AppTheme.textMid),
@@ -113,6 +125,12 @@ class _MobileShellState extends State<MobileShell> {
                 selectedIcon:
                     Icon(Icons.bookmark_rounded, color: AppTheme.textHigh),
                 label: 'La mia lista',
+              ),
+              NavigationDestination(
+                icon: Icon(Icons.event_outlined, color: AppTheme.textMid),
+                selectedIcon:
+                    Icon(Icons.event_rounded, color: AppTheme.textHigh),
+                label: 'Calendario',
               ),
               NavigationDestination(
                 icon: Icon(Icons.settings_outlined, color: AppTheme.textMid),

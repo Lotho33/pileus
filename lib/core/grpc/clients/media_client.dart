@@ -16,6 +16,9 @@ export '../generated/media.pbgrpc.dart'
         MyListItem,
         NewEpisode,
         NewEpisodesRequest,
+        CalendarEntry,
+        CalendarRequest,
+        CalendarResponse,
         NewEpisodesResponse,
         MyListRequest,
         MyListResponse,
@@ -266,6 +269,11 @@ class MediaGrpcClient {
   /// episodi" row (new_episodes.dart).
   Future<NewEpisodesResponse> getNewEpisodes() =>
       _mediaStub.getNewEpisodes(NewEpisodesRequest(),
+          options: CallOptions(timeout: _defaultRpcTimeout));
+
+  /// The release calendar, every plugin merged (calendar.dart).
+  Future<CalendarResponse> getCalendar(CalendarRequest request) =>
+      _mediaStub.getCalendar(request,
           options: CallOptions(timeout: _defaultRpcTimeout));
 
   Future<SetMyListItemResponse> setMyListItem(SetMyListItemRequest request) =>

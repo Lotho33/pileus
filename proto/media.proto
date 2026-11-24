@@ -804,6 +804,29 @@ message NewEpisodesResponse {
   repeated NewEpisode items = 1;  // most recent first
 }
 
+// Release calendar: what comes out between two dates, from every plugin with
+// a `calendar` entrypoint, merged by the server. A date is a plan, not a
+// promise: `available` says whether the plugin already has the title.
+message CalendarRequest {
+  string from          = 1;  // "YYYY-MM-DD", inclusive; empty = today
+  string to            = 2;  // "YYYY-MM-DD", inclusive; empty = from + 6 days; at most 31 days
+  string plugin_id     = 3;  // empty = every plugin
+  bool   followed_only = 4;  // only the series this profile follows
+}
+message CalendarEntry {
+  string      plugin_id  = 1;
+  CatalogItem item       = 2;  // the title (an episode: season/episode numbers set)
+  string      release_at = 3;  // RFC 3339 with offset; midnight when all_day
+  bool        all_day    = 4;  // only the date is known
+  bool        available  = 5;  // already in the plugin's catalog (playable)
+  string      series_id  = 6;  // media id of the series, for an episode; else empty
+  bool        followed   = 7;  // this profile follows the series (list or history)
+}
+message CalendarResponse {
+  repeated CalendarEntry entries        = 1;  // by release time
+  repeated string        failed_plugins = 2;  // plugins that didn't answer
+}
+
 service MediaPipeline {
   rpc GetCatalog       (CatalogRequest)        returns (CatalogResponse);
   rpc GetSearchFilters (SearchFiltersRequest)  returns (SearchFiltersResponse);
@@ -828,4 +851,5 @@ service MediaPipeline {
   rpc GetMyList          (MyListRequest)          returns (MyListResponse);
   rpc SetMyListItem      (SetMyListItemRequest)   returns (SetMyListItemResponse);
   rpc GetNewEpisodes     (NewEpisodesRequest)     returns (NewEpisodesResponse);
+  rpc GetCalendar        (CalendarRequest)        returns (CalendarResponse);
 }

@@ -150,6 +150,15 @@ class DesktopNavRail extends StatelessWidget {
                 selected: section == DesktopSection.myList,
                 onTap: () => onSection(DesktopSection.myList),
               ),
+              // A route push like Download: the calendar is its own page.
+              _RailItem(
+                icon: Icons.event_rounded,
+                label: 'Calendario',
+                extended: extended,
+                labelSize: labelSize,
+                selected: false,
+                onTap: () => context.push('/calendar'),
+              ),
               _RailItem(
                 icon: Icons.settings_rounded,
                 label: 'Impostazioni',

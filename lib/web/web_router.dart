@@ -26,6 +26,7 @@ import '../mobile/mobile_preferences_screen.dart';
 import '../mobile/mobile_profile_settings_screen.dart';
 import '../mobile/mobile_settings_screen.dart';
 import '../mobile/mobile_shell.dart';
+import '../features/media/presentation/calendar_screen.dart';
 import 'web_discovery_screen.dart';
 import 'web_playback_screen.dart';
 import 'web_responsive.dart';
@@ -135,6 +136,7 @@ final GoRouter webRouter = GoRouter(
         path: '/settings/plugins',
         builder: (_, __) => const MobilePluginsScreen()),
     GoRoute(path: '/downloads', builder: (_, __) => const DownloadsPage()),
+    GoRoute(path: '/calendar', builder: (_, __) => const CalendarScreen()),
   ],
   errorBuilder: (context, state) => Scaffold(
     backgroundColor: AppTheme.bg,

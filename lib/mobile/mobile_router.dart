@@ -22,6 +22,7 @@ import 'mobile_settings_screen.dart';
 import 'mobile_shell.dart';
 import 'mobile_splash_screen.dart';
 import '../core/utils/perf_probes.dart';
+import '../features/media/presentation/calendar_screen.dart';
 
 /// Mobile router. `/home` is the bottom-nav shell (Home / Cerca /
 /// Impostazioni). Splash, discovery, pairing, profiles, home, search,
@@ -114,6 +115,7 @@ final GoRouter mobileRouter = GoRouter(
         path: '/settings/plugins',
         builder: (_, __) => const MobilePluginsScreen()),
     GoRoute(path: '/downloads', builder: (_, __) => const DownloadsPage()),
+    GoRoute(path: '/calendar', builder: (_, __) => const CalendarScreen()),
   ],
   errorBuilder: (context, state) => Scaffold(
     backgroundColor: const Color(0xFF0D0D1A),

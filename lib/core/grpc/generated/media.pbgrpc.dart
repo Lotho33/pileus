@@ -312,6 +312,13 @@ class MediaPipelineClient extends $grpc.Client {
     return $createUnaryCall(_$getNewEpisodes, request, options: options);
   }
 
+  $grpc.ResponseFuture<$0.CalendarResponse> getCalendar(
+    $0.CalendarRequest request, {
+    $grpc.CallOptions? options,
+  }) {
+    return $createUnaryCall(_$getCalendar, request, options: options);
+  }
+
   // method descriptors
 
   static final _$getCatalog =
@@ -429,6 +436,11 @@ class MediaPipelineClient extends $grpc.Client {
           '/mycelium.MediaPipeline/GetNewEpisodes',
           ($0.NewEpisodesRequest value) => value.writeToBuffer(),
           $0.NewEpisodesResponse.fromBuffer);
+  static final _$getCalendar =
+      $grpc.ClientMethod<$0.CalendarRequest, $0.CalendarResponse>(
+          '/mycelium.MediaPipeline/GetCalendar',
+          ($0.CalendarRequest value) => value.writeToBuffer(),
+          $0.CalendarResponse.fromBuffer);
 }
 
 @$pb.GrpcServiceName('mycelium.MediaPipeline')
@@ -622,6 +634,13 @@ abstract class MediaPipelineServiceBase extends $grpc.Service {
             ($core.List<$core.int> value) =>
                 $0.NewEpisodesRequest.fromBuffer(value),
             ($0.NewEpisodesResponse value) => value.writeToBuffer()));
+    $addMethod($grpc.ServiceMethod<$0.CalendarRequest, $0.CalendarResponse>(
+        'GetCalendar',
+        getCalendar_Pre,
+        false,
+        false,
+        ($core.List<$core.int> value) => $0.CalendarRequest.fromBuffer(value),
+        ($0.CalendarResponse value) => value.writeToBuffer()));
   }
 
   $async.Future<$0.CatalogResponse> getCatalog_Pre($grpc.ServiceCall $call,
@@ -820,4 +839,12 @@ abstract class MediaPipelineServiceBase extends $grpc.Service {
 
   $async.Future<$0.NewEpisodesResponse> getNewEpisodes(
       $grpc.ServiceCall call, $0.NewEpisodesRequest request);
+
+  $async.Future<$0.CalendarResponse> getCalendar_Pre($grpc.ServiceCall $call,
+      $async.Future<$0.CalendarRequest> $request) async {
+    return getCalendar($call, await $request);
+  }
+
+  $async.Future<$0.CalendarResponse> getCalendar(
+      $grpc.ServiceCall call, $0.CalendarRequest request);
 }

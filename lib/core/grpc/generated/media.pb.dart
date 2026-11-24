@@ -8102,6 +8102,292 @@ class NewEpisodesResponse extends $pb.GeneratedMessage {
   $pb.PbList<NewEpisode> get items => $_getList(0);
 }
 
+/// Release calendar: what comes out between two dates, from every plugin with
+/// a `calendar` entrypoint, merged by the server. A date is a plan, not a
+/// promise: `available` says whether the plugin already has the title.
+class CalendarRequest extends $pb.GeneratedMessage {
+  factory CalendarRequest({
+    $core.String? from,
+    $core.String? to,
+    $core.String? pluginId,
+    $core.bool? followedOnly,
+  }) {
+    final result = CalendarRequest._();
+    if (from != null) result.from = from;
+    if (to != null) result.to = to;
+    if (pluginId != null) result.pluginId = pluginId;
+    if (followedOnly != null) result.followedOnly = followedOnly;
+    return result;
+  }
+
+  CalendarRequest._();
+
+  factory CalendarRequest.fromBuffer($core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      CalendarRequest()..mergeFromBuffer(data, registry);
+  factory CalendarRequest.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      CalendarRequest()..mergeFromJson(json, registry);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'CalendarRequest',
+      package: const $pb.PackageName(_omitMessageNames ? '' : 'mycelium'),
+      createEmptyInstance: CalendarRequest.$_createMessage)
+    ..aOS(1, _omitFieldNames ? '' : 'from')
+    ..aOS(2, _omitFieldNames ? '' : 'to')
+    ..aOS(3, _omitFieldNames ? '' : 'pluginId')
+    ..aOB(4, _omitFieldNames ? '' : 'followedOnly')
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  CalendarRequest clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  CalendarRequest copyWith(void Function(CalendarRequest) updates) =>
+      super.copyWith((message) => updates(message as CalendarRequest))
+          as CalendarRequest;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  @$core.Deprecated('Use CalendarRequest() / CalendarRequest.new instead')
+  static CalendarRequest create() => CalendarRequest._();
+  static $pb.GeneratedMessage $_createMessage() => CalendarRequest._();
+  @$core.override
+  CalendarRequest createEmptyInstance() => CalendarRequest._();
+  @$core.pragma('dart2js:noInline')
+  static CalendarRequest getDefault() =>
+      _defaultInstance ??= $pb.GeneratedMessage.$_defaultFor<CalendarRequest>(
+          CalendarRequest.$_createMessage);
+  static CalendarRequest? _defaultInstance;
+
+  @$pb.TagNumber(1)
+  $core.String get from => $_getSZ(0);
+  @$pb.TagNumber(1)
+  set from($core.String value) => $_setString(0, value);
+  @$pb.TagNumber(1)
+  $core.bool hasFrom() => $_has(0);
+  @$pb.TagNumber(1)
+  void clearFrom() => $_clearField(1);
+
+  @$pb.TagNumber(2)
+  $core.String get to => $_getSZ(1);
+  @$pb.TagNumber(2)
+  set to($core.String value) => $_setString(1, value);
+  @$pb.TagNumber(2)
+  $core.bool hasTo() => $_has(1);
+  @$pb.TagNumber(2)
+  void clearTo() => $_clearField(2);
+
+  @$pb.TagNumber(3)
+  $core.String get pluginId => $_getSZ(2);
+  @$pb.TagNumber(3)
+  set pluginId($core.String value) => $_setString(2, value);
+  @$pb.TagNumber(3)
+  $core.bool hasPluginId() => $_has(2);
+  @$pb.TagNumber(3)
+  void clearPluginId() => $_clearField(3);
+
+  @$pb.TagNumber(4)
+  $core.bool get followedOnly => $_getBF(3);
+  @$pb.TagNumber(4)
+  set followedOnly($core.bool value) => $_setBool(3, value);
+  @$pb.TagNumber(4)
+  $core.bool hasFollowedOnly() => $_has(3);
+  @$pb.TagNumber(4)
+  void clearFollowedOnly() => $_clearField(4);
+}
+
+class CalendarEntry extends $pb.GeneratedMessage {
+  factory CalendarEntry({
+    $core.String? pluginId,
+    CatalogItem? item,
+    $core.String? releaseAt,
+    $core.bool? allDay,
+    $core.bool? available,
+    $core.String? seriesId,
+    $core.bool? followed,
+  }) {
+    final result = CalendarEntry._();
+    if (pluginId != null) result.pluginId = pluginId;
+    if (item != null) result.item = item;
+    if (releaseAt != null) result.releaseAt = releaseAt;
+    if (allDay != null) result.allDay = allDay;
+    if (available != null) result.available = available;
+    if (seriesId != null) result.seriesId = seriesId;
+    if (followed != null) result.followed = followed;
+    return result;
+  }
+
+  CalendarEntry._();
+
+  factory CalendarEntry.fromBuffer($core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      CalendarEntry()..mergeFromBuffer(data, registry);
+  factory CalendarEntry.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      CalendarEntry()..mergeFromJson(json, registry);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'CalendarEntry',
+      package: const $pb.PackageName(_omitMessageNames ? '' : 'mycelium'),
+      createEmptyInstance: CalendarEntry.$_createMessage)
+    ..aOS(1, _omitFieldNames ? '' : 'pluginId')
+    ..aOM<CatalogItem>(2, _omitFieldNames ? '' : 'item',
+        subBuilder: CatalogItem.$_createMessage)
+    ..aOS(3, _omitFieldNames ? '' : 'releaseAt')
+    ..aOB(4, _omitFieldNames ? '' : 'allDay')
+    ..aOB(5, _omitFieldNames ? '' : 'available')
+    ..aOS(6, _omitFieldNames ? '' : 'seriesId')
+    ..aOB(7, _omitFieldNames ? '' : 'followed')
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  CalendarEntry clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  CalendarEntry copyWith(void Function(CalendarEntry) updates) =>
+      super.copyWith((message) => updates(message as CalendarEntry))
+          as CalendarEntry;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  @$core.Deprecated('Use CalendarEntry() / CalendarEntry.new instead')
+  static CalendarEntry create() => CalendarEntry._();
+  static $pb.GeneratedMessage $_createMessage() => CalendarEntry._();
+  @$core.override
+  CalendarEntry createEmptyInstance() => CalendarEntry._();
+  @$core.pragma('dart2js:noInline')
+  static CalendarEntry getDefault() =>
+      _defaultInstance ??= $pb.GeneratedMessage.$_defaultFor<CalendarEntry>(
+          CalendarEntry.$_createMessage);
+  static CalendarEntry? _defaultInstance;
+
+  @$pb.TagNumber(1)
+  $core.String get pluginId => $_getSZ(0);
+  @$pb.TagNumber(1)
+  set pluginId($core.String value) => $_setString(0, value);
+  @$pb.TagNumber(1)
+  $core.bool hasPluginId() => $_has(0);
+  @$pb.TagNumber(1)
+  void clearPluginId() => $_clearField(1);
+
+  @$pb.TagNumber(2)
+  CatalogItem get item => $_getN(1);
+  @$pb.TagNumber(2)
+  set item(CatalogItem value) => $_setField(2, value);
+  @$pb.TagNumber(2)
+  $core.bool hasItem() => $_has(1);
+  @$pb.TagNumber(2)
+  void clearItem() => $_clearField(2);
+  @$pb.TagNumber(2)
+  CatalogItem ensureItem() => $_ensure(1);
+
+  @$pb.TagNumber(3)
+  $core.String get releaseAt => $_getSZ(2);
+  @$pb.TagNumber(3)
+  set releaseAt($core.String value) => $_setString(2, value);
+  @$pb.TagNumber(3)
+  $core.bool hasReleaseAt() => $_has(2);
+  @$pb.TagNumber(3)
+  void clearReleaseAt() => $_clearField(3);
+
+  @$pb.TagNumber(4)
+  $core.bool get allDay => $_getBF(3);
+  @$pb.TagNumber(4)
+  set allDay($core.bool value) => $_setBool(3, value);
+  @$pb.TagNumber(4)
+  $core.bool hasAllDay() => $_has(3);
+  @$pb.TagNumber(4)
+  void clearAllDay() => $_clearField(4);
+
+  @$pb.TagNumber(5)
+  $core.bool get available => $_getBF(4);
+  @$pb.TagNumber(5)
+  set available($core.bool value) => $_setBool(4, value);
+  @$pb.TagNumber(5)
+  $core.bool hasAvailable() => $_has(4);
+  @$pb.TagNumber(5)
+  void clearAvailable() => $_clearField(5);
+
+  @$pb.TagNumber(6)
+  $core.String get seriesId => $_getSZ(5);
+  @$pb.TagNumber(6)
+  set seriesId($core.String value) => $_setString(5, value);
+  @$pb.TagNumber(6)
+  $core.bool hasSeriesId() => $_has(5);
+  @$pb.TagNumber(6)
+  void clearSeriesId() => $_clearField(6);
+
+  @$pb.TagNumber(7)
+  $core.bool get followed => $_getBF(6);
+  @$pb.TagNumber(7)
+  set followed($core.bool value) => $_setBool(6, value);
+  @$pb.TagNumber(7)
+  $core.bool hasFollowed() => $_has(6);
+  @$pb.TagNumber(7)
+  void clearFollowed() => $_clearField(7);
+}
+
+class CalendarResponse extends $pb.GeneratedMessage {
+  factory CalendarResponse({
+    $core.Iterable<CalendarEntry>? entries,
+    $core.Iterable<$core.String>? failedPlugins,
+  }) {
+    final result = CalendarResponse._();
+    if (entries != null) result.entries.addAll(entries);
+    if (failedPlugins != null) result.failedPlugins.addAll(failedPlugins);
+    return result;
+  }
+
+  CalendarResponse._();
+
+  factory CalendarResponse.fromBuffer($core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      CalendarResponse()..mergeFromBuffer(data, registry);
+  factory CalendarResponse.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      CalendarResponse()..mergeFromJson(json, registry);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'CalendarResponse',
+      package: const $pb.PackageName(_omitMessageNames ? '' : 'mycelium'),
+      createEmptyInstance: CalendarResponse.$_createMessage)
+    ..pPM<CalendarEntry>(1, _omitFieldNames ? '' : 'entries',
+        subBuilder: CalendarEntry.$_createMessage)
+    ..pPS(2, _omitFieldNames ? '' : 'failedPlugins')
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  CalendarResponse clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  CalendarResponse copyWith(void Function(CalendarResponse) updates) =>
+      super.copyWith((message) => updates(message as CalendarResponse))
+          as CalendarResponse;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  @$core.Deprecated('Use CalendarResponse() / CalendarResponse.new instead')
+  static CalendarResponse create() => CalendarResponse._();
+  static $pb.GeneratedMessage $_createMessage() => CalendarResponse._();
+  @$core.override
+  CalendarResponse createEmptyInstance() => CalendarResponse._();
+  @$core.pragma('dart2js:noInline')
+  static CalendarResponse getDefault() =>
+      _defaultInstance ??= $pb.GeneratedMessage.$_defaultFor<CalendarResponse>(
+          CalendarResponse.$_createMessage);
+  static CalendarResponse? _defaultInstance;
+
+  @$pb.TagNumber(1)
+  $pb.PbList<CalendarEntry> get entries => $_getList(0);
+
+  @$pb.TagNumber(2)
+  $pb.PbList<$core.String> get failedPlugins => $_getList(1);
+}
+
 const $core.bool _omitFieldNames =
     $core.bool.fromEnvironment('protobuf.omit_field_names');
 const $core.bool _omitMessageNames =
