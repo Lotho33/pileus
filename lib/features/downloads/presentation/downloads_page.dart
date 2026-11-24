@@ -199,7 +199,7 @@ class _SeriesCard extends StatelessWidget {
           ),
           child: Row(
             children: [
-              _Poster(url: g.poster),
+              _Poster(url: g.poster, landscape: true),
               const SizedBox(width: 12),
               Expanded(
                 child: Column(
@@ -229,16 +229,19 @@ class _SeriesCard extends StatelessWidget {
   }
 }
 
+/// A download's picture: an episode's still is landscape (16:9) and shows
+/// whole; a film's poster stays portrait.
 class _Poster extends StatelessWidget {
   final String url;
-  const _Poster({required this.url});
+  final bool landscape;
+  const _Poster({required this.url, this.landscape = false});
 
   @override
   Widget build(BuildContext context) => ClipRRect(
         borderRadius: BorderRadius.circular(6),
         child: SizedBox(
-          width: 64,
-          height: 96,
+          width: landscape ? 112 : 64,
+          height: landscape ? 63 : 96,
           // Cached: the poster still shows offline once seen.
           child: url.isNotEmpty
               ? CachedNetworkImage(
@@ -576,23 +579,7 @@ class _DownloadRow extends StatelessWidget {
       ),
       child: Row(
         children: [
-          ClipRRect(
-            borderRadius: BorderRadius.circular(6),
-            child: SizedBox(
-              width: 64,
-              height: 96,
-              // Cached: the poster still shows offline once seen.
-              child: info.poster.isNotEmpty
-                  ? CachedNetworkImage(
-                      imageUrl: info.poster,
-                      fit: BoxFit.cover,
-                      errorWidget: (_, __, ___) =>
-                          const ColoredBox(color: AppTheme.surface2),
-                      placeholder: (_, __) =>
-                          const ColoredBox(color: AppTheme.surface2))
-                  : const ColoredBox(color: AppTheme.surface2),
-            ),
-          ),
+          _Poster(url: info.poster, landscape: info.parentId.isNotEmpty),
           const SizedBox(width: 12),
           Expanded(
             child: Column(
