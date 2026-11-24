@@ -66,6 +66,9 @@ class _QuickSearchAreaState extends State<QuickSearchArea> {
   @override
   void initState() {
     super.initState();
+    VoiceSearch.available().then((v) {
+      if (mounted && v) setState(() => _voice = true);
+    });
     _resultsSub = _bloc.stream.listen((s) {
       if (s is DiscoveryLoaded && s.searchQuery.isNotEmpty) {
         _recent.settled(s.pluginId, s.searchQuery,
@@ -328,6 +331,14 @@ class _QuickSearchAreaState extends State<QuickSearchArea> {
     });
   }
 
+  // The microphone: the system recognizer's words, searched like a recent
+  // search picked from the row.
+  bool _voice = false;
+  Future<void> _listen() async {
+    final text = await VoiceSearch.listen();
+    if (mounted && text != null) _pickRecent(text);
+  }
+
   void _openFullSearch() {
     // Captured before _dismiss() clears the controller. Same reasoning as
     // onItemTap below: without collapsing quick search first, it stays
@@ -392,6 +403,7 @@ class _QuickSearchAreaState extends State<QuickSearchArea> {
                 _keyboardKey.currentState?.firstFocusNode.requestFocus(),
             onDismiss: _dismiss,
             onOpenFilters: _openFullSearch,
+            onVoice: _voice ? _listen : null,
           ),
           AnimatedSwitcher(
             duration: const Duration(milliseconds: 200),

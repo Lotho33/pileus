@@ -10,6 +10,7 @@ import '../../../../core/di/injection.dart';
 import '../../../../core/grpc/clients/media_client.dart' show CatalogItem;
 import '../../../../core/theme/app_scale.dart';
 import '../../../../core/theme/app_theme.dart';
+import '../../../../core/voice_search.dart';
 import '../../../../shared/sdui/blocks/card_carousel_block_view.dart';
 import '../../../../shared/sdui/sdui_block.dart';
 import '../../../../shared/sdui/sdui_parser.dart';

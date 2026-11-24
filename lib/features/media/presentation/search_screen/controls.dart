@@ -46,6 +46,7 @@ class _IconBtn extends StatefulWidget {
   final double size;
   final VoidCallback onTap;
   final FocusNode? focusNode;
+  final VoidCallback? onLeft;
   final VoidCallback? onRight;
   final VoidCallback? onDown;
   const _IconBtn({
@@ -53,6 +54,7 @@ class _IconBtn extends StatefulWidget {
     required this.size,
     required this.onTap,
     this.focusNode,
+    this.onLeft,
     this.onRight,
     this.onDown,
   });
@@ -67,6 +69,7 @@ class _IconBtnState extends State<_IconBtn> {
     return TvFocusable(
       focusNode: widget.focusNode,
       onActivate: widget.onTap,
+      onLeft: widget.onLeft,
       onRight: widget.onRight,
       onDown: widget.onDown,
       builder: (context, focused) => AnimatedContainer(

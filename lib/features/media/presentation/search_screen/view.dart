@@ -39,6 +39,9 @@ class _SearchViewState extends State<_SearchView> {
   final _firstResultFocus = SafeFocusRef();
   final _keyboardKey = GlobalKey<OnScreenKeyboardState>();
   final _filterBtnFn = FocusNode();
+  final _voiceBtnFn = FocusNode();
+  // The microphone (voice_search.dart): only where there's a recognizer.
+  bool _voice = false;
   // Landing spot inside the filter panel once it opens — without this,
   // pressing select on _FilterBtn just slides the panel open while focus
   // stays behind on the button that opened it, leaving every filter chip
@@ -87,6 +90,9 @@ class _SearchViewState extends State<_SearchView> {
   @override
   void initState() {
     super.initState();
+    VoiceSearch.available().then((v) {
+      if (mounted && v) setState(() => _voice = true);
+    });
     // The on-screen keyboard mutates _controller directly (never through a
     // real IME) — a TextField's own onChanged only fires for IME-driven
     // edits, so it never actually fired for on-screen-keyboard keystrokes.
@@ -171,6 +177,7 @@ class _SearchViewState extends State<_SearchView> {
     _controller.dispose();
     _backBtnFn.dispose();
     _filterBtnFn.dispose();
+    _voiceBtnFn.dispose();
     _filterPanelFirstFn.dispose();
     for (final n in _chipFns.values) {
       n.dispose();
@@ -243,6 +250,15 @@ class _SearchViewState extends State<_SearchView> {
         pluginId: widget.pluginId,
         query: q,
         filters: Map.from(_activeFilters)));
+  }
+
+  // The system recognizer's words: searched at once, kept as a recent search.
+  Future<void> _listen() async {
+    final text = await VoiceSearch.listen();
+    if (!mounted || text == null) return;
+    _controller.text = text;
+    _recent.submit(widget.pluginId, text);
+    _submit(text);
   }
 
   void _applyFilter(String id, String value) {
@@ -337,7 +353,9 @@ class _SearchViewState extends State<_SearchView> {
                                   onTap: () => context.pop(),
                                   focusNode: _backBtnFn,
                                   onRight: () {
-                                    if (_availableFilters.isNotEmpty) {
+                                    if (_voice) {
+                                      _voiceBtnFn.requestFocus();
+                                    } else if (_availableFilters.isNotEmpty) {
                                       _filterBtnFn.requestFocus();
                                     } else {
                                       _focusKeyboard();
@@ -413,6 +431,18 @@ class _SearchViewState extends State<_SearchView> {
                                     ),
                                   ),
                                 ),
+                                if (_voice) ...[
+                                  SizedBox(width: w * 0.006),
+                                  _IconBtn(
+                                    icon: Icons.mic_rounded,
+                                    size: barH * 0.50,
+                                    onTap: _listen,
+                                    focusNode: _voiceBtnFn,
+                                    onLeft: () => _backBtnFn.requestFocus(),
+                                    onRight: () => _filterBtnFn.requestFocus(),
+                                    onDown: _focusKeyboard,
+                                  ),
+                                ],
                                 SizedBox(width: w * 0.006),
                                 _FilterBtn(
                                   barH: barH,
@@ -425,7 +455,8 @@ class _SearchViewState extends State<_SearchView> {
                                   onTap: _onFilterBtn,
                                   focusNode: _filterBtnFn,
                                   onNavigateLeft: () =>
-                                      _backBtnFn.requestFocus(),
+                                      (_voice ? _voiceBtnFn : _backBtnFn)
+                                          .requestFocus(),
                                   onNavigateDown: () => _activeFilters.isEmpty
                                       ? _focusKeyboard()
                                       : _chipFn(_activeFilters.keys.first)

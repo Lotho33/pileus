@@ -10,6 +10,7 @@ import '../core/grpc/clients/media_client.dart'
 import '../core/theme/app_theme.dart';
 import '../features/auth/bloc/auth_bloc.dart';
 import '../features/auth/bloc/auth_event.dart';
+import '../core/voice_search.dart';
 import '../features/media/active_plugin_controller.dart';
 import '../features/media/bloc/discovery_bloc.dart';
 import '../features/media/bloc/discovery_event.dart';
@@ -96,6 +97,9 @@ class _MobileSearchScreenState extends State<MobileSearchScreen> {
   @override
   void initState() {
     super.initState();
+    VoiceSearch.available().then((v) {
+      if (mounted && v) setState(() => _voice = true);
+    });
     _bloc = DiscoveryBloc(
       getIt<MediaRepository>(),
       onSessionExpired: () =>
@@ -246,6 +250,16 @@ class _MobileSearchScreenState extends State<MobileSearchScreen> {
     _run();
   }
 
+  // The microphone: the system recognizer's words become the query.
+  bool _voice = false;
+  Future<void> _listen() async {
+    final text = await VoiceSearch.listen();
+    if (!mounted || text == null) return;
+    _ctrl.text = text;
+    _recent.submit(_pluginId ?? '', text);
+    _run();
+  }
+
   static const _supportedFilterTypes = {
     'select',
     'multiselect',
@@ -361,6 +375,7 @@ class _MobileSearchScreenState extends State<MobileSearchScreen> {
                           _run();
                         },
                         onClear: _clearQuery,
+                        onVoice: _voice ? _listen : null,
                       ),
                     ),
                     // Always rendered so the search bar doesn't reflow when
@@ -542,6 +557,8 @@ class _SearchField extends StatelessWidget {
   final ValueChanged<String> onChanged;
   final VoidCallback onSubmitted;
   final VoidCallback onClear;
+  // Null when there's no speech recognizer: no microphone.
+  final VoidCallback? onVoice;
 
   const _SearchField({
     required this.controller,
@@ -550,6 +567,7 @@ class _SearchField extends StatelessWidget {
     required this.onChanged,
     required this.onSubmitted,
     required this.onClear,
+    this.onVoice,
   });
 
   @override
@@ -574,7 +592,14 @@ class _SearchField extends StatelessWidget {
           suffixIcon: ValueListenableBuilder<TextEditingValue>(
             valueListenable: controller,
             builder: (_, value, __) => value.text.isEmpty
-                ? const SizedBox.shrink()
+                ? (onVoice == null
+                    ? const SizedBox.shrink()
+                    : IconButton(
+                        tooltip: 'Cerca con la voce',
+                        icon: const Icon(Icons.mic_rounded, size: 20),
+                        color: AppTheme.textMid,
+                        onPressed: onVoice,
+                      ))
                 : IconButton(
                     icon: const Icon(Icons.close, size: 18),
                     color: AppTheme.textMid,

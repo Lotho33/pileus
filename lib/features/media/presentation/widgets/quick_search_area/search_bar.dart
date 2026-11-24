@@ -12,6 +12,8 @@ class _QuickSearchBar extends StatefulWidget {
   final VoidCallback onNavigateDown;
   final VoidCallback onDismiss;
   final VoidCallback onOpenFilters;
+  // The microphone (voice_search.dart); null when there's no recognizer.
+  final VoidCallback? onVoice;
 
   const _QuickSearchBar({
     super.key,
@@ -23,6 +25,7 @@ class _QuickSearchBar extends StatefulWidget {
     required this.onNavigateDown,
     required this.onDismiss,
     required this.onOpenFilters,
+    this.onVoice,
   });
 
   @override
@@ -30,15 +33,56 @@ class _QuickSearchBar extends StatefulWidget {
 }
 
 class _QuickSearchBarState extends State<_QuickSearchBar> {
+  final _voiceFn = FocusNode();
   final _filtersFn = FocusNode();
   final _closeFn = FocusNode();
 
   @override
   void dispose() {
+    _voiceFn.dispose();
     _filtersFn.dispose();
     _closeFn.dispose();
     super.dispose();
   }
+
+  // The square buttons right of the bar (microphone, filters, close).
+  Widget _button({
+    required double barH,
+    required FocusNode focusNode,
+    required IconData icon,
+    required VoidCallback onActivate,
+    VoidCallback? onLeft,
+    VoidCallback? onRight,
+  }) =>
+      TvFocusable(
+        focusNode: focusNode,
+        onActivate: onActivate,
+        onLeft: onLeft,
+        onRight: onRight,
+        // Down from the top-row buttons drops into the keyboard, same as
+        // Down from the search field itself.
+        onDown: widget.onNavigateDown,
+        onEsc: widget.onDismiss,
+        builder: (context, focused) => Container(
+          height: barH,
+          width: barH,
+          alignment: Alignment.center,
+          decoration: BoxDecoration(
+            color: const Color(0xFF1E1E2E),
+            borderRadius: BorderRadius.circular(10),
+            border: Border.all(
+              color: focused
+                  ? AppTheme.primary
+                  : AppTheme.textHigh.withValues(alpha: 0.12),
+              width: focused ? 1.6 : 1,
+            ),
+            boxShadow: focused ? AppScale.focusGlow(AppTheme.primary) : null,
+          ),
+          child: Icon(icon,
+              size: barH * 0.44,
+              color: AppTheme.textHigh.withValues(alpha: 0.7)),
+        ),
+      );
 
   @override
   Widget build(BuildContext context) {
@@ -57,7 +101,10 @@ class _QuickSearchBarState extends State<_QuickSearchBar> {
           child: TvFocusable(
             canRequestFocus: false,
             onDown: widget.onNavigateDown,
-            onRight: widget.expanded ? () => _filtersFn.requestFocus() : null,
+            onRight: widget.expanded
+                ? () => (widget.onVoice != null ? _voiceFn : _filtersFn)
+                    .requestFocus()
+                : null,
             // Only Escape/Back exits search — an arrow key doing the same
             // was a trap: any direction that didn't have somewhere to go
             // could bubble past this widget and land on an unrelated,
@@ -128,72 +175,42 @@ class _QuickSearchBarState extends State<_QuickSearchBar> {
           ),
         ),
         if (widget.expanded) ...[
+          if (widget.onVoice != null) ...[
+            SizedBox(width: barH * 0.16),
+            _button(
+              barH: barH,
+              focusNode: _voiceFn,
+              icon: Icons.mic_rounded,
+              onActivate: widget.onVoice!,
+              // The bar itself can't take focus: left goes to the keyboard.
+              onLeft: widget.onNavigateDown,
+              onRight: () => _filtersFn.requestFocus(),
+            ),
+          ],
           SizedBox(width: barH * 0.16),
-          TvFocusable(
+          _button(
+            barH: barH,
             focusNode: _filtersFn,
+            icon: Icons.tune_rounded,
             onActivate: widget.onOpenFilters,
             // The TextField itself can no longer take focus (see
             // _textFieldFocusNode) — reuse the same "jump to the keyboard's
             // first key" target already wired for onNavigateDown above,
             // rather than a request that would now silently do nothing.
-            onLeft: widget.onNavigateDown,
+            onLeft: widget.onVoice != null
+                ? () => _voiceFn.requestFocus()
+                : widget.onNavigateDown,
             onRight: () => _closeFn.requestFocus(),
-            // Down from the top-row buttons drops into the keyboard, same as
-            // Down from the search field itself — previously the only way
-            // off these buttons was sideways.
-            onDown: widget.onNavigateDown,
-            onEsc: widget.onDismiss,
-            builder: (context, filtersFocused) => Container(
-              height: barH,
-              width: barH,
-              alignment: Alignment.center,
-              decoration: BoxDecoration(
-                color: const Color(0xFF1E1E2E),
-                borderRadius: BorderRadius.circular(10),
-                border: Border.all(
-                  color: filtersFocused
-                      ? AppTheme.primary
-                      : AppTheme.textHigh.withValues(alpha: 0.12),
-                  width: filtersFocused ? 1.6 : 1,
-                ),
-                boxShadow: filtersFocused
-                    ? AppScale.focusGlow(AppTheme.primary)
-                    : null,
-              ),
-              child: Icon(Icons.tune_rounded,
-                  size: barH * 0.44,
-                  color: AppTheme.textHigh.withValues(alpha: 0.7)),
-            ),
           ),
           SizedBox(width: barH * 0.16),
           // Explicit close — the only other way out is Escape/Back, which a
           // D-pad-only remote without a reliable back key might not have.
-          TvFocusable(
+          _button(
+            barH: barH,
             focusNode: _closeFn,
+            icon: Icons.close_rounded,
             onActivate: widget.onDismiss,
             onLeft: () => _filtersFn.requestFocus(),
-            onDown: widget.onNavigateDown,
-            onEsc: widget.onDismiss,
-            builder: (context, closeFocused) => Container(
-              height: barH,
-              width: barH,
-              alignment: Alignment.center,
-              decoration: BoxDecoration(
-                color: const Color(0xFF1E1E2E),
-                borderRadius: BorderRadius.circular(10),
-                border: Border.all(
-                  color: closeFocused
-                      ? AppTheme.primary
-                      : AppTheme.textHigh.withValues(alpha: 0.12),
-                  width: closeFocused ? 1.6 : 1,
-                ),
-                boxShadow:
-                    closeFocused ? AppScale.focusGlow(AppTheme.primary) : null,
-              ),
-              child: Icon(Icons.close_rounded,
-                  size: barH * 0.44,
-                  color: AppTheme.textHigh.withValues(alpha: 0.7)),
-            ),
           ),
         ],
       ],

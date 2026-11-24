@@ -28,6 +28,14 @@ class MainActivity : FlutterActivity() {
         WatchNext.onIntent(intent, notify = false)
         // Picture-in-picture for the phone player (no-op in the TV flavor).
         Pip.register(flutterEngine, this)
+        // The microphone in the search screens (both flavors).
+        VoiceSearch.register(flutterEngine, this)
+    }
+
+    @Deprecated("Deprecated in Java")
+    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+        if (VoiceSearch.onActivityResult(requestCode, resultCode, data)) return
+        super.onActivityResult(requestCode, resultCode, data)
     }
 
     override fun onUserLeaveHint() {
