@@ -25,7 +25,9 @@ import '../download_playback.dart';
 import '../../../shared/utils/tap_guard.dart';
 
 class DownloadsPage extends StatelessWidget {
-  const DownloadsPage({super.key});
+  /// A pane of the desktop/web shell (beside its rail): no back button.
+  final bool embedded;
+  const DownloadsPage({super.key, this.embedded = false});
 
   @override
   Widget build(BuildContext context) {
@@ -34,7 +36,7 @@ class DownloadsPage extends StatelessWidget {
         getIt<MediaRepository>(),
         localIndex: DownloadsLocalIndex(getIt<SharedPreferences>()),
       )..start(),
-      child: const _DownloadsView(),
+      child: _DownloadsView(embedded: embedded),
     );
   }
 }
@@ -114,14 +116,16 @@ class _DownloadsBuilder extends StatelessWidget {
 }
 
 class _DownloadsView extends StatelessWidget {
-  const _DownloadsView();
+  final bool embedded;
+  const _DownloadsView({this.embedded = false});
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: AppTheme.bg,
       appBar: AppBar(
-        leading: const GuardedBackButton(),
+        leading: embedded ? null : const GuardedBackButton(),
+        automaticallyImplyLeading: !embedded,
         backgroundColor: AppTheme.bg,
         title: const Text('Download'),
       ),

@@ -24,7 +24,9 @@ import 'desktop_search_screen.dart';
 import 'desktop_my_list_pane.dart';
 import 'desktop_settings_pane.dart';
 import 'widgets/desktop_nav_rail.dart';
+import '../features/downloads/presentation/downloads_page.dart';
 import '../features/media/my_list.dart';
+import '../features/media/presentation/calendar_screen.dart';
 
 /// The desktop home destination: a left rail (Home / Cerca / plugin list /
 /// Impostazioni) beside a content area that swaps between the three panes.
@@ -38,6 +40,24 @@ class DesktopShell extends StatefulWidget {
 
 class _DesktopShellState extends State<DesktopShell> {
   DesktopSection _section = DesktopSection.home;
+  // Download and Calendario are built when first opened (no request at
+  // start-up) and reload each time they're picked again.
+  final Map<DesktopSection, int> _visits = {};
+
+  void _select(DesktopSection s) => setState(() {
+        if (s == DesktopSection.downloads || s == DesktopSection.calendar) {
+          _visits[s] = (_visits[s] ?? 0) + 1;
+        }
+        _section = s;
+      });
+
+  Widget _lazyPane(DesktopSection s, Widget Function() build) {
+    final n = _visits[s] ?? 0;
+    return n == 0
+        ? const SizedBox.shrink()
+        : KeyedSubtree(key: ValueKey('$s#$n'), child: build());
+  }
+
   String? _activePluginId;
   bool _railExtended = true;
 
@@ -189,7 +209,7 @@ class _DesktopShellState extends State<DesktopShell> {
                       onToggleExtended: () =>
                           setState(() => _railExtended = !_railExtended),
                       section: _section,
-                      onSection: (s) => setState(() => _section = s),
+                      onSection: _select,
                       plugins: plugins,
                       activePluginId: active?.pluginId,
                       onPluginSelect: (id) => setState(() {
@@ -211,6 +231,10 @@ class _DesktopShellState extends State<DesktopShell> {
                                     visible: _section == DesktopSection.search,
                                     homePluginId: active?.pluginId),
                                 const DesktopMyListPane(),
+                                _lazyPane(DesktopSection.downloads,
+                                    () => const DownloadsPage(embedded: true)),
+                                _lazyPane(DesktopSection.calendar,
+                                    () => const CalendarScreen(embedded: true)),
                                 const DesktopSettingsPane(),
                               ],
                             ),

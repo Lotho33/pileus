@@ -1,14 +1,13 @@
 // ignore: deprecated_member_use, material_ui migration pending (docs/FLUTTER_UPGRADE.md)
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
-import 'package:go_router/go_router.dart';
 
 import '../../core/grpc/clients/media_client.dart' hide ContinueWatchingItem;
 import '../../core/theme/app_theme.dart';
 import '../../features/media/presentation/widgets/plugin_nav.dart'
     show PluginIcon, pluginLabel;
 
-enum DesktopSection { home, search, myList, settings }
+enum DesktopSection { home, search, myList, downloads, calendar, settings }
 
 /// Left navigation rail for the desktop shell. Collapsible: icon-only at
 /// 68px, labelled at 236px. Fixed destinations (Home / Cerca) + the dynamic
@@ -130,17 +129,13 @@ class DesktopNavRail extends StatelessWidget {
                 ),
               ),
               const Divider(height: 1, color: AppTheme.border),
-              // A plain route push (not an in-shell DesktopSection pane, like
-              // every other item here) — DownloadsPage is shared with
-              // mobile/web and already a full Scaffold with its own back
-              // navigation, same as /details and /player already are.
               _RailItem(
                 icon: Icons.download_rounded,
                 label: 'Download',
                 extended: extended,
                 labelSize: labelSize,
-                selected: false,
-                onTap: () => context.push('/downloads'),
+                selected: section == DesktopSection.downloads,
+                onTap: () => onSection(DesktopSection.downloads),
               ),
               _RailItem(
                 icon: Icons.bookmark_rounded,
@@ -150,14 +145,13 @@ class DesktopNavRail extends StatelessWidget {
                 selected: section == DesktopSection.myList,
                 onTap: () => onSection(DesktopSection.myList),
               ),
-              // A route push like Download: the calendar is its own page.
               _RailItem(
                 icon: Icons.event_rounded,
                 label: 'Calendario',
                 extended: extended,
                 labelSize: labelSize,
-                selected: false,
-                onTap: () => context.push('/calendar'),
+                selected: section == DesktopSection.calendar,
+                onTap: () => onSection(DesktopSection.calendar),
               ),
               _RailItem(
                 icon: Icons.settings_rounded,
