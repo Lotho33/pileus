@@ -130,11 +130,13 @@ class _TakeoverPrompt {
   final String actionLabel;
   final String backLabel;
   final VoidCallback onAction;
+  final IconData icon;
   const _TakeoverPrompt({
     required this.message,
     required this.actionLabel,
     required this.backLabel,
     required this.onAction,
+    this.icon = Icons.devices_rounded,
   });
 }
 
@@ -197,7 +199,7 @@ class _TakeoverOverlayState extends State<_TakeoverOverlay> {
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                Icon(Icons.devices_rounded,
+                Icon(widget.prompt.icon,
                     color: Colors.white70, size: AppScale.space(context, 56)),
                 SizedBox(height: AppScale.space(context, 20)),
                 Text(

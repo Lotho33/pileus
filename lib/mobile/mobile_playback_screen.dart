@@ -38,6 +38,7 @@ import '../features/player/progress_heartbeat.dart';
 import '../features/player/resume_seek.dart' show resolveStartPositionSec;
 import '../features/media/episode_kind.dart';
 import '../features/player/playback_episode_list.dart';
+import '../features/player/still_watching.dart';
 import '../features/player/presentation/widgets/player_audio_artwork.dart';
 import '../features/player/presentation/widgets/player_seek_bar.dart';
 import '../features/player/presentation/widgets/pointer_next_episode_banner.dart';
@@ -148,6 +149,7 @@ class _MobilePlayerViewState extends State<_MobilePlayerView> {
   // take-over (_onPlaybackTakenOver, "Riprendi qui"). Never auto-dismissed
   // or retried — only the user's own tap on either button clears it.
   _TakeoverPrompt? _takeoverPrompt;
+  final _stillWatching = StillWatchingGuard();
   Timer? _hideTimer;
   final _errorGrace = ErrorGrace();
   late final _heartbeat = ProgressHeartbeat(
@@ -268,6 +270,7 @@ class _MobilePlayerViewState extends State<_MobilePlayerView> {
   @override
   void initState() {
     super.initState();
+    _stillWatching.attach();
     _settings = getIt<SettingsRepository>();
     Pip.onAction = _onPipAction;
     // Silence the home's 30s plugin-status poll for the whole playback
@@ -412,6 +415,7 @@ class _MobilePlayerViewState extends State<_MobilePlayerView> {
 
   @override
   void dispose() {
+    _stillWatching.detach();
     Pip.setEligible(false);
     if (Pip.onAction == _onPipAction) Pip.onAction = null;
     // Restore portrait + chrome FIRST — if the engine teardown below throws
@@ -947,8 +951,34 @@ class _MobilePlayerViewState extends State<_MobilePlayerView> {
     }
     if (tick.advance && !_autoAdvanced && !_resolvingEpisode) {
       _autoAdvanced = true;
-      _goToNextEpisode();
+      if (_stillWatching.shouldAsk) {
+        _askStillWatching();
+      } else {
+        _stillWatching.noteAutoAdvance();
+        _goToNextEpisode();
+      }
     }
+  }
+
+  // "Stai ancora guardando?" (still_watching.dart): the countdown would
+  // start the next episode by itself — pause and ask first. Reuses the
+  // takeover overlay: same two buttons, same gates on the watchdogs.
+  void _askStillWatching() {
+    if (!mounted || _takeoverPrompt != null) return;
+    _engine.pause();
+    setState(() {
+      _nextEpisodeSecs = null;
+      _takeoverPrompt = _TakeoverPrompt(
+        message: stillWatchingMessage(widget.args.showTitle),
+        actionLabel: 'Continua',
+        backLabel: 'Esci',
+        icon: Icons.bedtime_rounded,
+        onAction: () {
+          setState(() => _takeoverPrompt = null);
+          _goToNextEpisode();
+        },
+      );
+    });
   }
 
   Future<void> _goToNextEpisode() async {
@@ -2045,11 +2075,13 @@ class _TakeoverPrompt {
   final String actionLabel;
   final String backLabel;
   final VoidCallback onAction;
+  final IconData icon;
   const _TakeoverPrompt({
     required this.message,
     required this.actionLabel,
     required this.backLabel,
     required this.onAction,
+    this.icon = Icons.devices_rounded,
   });
 }
 
@@ -2068,8 +2100,7 @@ class _TakeoverOverlay extends StatelessWidget {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              const Icon(Icons.devices_rounded,
-                  color: Colors.white70, size: 48),
+              Icon(prompt.icon, color: Colors.white70, size: 48),
               const SizedBox(height: 14),
               Text(prompt.message,
                   textAlign: TextAlign.center,

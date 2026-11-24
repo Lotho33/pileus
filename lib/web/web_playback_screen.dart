@@ -30,6 +30,7 @@ import '../features/player/episode_nav.dart';
 import '../features/player/player_languages.dart';
 import '../features/media/episode_kind.dart';
 import '../features/player/playback_episode_list.dart';
+import '../features/player/still_watching.dart';
 import '../features/player/source_continuity.dart' show inferSourceLabel;
 import '../features/player/episode_poster.dart';
 import '../features/player/episode_prefetch.dart';
@@ -399,6 +400,7 @@ class _ViewState extends State<_View> {
   // take-over (_onPlaybackTakenOver, "Riprendi qui"). Never auto-dismissed
   // or retried — only the user's own tap on either button clears it.
   _TakeoverPrompt? _takeoverPrompt;
+  final _stillWatching = StillWatchingGuard();
 
   LiveStallWatchdog? _liveWatchdog;
   // Set from the <video> element's own 'waiting'/'playing' events (wired in
@@ -414,6 +416,7 @@ class _ViewState extends State<_View> {
   @override
   void initState() {
     super.initState();
+    _stillWatching.attach();
     _phoneLandscape.enter();
     _resumeSeek = ResumeSeekController(
         targetSec: widget.args.seekTo, isLive: widget.args.isLive);
@@ -643,6 +646,7 @@ class _ViewState extends State<_View> {
 
   @override
   void dispose() {
+    _stillWatching.detach();
     _phoneLandscape.exit();
     _mediaSession.clear();
     AppLifecycleReactor.instance.state.removeListener(_onLifecycle);
@@ -909,8 +913,34 @@ class _ViewState extends State<_View> {
     }
     if (tick.advance && !_autoAdvanced && !_resolvingEpisode) {
       _autoAdvanced = true;
-      _goToNextEpisode();
+      if (_stillWatching.shouldAsk) {
+        _askStillWatching();
+      } else {
+        _stillWatching.noteAutoAdvance();
+        _goToNextEpisode();
+      }
     }
+  }
+
+  // "Stai ancora guardando?" (still_watching.dart): the countdown would
+  // start the next episode by itself — pause and ask first. Reuses the
+  // takeover overlay: same two buttons, same gates on the watchdogs.
+  void _askStillWatching() {
+    if (!mounted || _takeoverPrompt != null) return;
+    _video.pause();
+    setState(() {
+      _nextEpisodeSecs = null;
+      _takeoverPrompt = _TakeoverPrompt(
+        message: stillWatchingMessage(widget.args.showTitle),
+        actionLabel: 'Continua',
+        backLabel: 'Esci',
+        icon: Icons.bedtime_rounded,
+        onAction: () {
+          setState(() => _takeoverPrompt = null);
+          _goToNextEpisode();
+        },
+      );
+    });
   }
 
   // ── episode navigation ────────────────────────────────────────────────
@@ -2009,11 +2039,13 @@ class _TakeoverPrompt {
   final String actionLabel;
   final String backLabel;
   final VoidCallback onAction;
+  final IconData icon;
   const _TakeoverPrompt({
     required this.message,
     required this.actionLabel,
     required this.backLabel,
     required this.onAction,
+    this.icon = Icons.devices_rounded,
   });
 }
 
@@ -2034,8 +2066,7 @@ class _TakeoverOverlay extends StatelessWidget {
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  const Icon(Icons.devices_rounded,
-                      color: Colors.white70, size: 48),
+                  Icon(prompt.icon, color: Colors.white70, size: 48),
                   const SizedBox(height: 16),
                   Text(prompt.message,
                       textAlign: TextAlign.center,

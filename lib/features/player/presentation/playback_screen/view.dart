@@ -146,6 +146,7 @@ class _PlaybackViewState extends State<_PlaybackView> {
   // auto-dismissed or retried — only the user's own tap on either button
   // clears it.
   _TakeoverPrompt? _takeoverPrompt;
+  final _stillWatching = StillWatchingGuard();
   // Wall-clock of the last position tick. An error while the stream is in
   // fact still advancing (segment fetch that retried and succeeded, an
   // end-file for a discarded variant, …) must not blank the screen — the
@@ -242,6 +243,7 @@ class _PlaybackViewState extends State<_PlaybackView> {
   @override
   void initState() {
     super.initState();
+    _stillWatching.attach();
     final args = widget.args;
     perf('screen: initState (live=${args.isLive}, lowPower=$lowPowerUi)');
 
@@ -888,6 +890,7 @@ class _PlaybackViewState extends State<_PlaybackView> {
 
   @override
   void dispose() {
+    _stillWatching.detach();
     _mediaSession.clear();
     perf('screen: dispose (videoStarted=$_videoStarted)');
     _backgroundReleaseTimer?.cancel();
@@ -1173,7 +1176,12 @@ class _PlaybackViewState extends State<_PlaybackView> {
         }
         if (tick.advance && !_autoAdvanced) {
           _autoAdvanced = true;
-          _goToEpisode(_currentEpisodeIndex + 1);
+          if (_stillWatching.shouldAsk) {
+            _askStillWatching();
+          } else {
+            _stillWatching.noteAutoAdvance();
+            _goToEpisode(_currentEpisodeIndex + 1);
+          }
         }
       }
       // End-of-title continue-watching handling. Three cases:
@@ -1711,6 +1719,27 @@ class _PlaybackViewState extends State<_PlaybackView> {
         // for the ~8s before the error page (if it) appears.
         (_pendingErrorText != null && !_engine.playing);
     return initialLoading || uiState.buffering;
+  }
+
+  // "Stai ancora guardando?" (still_watching.dart): the countdown would
+  // start the next episode by itself — pause and ask first. Reuses the
+  // takeover overlay: same two buttons, same gates on the watchdogs.
+  void _askStillWatching() {
+    if (!mounted || _takeoverPrompt != null) return;
+    _engine.pause();
+    _uiCubit.setNextEpisodeSecs(null);
+    setState(() {
+      _takeoverPrompt = _TakeoverPrompt(
+        message: stillWatchingMessage(_showTitle),
+        actionLabel: 'Continua',
+        backLabel: 'Esci',
+        icon: Icons.bedtime_rounded,
+        onAction: () {
+          setState(() => _takeoverPrompt = null);
+          _goToEpisode(_currentEpisodeIndex + 1);
+        },
+      );
+    });
   }
 
   // Leave the player. A deep link straight to /player has nothing to pop
