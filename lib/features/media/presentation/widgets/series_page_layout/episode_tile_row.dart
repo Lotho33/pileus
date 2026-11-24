@@ -98,6 +98,7 @@ class _EpisodeTileRowState extends State<_EpisodeTileRow> {
     // This episode's own language versions, when the plugin says (only the
     // exceptions: JAP on an episode not dubbed yet, …).
     final badges = languageBadges(item.extra['lang'] ?? '');
+    final kind = episodeKindLabel(item.extra['filler']);
 
     // Use LayoutBuilder so fonts are additionally clamped to the tile's actual
     // height — prevents the "A RenderFlex overflowed by N pixels" error.
@@ -273,17 +274,24 @@ class _EpisodeTileRowState extends State<_EpisodeTileRow> {
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                         ),
-                      // Duration, then the start of the plot on the same
-                      // line — the row is wide and was empty past the title.
-                      if (item.duration > 0 || item.plot.isNotEmpty)
+                      // Duration (and Filler/Riassunto), then the start of
+                      // the plot on the same line — the row is wide and was
+                      // empty past the title.
+                      if (item.duration > 0 ||
+                          item.plot.isNotEmpty ||
+                          kind.isNotEmpty)
                         Padding(
                           padding: const EdgeInsets.only(top: 2),
-                          child: Text(
-                            [
-                              if (item.duration > 0) '${item.duration} min',
-                              if (item.plot.isNotEmpty)
-                                item.plot.replaceAll('\n', ' ').trim(),
-                            ].join('  ·  '),
+                          child: Text.rich(
+                            episodeMetaSpan(
+                              [
+                                if (item.duration > 0) '${item.duration} min',
+                                if (item.plot.isNotEmpty)
+                                  item.plot.replaceAll('\n', ' ').trim(),
+                              ],
+                              kind: kind,
+                              kindAt: item.duration > 0 ? 1 : 0,
+                            ),
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
                             style: TextStyle(

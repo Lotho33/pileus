@@ -28,6 +28,7 @@ import '../features/player/engine/playback_speed.dart';
 import '../features/player/cw_progress.dart';
 import '../features/player/episode_nav.dart';
 import '../features/player/player_languages.dart';
+import '../features/media/episode_kind.dart';
 import '../features/player/playback_episode_list.dart';
 import '../features/player/source_continuity.dart' show inferSourceLabel;
 import '../features/player/episode_poster.dart';
@@ -1782,6 +1783,10 @@ class _ViewState extends State<_View> {
                   nextTitle: _nav.episodeIndex + 1 < _nav.episodeTitles.length
                       ? _nav.episodeTitles[_nav.episodeIndex + 1]
                       : null,
+                  nextKind: _nav.episodeIndex + 1 < _nav.episodeList.length
+                      ? episodeKindOf(widget.args.epPluginId,
+                          _nav.episodeList[_nav.episodeIndex + 1])
+                      : '',
                   onPlay: () {
                     setState(() => _nextEpisodeSecs = null);
                     _goToNextEpisode();

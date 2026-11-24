@@ -1,6 +1,8 @@
 // ignore: deprecated_member_use, material_ui migration pending (docs/FLUTTER_UPGRADE.md)
 import 'package:flutter/material.dart';
 
+import '../../../media/episode_kind.dart';
+
 /// Mouse/touch equivalent of the TV player's `_NextEpisodeBanner`
 /// (`presentation/playback_screen/next_episode_banner.dart`, private to that
 /// `part of` file) — same countdown-toward-auto-advance banner, for desktop
@@ -9,6 +11,9 @@ import 'package:flutter/material.dart';
 class PointerNextEpisodeBanner extends StatelessWidget {
   final int secsRemaining;
   final String? nextTitle;
+
+  /// Filler/Riassunto ([episodeKindLabel]) of the next episode, or ''.
+  final String nextKind;
   final VoidCallback onPlay;
   final VoidCallback onDismiss;
 
@@ -18,6 +23,7 @@ class PointerNextEpisodeBanner extends StatelessWidget {
     required this.onPlay,
     required this.onDismiss,
     this.nextTitle,
+    this.nextKind = '',
   });
 
   @override
@@ -41,8 +47,8 @@ class PointerNextEpisodeBanner extends StatelessWidget {
           ),
           if (nextTitle != null) ...[
             const SizedBox(height: 4),
-            Text(
-              nextTitle!,
+            Text.rich(
+              episodeMetaSpan([nextTitle!], kind: nextKind, sep: ' · '),
               style: const TextStyle(
                   color: Colors.white,
                   fontSize: 16,

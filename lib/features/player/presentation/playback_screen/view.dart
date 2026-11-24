@@ -2301,6 +2301,11 @@ class _PlaybackViewState extends State<_PlaybackView> {
                           key: _nextEpisodeKey,
                           secsRemaining: uiState.nextEpisodeSecs!,
                           nextTitle: nextTitle,
+                          nextKind: _currentEpisodeIndex + 1 <
+                                  _currentEpisodeList.length
+                              ? episodeKindOf(widget.args.epPluginId,
+                                  _currentEpisodeList[_currentEpisodeIndex + 1])
+                              : '',
                           onPlay: () {
                             _uiCubit.setNextEpisodeSecs(null);
                             _goToEpisode(_currentEpisodeIndex + 1);

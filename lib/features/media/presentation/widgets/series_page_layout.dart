@@ -25,6 +25,7 @@ import '../../../../shared/utils/safe_focus.dart';
 import '../../../../shared/widgets/language_badge.dart';
 import '../../../../shared/widgets/pileus_spinner.dart';
 import '../../../../shared/widgets/tv_focusable.dart';
+import '../../episode_kind.dart';
 import '../../my_list.dart';
 import 'details_actions.dart';
 import 'details_common.dart';

@@ -246,6 +246,7 @@ class _EpisodePopupState extends State<_EpisodePopup> {
     final durLabel = duration > 0 ? '$duration min' : '';
     final metaParts =
         [epLabel, dateLabel, durLabel].where((s) => s.isNotEmpty).toList();
+    final kind = episodeKindLabel(item.extra['filler']);
 
     // Bound the dialog to the viewport and cap the thumbnail, otherwise on a
     // TV (~540 dp tall) the 16:9 image fills the screen and the play buttons
@@ -382,7 +383,7 @@ class _EpisodePopupState extends State<_EpisodePopup> {
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
                                   // Meta row: ep · data · durata
-                                  if (metaParts.isNotEmpty)
+                                  if (metaParts.isNotEmpty || kind.isNotEmpty)
                                     Row(
                                       children: [
                                         if (vote > 0) ...[
@@ -398,8 +399,10 @@ class _EpisodePopupState extends State<_EpisodePopup> {
                                                   fontWeight: FontWeight.w600)),
                                           SizedBox(width: sh * (12.0 / 1080.0)),
                                         ],
-                                        Text(
-                                          metaParts.join('  ·  '),
+                                        Text.rich(
+                                          episodeMetaSpan(metaParts,
+                                              kind: kind,
+                                              kindAt: metaParts.length),
                                           style: TextStyle(
                                               color: Colors.white54,
                                               fontSize: sh * (16.0 / 1080.0)),

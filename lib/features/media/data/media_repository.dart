@@ -17,6 +17,7 @@ import '../../auth/data/auth_repository.dart';
 import '../../player/content_view_mode.dart';
 import '../../settings/data/settings_repository.dart';
 import '../../player/cw_advance.dart';
+import '../episode_kind.dart';
 import 'continue_watching_item.dart';
 import 'cw_offline_queue.dart';
 import 'plugin_prefs.dart';
@@ -487,8 +488,10 @@ class MediaRepository {
       String pluginId, String parentId, String childId,
       {bool cache = false}) async {
     if (!cache) {
-      return _client.browse(BrowseRequest(
+      final resp = await _client.browse(BrowseRequest(
           pluginId: pluginId, parentId: parentId, childId: childId));
+      rememberEpisodeKinds(pluginId, resp);
+      return resp;
     }
     _checkSessionClient();
     final key = '${_interceptor.profileId ?? ''}|$pluginId|$parentId|$childId';
@@ -509,6 +512,7 @@ class MediaRepository {
     try {
       final resp = await _client.browse(BrowseRequest(
           pluginId: pluginId, parentId: parentId, childId: childId));
+      rememberEpisodeKinds(pluginId, resp);
       if (resp.items.isNotEmpty || resp.episodes.isNotEmpty) {
         _putCapped(_browseCache, key, resp);
       }

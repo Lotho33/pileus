@@ -36,6 +36,7 @@ import '../features/player/next_episode_countdown.dart';
 import '../features/player/player_tuning.dart';
 import '../features/player/progress_heartbeat.dart';
 import '../features/player/resume_seek.dart' show resolveStartPositionSec;
+import '../features/media/episode_kind.dart';
 import '../features/player/playback_episode_list.dart';
 import '../features/player/presentation/widgets/player_audio_artwork.dart';
 import '../features/player/presentation/widgets/player_seek_bar.dart';
@@ -1495,6 +1496,11 @@ class _MobilePlayerViewState extends State<_MobilePlayerView> {
                                 _curEpisodeIndex + 1 < _curEpisodeTitles.length
                                     ? _curEpisodeTitles[_curEpisodeIndex + 1]
                                     : null,
+                            nextKind:
+                                _curEpisodeIndex + 1 < _curEpisodeList.length
+                                    ? episodeKindOf(widget.args.epPluginId,
+                                        _curEpisodeList[_curEpisodeIndex + 1])
+                                    : '',
                             onPlay: () {
                               _autoAdvanced = true;
                               _goToNextEpisode();

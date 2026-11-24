@@ -12,6 +12,9 @@ part of '../playback_screen.dart';
 class _NextEpisodeBanner extends StatefulWidget {
   final int secsRemaining;
   final String? nextTitle;
+
+  /// Filler/Riassunto ([episodeKindLabel]) of the next episode, or ''.
+  final String nextKind;
   final VoidCallback onPlay;
   final VoidCallback onDismiss;
 
@@ -21,6 +24,7 @@ class _NextEpisodeBanner extends StatefulWidget {
     required this.onPlay,
     required this.onDismiss,
     this.nextTitle,
+    this.nextKind = '',
   });
 
   @override
@@ -63,8 +67,9 @@ class _NextEpisodeBannerState extends State<_NextEpisodeBanner> {
           ),
           if (widget.nextTitle != null) ...[
             const SizedBox(height: 4),
-            Text(
-              widget.nextTitle!,
+            Text.rich(
+              episodeMetaSpan([widget.nextTitle!],
+                  kind: widget.nextKind, sep: ' · '),
               style: const TextStyle(
                   color: Colors.white,
                   fontSize: 16,

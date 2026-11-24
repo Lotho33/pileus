@@ -27,6 +27,7 @@ import '../features/player/episode_poster.dart';
 import '../features/player/resolve_and_play.dart';
 import '../features/player/source_continuity.dart' show defaultPlayStreamId;
 import '../features/player/stream_warmer.dart';
+import '../features/media/episode_kind.dart';
 import '../shared/widgets/language_badge.dart';
 import '../shared/widgets/language_chips.dart';
 import '../shared/responsive.dart';
@@ -1048,6 +1049,8 @@ class _EpisodeCardState extends State<_EpisodeCard> {
   Widget build(BuildContext context) {
     final ep = widget.ep;
     final n = ep.episodeNumber > 0 ? ep.episodeNumber : widget.index + 1;
+    final kind = episodeKindLabel(ep.extra['filler']);
+    final lang = ep.extra['lang'] ?? '';
     return MouseRegion(
       cursor: SystemMouseCursors.click,
       onEnter: (_) => setState(() => _hover = true),
@@ -1111,12 +1114,25 @@ class _EpisodeCardState extends State<_EpisodeCard> {
                             color: AppTheme.textHigh,
                             fontSize: 13.5,
                             fontWeight: FontWeight.w600)),
-                    // The episode's own language versions, when the plugin
-                    // says (JAP on an episode not dubbed yet, …).
-                    if (languageBadges(ep.extra['lang'] ?? '').isNotEmpty)
+                    // Filler/Riassunto and the episode's own language
+                    // versions, when the plugin says (JAP on an episode not
+                    // dubbed yet, …).
+                    if (kind.isNotEmpty || languageBadges(lang).isNotEmpty)
                       Padding(
                         padding: const EdgeInsets.only(top: 4),
-                        child: LanguageBadgePill(lang: ep.extra['lang']!),
+                        child: Row(children: [
+                          if (kind.isNotEmpty)
+                            Padding(
+                              padding: const EdgeInsets.only(right: 8),
+                              child: Text(kind,
+                                  style: const TextStyle(
+                                      color: kEpisodeKindColor,
+                                      fontSize: 11.5,
+                                      fontWeight: FontWeight.w600)),
+                            ),
+                          if (languageBadges(lang).isNotEmpty)
+                            LanguageBadgePill(lang: lang),
+                        ]),
                       ),
                     if (ep.plot.isNotEmpty) ...[
                       const SizedBox(height: 4),

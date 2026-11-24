@@ -25,6 +25,7 @@ import '../features/player/engine/playback_speed.dart';
 import '../features/player/engine/player_engine.dart';
 import '../features/player/episode_nav.dart';
 import '../features/player/player_languages.dart';
+import '../features/media/episode_kind.dart';
 import '../features/player/playback_episode_list.dart';
 import '../features/player/episode_poster.dart';
 import '../features/player/episode_prefetch.dart';
@@ -1314,6 +1315,13 @@ class _ViewState extends State<_View> with WindowListener {
                                       ? _nav
                                           .episodeTitles[_nav.episodeIndex + 1]
                                       : null,
+                                  nextKind: _nav.episodeIndex + 1 <
+                                          _nav.episodeList.length
+                                      ? episodeKindOf(
+                                          widget.args.epPluginId,
+                                          _nav.episodeList[
+                                              _nav.episodeIndex + 1])
+                                      : '',
                                   onPlay: () {
                                     setState(() => _nextEpisodeSecs = null);
                                     _goToNextEpisode();

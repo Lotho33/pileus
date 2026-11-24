@@ -27,6 +27,7 @@ import '../features/player/resolve_and_play.dart';
 import '../features/player/resume_lookup.dart';
 import '../features/player/source_continuity.dart' show defaultPlayStreamId;
 import '../features/player/stream_warmer.dart';
+import '../features/media/episode_kind.dart';
 import '../shared/widgets/language_badge.dart';
 import '../shared/widgets/language_chips.dart';
 import '../shared/widgets/error_retry_view.dart';
@@ -969,18 +970,22 @@ class _SeasonsState extends State<_Seasons> {
   }
 }
 
-/// Duration and, when the plugin says, the episode's own language badge
-/// (JAP on an episode not dubbed yet, …).
+/// Duration, Filler/Riassunto and, when the plugin says, the episode's own
+/// language badge (JAP on an episode not dubbed yet, …).
 Widget? _episodeSubtitle(EpisodeInfo ep) {
   final lang = ep.extra['lang'] ?? '';
   final hasBadge = languageBadges(lang).isNotEmpty;
-  if (ep.duration <= 0 && !hasBadge) return null;
+  final kind = episodeKindLabel(ep.extra['filler']);
+  final hasMeta = ep.duration > 0 || kind.isNotEmpty;
+  if (!hasMeta && !hasBadge) return null;
   return Row(
     children: [
-      if (ep.duration > 0)
-        Text('${ep.duration} min',
+      if (hasMeta)
+        Text.rich(
+            episodeMetaSpan([if (ep.duration > 0) '${ep.duration} min'],
+                kind: kind, sep: ' · '),
             style: const TextStyle(color: AppTheme.textLow, fontSize: 12)),
-      if (ep.duration > 0 && hasBadge) const SizedBox(width: 8),
+      if (hasMeta && hasBadge) const SizedBox(width: 8),
       if (hasBadge) LanguageBadgePill(lang: lang),
     ],
   );

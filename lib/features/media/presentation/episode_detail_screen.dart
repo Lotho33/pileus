@@ -17,6 +17,7 @@ import '../../../shared/widgets/error_retry_view.dart';
 import '../../../shared/widgets/pileus_spinner.dart';
 import '../../../shared/widgets/tv_focusable.dart';
 import '../data/media_repository.dart';
+import '../episode_kind.dart';
 import '../../player/source_continuity.dart' show pickSourceByLabel;
 import '../../player/source_preference.dart' show preferredFirst;
 import '../../player/stream_warmer.dart';
@@ -565,7 +566,10 @@ class _EpisodeBodyState extends State<_EpisodeBody> {
                                 child: Column(
                                   crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
-                                    _EpMeta(item: item, scale: s),
+                                    _EpMeta(
+                                        item: item,
+                                        pluginId: widget.pluginId,
+                                        scale: s),
                                     SizedBox(height: 12 * s),
                                     Text(
                                       item.title,
@@ -739,8 +743,10 @@ class _StillPlaceholder extends StatelessWidget {
 
 class _EpMeta extends StatelessWidget {
   final CatalogItem item;
+  final String pluginId;
   final double scale;
-  const _EpMeta({required this.item, this.scale = 1.0});
+  const _EpMeta(
+      {required this.item, required this.pluginId, this.scale = 1.0});
 
   @override
   Widget build(BuildContext context) {
@@ -754,9 +760,13 @@ class _EpMeta extends StatelessWidget {
       parts.add(d.length == 3 ? '${d[2]}/${d[1]}/${d[0]}' : airDate);
     }
 
-    if (parts.isEmpty) return const SizedBox.shrink();
-    return Text(
-      parts.join('  ·  '),
+    // Filler/Riassunto: on the item, or from the list it was opened from.
+    final fromItem = episodeKindLabel(item.extra['filler']);
+    final kind =
+        fromItem.isNotEmpty ? fromItem : episodeKindOf(pluginId, item.id);
+    if (parts.isEmpty && kind.isEmpty) return const SizedBox.shrink();
+    return Text.rich(
+      episodeMetaSpan(parts, kind: kind, kindAt: parts.length),
       style: TextStyle(
         color: Colors.white38,
         fontSize: 14 * scale,
