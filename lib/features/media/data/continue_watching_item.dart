@@ -27,6 +27,9 @@ class ContinueWatchingItem {
   // never a list position.
   final int seasonNumber;
   final int episodeNumber;
+  // "new_episode" when the series got an episode after this profile last
+  // watched it (the server's daily check); '' otherwise — card_badge.dart.
+  final String badge;
 
   const ContinueWatchingItem({
     required this.providerID,
@@ -44,6 +47,7 @@ class ContinueWatchingItem {
     this.durationSeconds = 0,
     this.seasonNumber = 0,
     this.episodeNumber = 0,
+    this.badge = '',
   });
 
   double get progressFraction =>

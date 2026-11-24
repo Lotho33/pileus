@@ -14,6 +14,9 @@ export '../generated/media.pbgrpc.dart'
         CatalogItem,
         EpisodeInfo,
         MyListItem,
+        NewEpisode,
+        NewEpisodesRequest,
+        NewEpisodesResponse,
         MyListRequest,
         MyListResponse,
         SetMyListItemRequest,
@@ -257,6 +260,12 @@ class MediaGrpcClient {
   /// "La mia lista" — see proto/media.proto's MyListItem.
   Future<MyListResponse> getMyList(MyListRequest request) =>
       _mediaStub.getMyList(request,
+          options: CallOptions(timeout: _defaultRpcTimeout));
+
+  /// New episodes of the series this profile follows — the home's "Nuovi
+  /// episodi" row (new_episodes.dart).
+  Future<NewEpisodesResponse> getNewEpisodes() =>
+      _mediaStub.getNewEpisodes(NewEpisodesRequest(),
           options: CallOptions(timeout: _defaultRpcTimeout));
 
   Future<SetMyListItemResponse> setMyListItem(SetMyListItemRequest request) =>

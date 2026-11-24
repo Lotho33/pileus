@@ -202,6 +202,7 @@ class MyList extends ChangeNotifier {
         logoUrl: i.logoUrl,
         logoMeta: i.hasLogoMeta() ? i.logoMeta : null,
         isDir: i.mediaType == 'series',
+        badge: i.badge,
         extra: i.extra.entries,
       )..extra.addAll({
           if (i.fanartUrl.isNotEmpty) 'fanart_url': i.fanartUrl,

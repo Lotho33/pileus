@@ -18,6 +18,7 @@ import '../../player/content_view_mode.dart';
 import '../../settings/data/settings_repository.dart';
 import '../../player/cw_advance.dart';
 import '../episode_kind.dart';
+import '../new_episodes.dart';
 import 'continue_watching_item.dart';
 import 'cw_offline_queue.dart';
 import 'plugin_prefs.dart';
@@ -286,6 +287,17 @@ class MediaRepository {
     int ttlSeconds = 0,
     bool forceRefresh = false,
   }) async {
+    if (isNewEpisodesCatalog(catalogId)) {
+      return (
+        catalog: CatalogResponse(items: [
+          if (page <= 1)
+            for (final e in await _newEpisodes(fresh: forceRefresh))
+              if (e.pluginId == pluginId) newEpisodeCard(e)
+        ], hasMore: false),
+        fromCache: false,
+        stale: false,
+      );
+    }
     final endpoint = '$pluginId/$catalogId/$page';
     final skipCache = ttlSeconds == _noCache;
 
@@ -656,8 +668,54 @@ class MediaRepository {
         : '$_pluginOrderKeyPrefix:$pid';
   }
 
-  Future<List<PluginInfo>> listPlugins() async =>
-      _applyPluginPrefs(await _orderedPlugins(), await loadPluginPrefs());
+  Future<List<PluginInfo>> listPlugins() async => withNewEpisodesRow(
+      _applyPluginPrefs(await _orderedPlugins(), await loadPluginPrefs()));
+
+  // ── Nuovi episodi (new_episodes.dart) ──────────────────────────────────
+  // One GetNewEpisodes answers every plugin's row: kept a few minutes per
+  // profile, one call in flight. Any failure is an empty row (hidden), never
+  // an error on the home; a server without the RPC isn't asked again.
+  static const _newEpisodesTtl = Duration(minutes: 5);
+  (String, DateTime, List<NewEpisode>)? _newEpisodesCache;
+  (String, Future<List<NewEpisode>>)? _newEpisodesInFlight;
+  bool _newEpisodesUnsupported = false;
+
+  Future<List<NewEpisode>> _newEpisodes({bool fresh = false}) {
+    if (_newEpisodesUnsupported) return Future.value(const []);
+    final profile = _interceptor.profileId ?? '';
+    final c = _newEpisodesCache;
+    if (!fresh &&
+        c != null &&
+        c.$1 == profile &&
+        DateTime.now().difference(c.$2) < _newEpisodesTtl) {
+      return Future.value(c.$3);
+    }
+    final running = _newEpisodesInFlight;
+    if (running != null && running.$1 == profile) return running.$2;
+    final call = _fetchNewEpisodes(profile);
+    _newEpisodesInFlight = (profile, call);
+    call.whenComplete(() {
+      if (identical(_newEpisodesInFlight?.$2, call)) {
+        _newEpisodesInFlight = null;
+      }
+    });
+    return call;
+  }
+
+  Future<List<NewEpisode>> _fetchNewEpisodes(String profile) async {
+    try {
+      final items = (await _client.getNewEpisodes()).items;
+      if ((_interceptor.profileId ?? '') == profile) {
+        _newEpisodesCache = (profile, DateTime.now(), items);
+      }
+      return items;
+    } on GrpcError catch (e) {
+      if (e.code == StatusCode.unimplemented) _newEpisodesUnsupported = true;
+      return const <NewEpisode>[];
+    } catch (_) {
+      return const <NewEpisode>[];
+    }
+  }
 
   // Last good _orderedPlugins() result — HomeScreen refreshes it every ~30s,
   // so it's normally warm. listAllPlugins() falls back to it when a call
@@ -732,7 +790,8 @@ class MediaRepository {
     if (pid == null || pid.isEmpty) return null;
     final resp = _readPluginsSnapshot(pid);
     if (resp == null || resp.plugins.isEmpty) return null;
-    return _applyPluginPrefs(await _orderPlugins(resp), await loadPluginPrefs());
+    return withNewEpisodesRow(
+        _applyPluginPrefs(await _orderPlugins(resp), await loadPluginPrefs()));
   }
 
   Future<List<PluginInfo>> _orderedPlugins() async {
@@ -1385,6 +1444,7 @@ class MediaRepository {
                 year: i.year,
                 seasonNumber: i.seasonNumber,
                 episodeNumber: i.episodeNumber,
+                badge: i.badge,
               ))
           .toList();
 

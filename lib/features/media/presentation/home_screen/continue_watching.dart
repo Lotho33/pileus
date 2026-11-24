@@ -707,6 +707,9 @@ class _ContinueWatchingCardState extends State<_ContinueWatchingCard> {
                   ),
                 ),
               ),
+              // "Nuovo episodio": the bottom holds title and progress.
+              ...cardBadgeOverlay(widget.item.badge,
+                  top: true, fontSize: AppScale.caption(context)),
               // Progress bar — on top of gradient, well visible
               if (widget.item.progressFraction > 0)
                 Positioned(

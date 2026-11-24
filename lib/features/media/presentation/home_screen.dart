@@ -42,6 +42,7 @@ import 'widgets/plugin_nav.dart';
 import 'widgets/quick_search_area.dart';
 import '../../../shared/utils/safe_focus.dart';
 import 'widgets/details_common.dart';
+import '../../../shared/widgets/card_badge.dart';
 import '../../../shared/widgets/error_retry_view.dart';
 import '../../../shared/widgets/open_catalog_item.dart';
 import '../../../shared/widgets/offline_banner.dart';

@@ -122,6 +122,7 @@ class _MyListScreenState extends State<MyListScreen> {
                                 key: ValueKey('${it.pluginId}|${it.mediaId}'),
                                 title: it.title,
                                 posterUrl: it.posterUrl,
+                                badge: it.badge,
                                 width: cardW,
                                 height: cardH,
                                 autofocus: i == 0,

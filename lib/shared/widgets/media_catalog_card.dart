@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 
 import '../../core/theme/app_scale.dart';
 import '../../core/utils/image_sizing.dart';
+import 'card_badge.dart';
 import 'tv_focusable.dart';
 import 'package:cached_network_image_platform_interface/cached_network_image_platform_interface.dart'
     show ImageRenderMethodForWeb;
@@ -28,6 +29,7 @@ class MediaCatalogCard extends StatelessWidget {
   final VoidCallback? onNavigateUp; // fired when ↑ pressed (first section only)
   final VoidCallback?
       onNavigateDown; // fired when ↓ pressed (first section only)
+  final String badge; // 'new' | 'new_episode' — card_badge.dart
 
   const MediaCatalogCard({
     super.key,
@@ -46,6 +48,7 @@ class MediaCatalogCard extends StatelessWidget {
     this.onNavigateLeft,
     this.onNavigateUp,
     this.onNavigateDown,
+    this.badge = '',
   });
 
   /// Height of a grid cell for a poster card [posterHeight] tall: the card
@@ -185,6 +188,8 @@ class MediaCatalogCard extends StatelessWidget {
                           ),
                         ),
                       ),
+                    ...cardBadgeOverlay(badge,
+                        fontSize: AppScale.caption(context)),
                   ],
                 ),
               ),

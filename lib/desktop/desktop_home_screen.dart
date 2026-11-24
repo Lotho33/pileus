@@ -20,6 +20,7 @@ import '../features/media/bloc/discovery_state.dart';
 import '../features/media/paging.dart';
 import '../features/media/catalog_ranking.dart';
 import '../shared/widgets/more_items_tile.dart';
+import '../shared/widgets/card_badge.dart';
 import '../shared/widgets/rank_number.dart';
 import '../features/media/data/continue_watching_item.dart';
 import '../features/media/data/media_repository.dart';
@@ -377,6 +378,7 @@ class _CwRow extends StatelessWidget {
                 title: badge.isEmpty ? baseTitle : '$baseTitle · $badge',
                 poster: it.poster,
                 fraction: it.progressFraction,
+                badge: it.badge,
                 onResume: () => _resume(ctx, it),
                 onDetails: () => _details(ctx, it),
                 onRemove: () => _remove(ctx, it),
@@ -422,6 +424,7 @@ class _CwTile extends StatefulWidget {
   final String title;
   final String poster;
   final double fraction;
+  final String badge;
   final VoidCallback onResume;
   final VoidCallback onDetails;
   final VoidCallback onRemove;
@@ -430,6 +433,7 @@ class _CwTile extends StatefulWidget {
     required this.title,
     required this.poster,
     required this.fraction,
+    this.badge = '',
     required this.onResume,
     required this.onDetails,
     required this.onRemove,
@@ -512,6 +516,7 @@ class _CwTileState extends State<_CwTile> {
                           child: Icon(Icons.play_circle_fill_rounded,
                               color: Colors.white70, size: 42),
                         ),
+                        ...cardBadgeOverlay(widget.badge, top: true),
                         if (_hover)
                           Positioned(
                             top: 6,

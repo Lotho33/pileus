@@ -24,6 +24,7 @@ import '../features/media/bloc/discovery_state.dart';
 import '../features/media/catalog_ranking.dart';
 import '../features/media/paging.dart';
 import '../shared/widgets/more_items_tile.dart';
+import '../shared/widgets/card_badge.dart';
 import '../shared/widgets/rank_number.dart';
 import '../features/media/bloc/plugin_bloc.dart';
 import '../features/media/bloc/plugin_event.dart';
@@ -843,6 +844,7 @@ class _CwCard extends StatelessWidget {
                           color: Colors.white70, size: 40),
                     ),
                   ),
+                  ...cardBadgeOverlay(item.badge, top: true, fontSize: 10),
                 ],
               ),
             ),
