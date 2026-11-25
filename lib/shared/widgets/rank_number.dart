@@ -7,16 +7,12 @@ import '../../core/theme/app_theme.dart';
 /// width; the card then covers [kRankOverlap] of it — like the big charts of
 /// the streaming services, the digits run well under the next poster.
 const double kRankNumberWidth = 1.0;
-const double kRankOverlap = 0.4;
+const double kRankOverlap = 0.3;
 
-/// A two-digit rank ("10") is half again as wide as a wide digit: its card
-/// gets more room, so it stands nearly as tall as the others. It is always
-/// the row's last.
-const double kRankNumberWidthWide = 1.5;
-
-/// The number's space for [rank], as a fraction of the card's width.
-double rankNumberWidth(int rank) =>
-    rank >= 10 ? kRankNumberWidthWide : kRankNumberWidth;
+/// A two-digit rank ("10") keeps the same space as the others — it is drawn
+/// smaller, as in the charts, and may run further under its card, by this
+/// share of the part the card covers: its "0" half hidden.
+const double _kTwoDigitsUnderCard = 0.15;
 
 /// How tall the digits stand, as a fraction of the card's height.
 const double _kDigitHeight = 0.94;
@@ -29,6 +25,9 @@ const double _kClearOfCard = 0.1;
 /// they stand as tall as the card without a wide row (a chart's look).
 const double _kCondense = 0.86;
 
+/// Two digits a little more condensed, so "10" isn't much smaller.
+const double _kCondenseTwoDigits = 0.78;
+
 /// The big number beside a card in a Top 10 row: the app's own font,
 /// condensed, filled with the background and outlined in the accent — plain
 /// stroked text, cheap on modest hardware (no shader, blur or shadow). Its
@@ -36,7 +35,9 @@ const double _kCondense = 0.86;
 /// the card. A wide number starts at the left of [width] and runs under the
 /// card as far as it must; a narrow one ("1") stays whole in the part the
 /// card leaves visible ([visibleWidth]). A number wider than [width] is
-/// scaled down to fit.
+/// scaled down to fit — a two-digit one may reach a little further under
+/// the card ([_kTwoDigitsUnderCard]), so "10" is smaller than the others
+/// but not tiny.
 class RankNumber extends StatelessWidget {
   final int rank;
   final double width;
@@ -62,6 +63,8 @@ class _RankPainter extends CustomPainter {
   final String text;
   final double visible;
   _RankPainter(this.text, this.visible);
+
+  double get _condense => text.length > 1 ? _kCondenseTwoDigits : _kCondense;
 
   // Digits' cap height is ~0.7 of the font size in DM Sans.
   static const _capRatio = 0.72;
@@ -101,14 +104,16 @@ class _RankPainter extends CustomPainter {
     var fontSize = size.height * _kDigitHeight / _capRatio;
     // On screen (condensed) a number never goes past its own box. One digit
     // is sized as the widest ("0") would be, so 1 to 9 stand equally tall.
-    final full = _width(text.length == 1 ? '0' : text, fontSize) * _kCondense;
-    if (full > size.width) fontSize *= size.width / full;
-    final w = _width(text, fontSize) * _kCondense;
+    final room = size.width +
+        (text.length > 1 ? (size.width - visible) * _kTwoDigitsUnderCard : 0);
+    final full = _width(text.length == 1 ? '0' : text, fontSize) * _condense;
+    if (full > room) fontSize *= room / full;
+    final w = _width(text, fontSize) * _condense;
     // Wide: from the left edge, under the card as needed. Narrow: whole in
     // the visible part, clear of the card.
     final right =
         (w > visible * (1 - _kClearOfCard) ? w : visible * (1 - _kClearOfCard))
-            .clamp(0.0, size.width);
+            .clamp(0.0, room);
     final strokePaint = Paint()
       ..style = PaintingStyle.stroke
       ..strokeWidth = (fontSize * 0.02).clamp(1.5, 9.0)
@@ -116,7 +121,7 @@ class _RankPainter extends CustomPainter {
     canvas
       ..save()
       ..translate(right - w, 0)
-      ..scale(_kCondense, 1);
+      ..scale(_condense, 1);
     var x = 0.0;
     for (var i = 0; i < text.length; i++) {
       final fill = _digit(text[i], fontSize, null);
@@ -159,9 +164,9 @@ class RankedCardSlot extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final numW = cardWidth * rankNumberWidth(rank);
+    final numW = cardWidth * kRankNumberWidth;
     return SizedBox(
-      width: rankedSlotWidth(cardWidth, rank: rank),
+      width: rankedSlotWidth(cardWidth),
       height: slotHeight,
       child: Stack(
         clipBehavior: Clip.none,
@@ -188,5 +193,5 @@ class RankedCardSlot extends StatelessWidget {
   }
 }
 
-double rankedSlotWidth(double cardWidth, {int rank = 1}) =>
-    cardWidth * (1 + rankNumberWidth(rank) - kRankOverlap);
+double rankedSlotWidth(double cardWidth) =>
+    cardWidth * (1 + kRankNumberWidth - kRankOverlap);

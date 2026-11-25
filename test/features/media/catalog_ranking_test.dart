@@ -18,9 +18,6 @@ void main() {
     expect(rankFor(0, 0), 1);
     expect(rankFor(0, 4), 5);
     expect(rankFor(7, 4), 7); // the plugin's own number wins
-    // A two-digit rank gets a wider number space, so "10" isn't shrunk.
-    expect(rankedSlotWidth(100, rank: 10), greaterThan(rankedSlotWidth(100)));
-    expect(rankNumberWidth(9), kRankNumberWidth);
   });
 
   test('badge labels; unknown values show nothing', () {

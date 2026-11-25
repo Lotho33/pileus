@@ -158,41 +158,10 @@ class _FixedCarouselViewState extends State<_FixedCarouselView> {
           : _kVisibleCards);
 
   // A Top 10: the cards keep the size of the other rows' and each slot also
-  // holds the number, so fewer slots fit; [_slotW] is a one-digit slot's
-  // width — a two-digit rank's is wider (rankNumberWidth), so positions are
-  // summed slot by slot ([_offsetOf]) instead of a fixed stride.
+  // holds the number, so fewer slots fit; [_slotW] is the slot's width.
   bool get _ranked => widget.block.ranked;
   double _slotW = 0;
-  double _avail = 0;
   int _visibleSlots = 0;
-
-  double _slotWidthAt(int i) {
-    final items = widget.block.items;
-    return _ranked && i < items.length
-        ? rankedSlotWidth(_cardW, rank: items[i].rank)
-        : _slotW;
-  }
-
-  // Where slot [i] starts, from the first one.
-  double _offsetOf(int i) {
-    if (!_ranked) return i * (_slotW + _cardGap);
-    var x = 0.0;
-    for (var j = 0; j < i; j++) {
-      x += _slotWidthAt(j) + _cardGap;
-    }
-    return x;
-  }
-
-  // The furthest the row scrolls: from there the last slot ends at the
-  // right margin.
-  int _maxScroll(int slots) {
-    if (!_ranked) return (slots - _visibleSlots).clamp(0, 9999);
-    final end = _offsetOf(slots) - _cardGap;
-    for (var i = 0; i < slots; i++) {
-      if (end - _offsetOf(i) <= _avail + 0.5) return i;
-    }
-    return 0;
-  }
 
   // Recomputed every build (cheap arithmetic, no side effects) rather than
   // cached via didChangeDependencies — a host that hands in
@@ -233,7 +202,6 @@ class _FixedCarouselViewState extends State<_FixedCarouselView> {
     _hPad = hPad;
     _cardH = _cardW * 3 / 2;
     _scaleOvf = _cardH * 0.10;
-    _avail = avail;
     _slotW = _ranked ? rankedSlotWidth(_cardW) : _cardW;
     _visibleSlots = _ranked
         ? ((avail + _cardGap) / (_slotW + _cardGap)).floor().clamp(1, 99)
@@ -304,8 +272,9 @@ class _FixedCarouselViewState extends State<_FixedCarouselView> {
     _computeDims();
     final items = widget.block.items;
     final slots = _slotCount;
-    final scrollIdx = _focusedIndex.clamp(0, _maxScroll(slots));
-    final translateX = _offsetOf(scrollIdx);
+    final scrollIdx =
+        _focusedIndex.clamp(0, (slots - _visibleSlots).clamp(0, 9999));
+    final translateX = scrollIdx * (_slotW + _cardGap);
 
     // Windowed rendering: build only visible cards + a small buffer on each side.
     // Single-step navigation always targets an index inside this window, so no
@@ -313,7 +282,7 @@ class _FixedCarouselViewState extends State<_FixedCarouselView> {
     const kBuf = 3;
     final winStart = (scrollIdx - kBuf).clamp(0, slots);
     final winEnd = (scrollIdx + _visibleSlots + kBuf).clamp(0, slots);
-    final winOffX = _offsetOf(winStart);
+    final winOffX = winStart * (_slotW + _cardGap);
 
     final row = Padding(
       padding: EdgeInsets.only(left: _hPad + winOffX),
