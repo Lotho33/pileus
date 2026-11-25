@@ -4,33 +4,38 @@ import 'package:flutter/material.dart';
 import '../../core/theme/app_theme.dart';
 
 /// How wide the number beside a ranked card is, as a fraction of the card's
-/// width; the card then covers the number's last [kRankOverlap] of that.
-const double kRankNumberWidth = 0.92;
-const double kRankOverlap = 0.22;
+/// width; the card then covers [kRankOverlap] of it — like the big charts of
+/// the streaming services, the digits run well under the next poster.
+const double kRankNumberWidth = 1.0;
+const double kRankOverlap = 0.4;
 
-/// A two-digit rank ("10") is half again as wide as a wide digit in DM Sans:
-/// its card gets a wider number space, so it stands as tall as the others
-/// without squeezing its digits together. It is always the row's last.
-const double kRankNumberWidthWide = 1.45;
+/// A two-digit rank ("10"): a little more room, so the "0" isn't all hidden.
+/// It is always the row's last.
+const double kRankNumberWidthWide = 1.15;
 
 /// The number's space for [rank], as a fraction of the card's width.
 double rankNumberWidth(int rank) =>
     rank >= 10 ? kRankNumberWidthWide : kRankNumberWidth;
 
 /// How tall the digits stand, as a fraction of the card's height.
-const double _kDigitHeight = 0.74;
+const double _kDigitHeight = 0.94;
 
-/// The share of a number's own width that may slip under the card.
-const double _kUnderCard = 0.25;
+/// How far from the card a narrow number ("1") ends, as a share of the
+/// visible part: room for the focused card growing over it.
+const double _kClearOfCard = 0.1;
 
-/// The big number beside a card in a Top 10 row: the app's own font, filled
-/// with the background and outlined in the accent — plain stroked text,
-/// cheap on modest hardware (no shader, blur or shadow). Its baseline sits
-/// on the card's bottom edge. It is placed on the part of [width] the card
-/// leaves visible ([visibleWidth]) and slips under the card by at most a
-/// quarter of its own width, so a narrow "1" stays whole and a wide "7"
-/// keeps its stroke; a number still too wide for that is scaled down to
-/// fit (a two-digit one has a wider space: [rankNumberWidth]).
+/// DM Sans' digits are wide: drawn condensed to this share of their width,
+/// they stand as tall as the card without a wide row (a chart's look).
+const double _kCondense = 0.74;
+
+/// The big number beside a card in a Top 10 row: the app's own font,
+/// condensed, filled with the background and outlined in the accent — plain
+/// stroked text, cheap on modest hardware (no shader, blur or shadow). Its
+/// baseline sits on the card's bottom edge and it stands about as tall as
+/// the card. A wide number starts at the left of [width] and runs under the
+/// card as far as it must; a narrow one ("1") stays whole in the part the
+/// card leaves visible ([visibleWidth]). A number wider than [width] is
+/// scaled down to fit.
 class RankNumber extends StatelessWidget {
   final int rank;
   final double width;
@@ -67,7 +72,8 @@ class _RankPainter extends CustomPainter {
             fontFamily: AppTheme.bodyFont,
             fontSize: fontSize,
             fontWeight: FontWeight.w700,
-            letterSpacing: -fontSize * 0.03,
+            // Two digits nearly touch, as in the charts.
+            letterSpacing: -fontSize * (text.length > 1 ? 0.07 : 0.02),
             color: stroke == null ? AppTheme.bg : null,
             foreground: stroke,
           ),
@@ -78,24 +84,32 @@ class _RankPainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
     var fontSize = size.height * _kDigitHeight / _capRatio;
-    // Widest a number can be: whole in the visible part but for the share
-    // allowed under the card, and never past the number's own box.
-    final maxW = (visible / (1 - _kUnderCard)).clamp(0.0, size.width);
+    // On screen (condensed) a number never goes past its own box.
     final probe = _layout(fontSize, null);
-    if (probe.width > maxW) fontSize *= maxW / probe.width;
+    final probeW = probe.width * _kCondense;
+    if (probeW > size.width) fontSize *= size.width / probeW;
     final fill = _layout(fontSize, null);
     final stroke = _layout(
         fontSize,
         Paint()
           ..style = PaintingStyle.stroke
-          ..strokeWidth = (fontSize * 0.018).clamp(1.5, 8.0)
+          ..strokeWidth = (fontSize * 0.02).clamp(1.5, 9.0)
           ..color = AppTheme.primary.withValues(alpha: 0.9));
+    final w = fill.width * _kCondense;
     final baseline =
         fill.computeDistanceToActualBaseline(TextBaseline.alphabetic);
-    final right = (visible + fill.width * _kUnderCard).clamp(0.0, size.width);
-    final at = Offset(right - fill.width, size.height - baseline);
-    fill.paint(canvas, at);
-    stroke.paint(canvas, at);
+    // Wide: from the left edge, under the card as needed. Narrow: whole in
+    // the visible part, clear of the card.
+    final right =
+        (w > visible * (1 - _kClearOfCard) ? w : visible * (1 - _kClearOfCard))
+            .clamp(0.0, size.width);
+    canvas
+      ..save()
+      ..translate(right - w, size.height - baseline)
+      ..scale(_kCondense, 1);
+    fill.paint(canvas, Offset.zero);
+    stroke.paint(canvas, Offset.zero);
+    canvas.restore();
     probe.dispose();
     fill.dispose();
     stroke.dispose();
