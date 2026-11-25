@@ -2,8 +2,7 @@
 import 'package:flutter/material.dart';
 
 import '../../../core/theme/app_scale.dart';
-import '../../../core/theme/app_theme.dart';
-import '../tv_focusable.dart';
+import '../tv_back_button.dart';
 
 /// Header for full-screen Settings pages — replaces the stock Material
 /// AppBar (fixed 56dp height, default title style, and a back button that
@@ -38,7 +37,7 @@ class SettingsHeader extends StatelessWidget {
           AppScale.space(context, 12)),
       child: Row(
         children: [
-          _SettingsBackButton(
+          TvBackButton(
               focusNode: focusNode,
               onTap: onBack,
               onFocusDown: onFocusDown,
@@ -58,58 +57,6 @@ class SettingsHeader extends StatelessWidget {
             ),
           ),
         ],
-      ),
-    );
-  }
-}
-
-class _SettingsBackButton extends StatelessWidget {
-  final FocusNode focusNode;
-  final VoidCallback onTap;
-  final VoidCallback? onFocusDown;
-  final bool autofocus;
-
-  const _SettingsBackButton({
-    required this.focusNode,
-    required this.onTap,
-    this.onFocusDown,
-    this.autofocus = false,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return TvFocusable(
-      focusNode: focusNode,
-      autofocus: autofocus,
-      onActivate: onTap,
-      onEsc: onTap,
-      onDown: onFocusDown,
-      builder: (context, focused) => AnimatedScale(
-        scale: focused ? AppScale.focusScaleIcon : 1.0,
-        duration: AppScale.focusDuration,
-        curve: AppScale.focusCurve,
-        child: AnimatedContainer(
-          duration: AppScale.focusDuration,
-          curve: AppScale.focusCurve,
-          padding: EdgeInsets.all(AppScale.space(context, 10)),
-          decoration: BoxDecoration(
-            color: focused
-                ? AppTheme.primary.withValues(alpha: 0.22)
-                : Colors.white.withValues(alpha: 0.05),
-            borderRadius: BorderRadius.circular(10),
-            border: Border.all(
-              color: focused ? AppTheme.primary : Colors.transparent,
-              width: 2,
-            ),
-            boxShadow:
-                focused ? AppScale.focusGlow(AppTheme.primary, blur: 14) : null,
-          ),
-          child: Icon(
-            Icons.arrow_back_rounded,
-            color: Colors.white.withValues(alpha: focused ? 1.0 : 0.7),
-            size: AppScale.iconM(context),
-          ),
-        ),
       ),
     );
   }

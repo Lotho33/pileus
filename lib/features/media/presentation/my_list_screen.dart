@@ -6,6 +6,7 @@ import '../../../core/theme/app_scale.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../shared/widgets/media_catalog_card.dart';
 import '../../../shared/widgets/open_catalog_item.dart';
+import '../../../shared/widgets/tv_back_button.dart';
 import '../../../shared/widgets/tv_focusable.dart';
 import '../my_list.dart';
 
@@ -65,22 +66,10 @@ class _MyListScreenState extends State<MyListScreen> {
                       hPad, AppScale.space(context, 40), hPad, 0),
                   child: Row(
                     children: [
-                      TvFocusable(
+                      TvBackButton(
                         focusNode: _backFn,
                         autofocus: items.isEmpty,
-                        onActivate: () => context.pop(),
-                        builder: (context, focused) => Container(
-                          padding: EdgeInsets.all(AppScale.space(context, 10)),
-                          decoration: BoxDecoration(
-                            color: Colors.white
-                                .withValues(alpha: focused ? 0.15 : 0.05),
-                            borderRadius: BorderRadius.circular(10),
-                          ),
-                          child: Icon(Icons.arrow_back_rounded,
-                              size: AppScale.iconM(context),
-                              color: Colors.white
-                                  .withValues(alpha: focused ? 1.0 : 0.7)),
-                        ),
+                        onTap: () => context.pop(),
                       ),
                       SizedBox(width: AppScale.space(context, 16)),
                       Text('La mia lista',
@@ -127,9 +116,8 @@ class _MyListScreenState extends State<MyListScreen> {
                                 height: cardH,
                                 autofocus: i == 0,
                                 centerTitle: true,
-                                onNavigateUp: i < _columns
-                                    ? _backFn.requestFocus
-                                    : null,
+                                onNavigateUp:
+                                    i < _columns ? _backFn.requestFocus : null,
                                 onTap: () => openCatalogItem(context,
                                     it.pluginId, MyList.toCatalogItem(it)),
                               );

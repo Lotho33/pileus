@@ -13,6 +13,7 @@ import '../../../core/grpc/grpc_errors.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/image_sizing.dart';
 import '../../../shared/widgets/open_catalog_item.dart';
+import '../../../shared/widgets/tv_back_button.dart';
 import '../../../shared/widgets/tv_focusable.dart';
 import '../calendar.dart';
 import '../data/media_repository.dart';
@@ -139,11 +140,9 @@ class _CalendarScreenState extends State<CalendarScreen> {
         children: [
           Row(children: [
             if (!widget.embedded) ...[
-              _Chip(
-                u: u,
-                icon: Icons.arrow_back_rounded,
+              TvBackButton(
                 onTap: () => context.pop(),
-                onDown: () => _firstRowFn.requestFocus(),
+                onFocusDown: () => _mineFn.requestFocus(),
               ),
               SizedBox(width: 16 * u),
             ],
@@ -373,7 +372,9 @@ class _Row extends StatelessWidget {
       child: Text('Previsto',
           style: TextStyle(color: AppTheme.textMid, fontSize: 19 * u)),
     );
-    final small = [if (compact) time, sub, pluginName]
+    // No announced hour: "In giornata" instead of an empty time.
+    final when = time.isEmpty ? kCalendarAllDayLabel : time;
+    final small = [if (compact) when, sub, pluginName]
         .where((s) => s.isNotEmpty)
         .join('  ·  ');
     return Padding(
@@ -396,11 +397,18 @@ class _Row extends StatelessWidget {
             if (!compact)
               SizedBox(
                 width: 90 * u,
-                child: Text(time,
-                    style: TextStyle(
-                        color: AppTheme.textMid,
-                        fontSize: 24 * u,
-                        fontWeight: FontWeight.w600)),
+                child: time.isNotEmpty
+                    ? Text(time,
+                        style: TextStyle(
+                            color: AppTheme.textMid,
+                            fontSize: 24 * u,
+                            fontWeight: FontWeight.w600))
+                    : Text('In\ngiornata',
+                        style: TextStyle(
+                            color: AppTheme.textLow,
+                            fontSize: 18 * u,
+                            height: 1.15,
+                            fontWeight: FontWeight.w600)),
               ),
             ClipRRect(
               borderRadius: BorderRadius.circular(8 * u),

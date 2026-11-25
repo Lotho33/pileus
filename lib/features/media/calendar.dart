@@ -75,6 +75,10 @@ String calendarDayLabel(DateTime day, DateTime now) {
   return '${_weekdays[d.weekday - 1]} ${d.day} ${_months[d.month - 1]}';
 }
 
+/// What stands in for the time when only the date is known: due that day,
+/// at an hour nobody announced.
+const kCalendarAllDayLabel = 'In giornata';
+
 /// "21:00", or '' when only the date is known.
 String calendarTimeLabel(CalendarEntry e) {
   if (e.allDay) return '';
