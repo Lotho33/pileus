@@ -8,6 +8,15 @@ import '../../core/theme/app_theme.dart';
 const double kRankNumberWidth = 0.92;
 const double kRankOverlap = 0.22;
 
+/// A two-digit rank ("10") is half again as wide as a wide digit in DM Sans:
+/// its card gets a wider number space, so it stands as tall as the others
+/// without squeezing its digits together. It is always the row's last.
+const double kRankNumberWidthWide = 1.45;
+
+/// The number's space for [rank], as a fraction of the card's width.
+double rankNumberWidth(int rank) =>
+    rank >= 10 ? kRankNumberWidthWide : kRankNumberWidth;
+
 /// How tall the digits stand, as a fraction of the card's height.
 const double _kDigitHeight = 0.74;
 
@@ -20,8 +29,8 @@ const double _kUnderCard = 0.25;
 /// on the card's bottom edge. It is placed on the part of [width] the card
 /// leaves visible ([visibleWidth]) and slips under the card by at most a
 /// quarter of its own width, so a narrow "1" stays whole and a wide "7"
-/// keeps its stroke; a number too wide for that ("10", tightened first) is
-/// scaled down to fit.
+/// keeps its stroke; a number still too wide for that is scaled down to
+/// fit (a two-digit one has a wider space: [rankNumberWidth]).
 class RankNumber extends StatelessWidget {
   final int rank;
   final double width;
@@ -58,8 +67,7 @@ class _RankPainter extends CustomPainter {
             fontFamily: AppTheme.bodyFont,
             fontSize: fontSize,
             fontWeight: FontWeight.w700,
-            // Two digits sit closer, so "10" isn't squeezed as small.
-            letterSpacing: -fontSize * (text.length > 1 ? 0.14 : 0.04),
+            letterSpacing: -fontSize * 0.03,
             color: stroke == null ? AppTheme.bg : null,
             foreground: stroke,
           ),
@@ -119,9 +127,9 @@ class RankedCardSlot extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final numW = cardWidth * kRankNumberWidth;
+    final numW = cardWidth * rankNumberWidth(rank);
     return SizedBox(
-      width: rankedSlotWidth(cardWidth),
+      width: rankedSlotWidth(cardWidth, rank: rank),
       height: slotHeight,
       child: Stack(
         clipBehavior: Clip.none,
@@ -148,5 +156,5 @@ class RankedCardSlot extends StatelessWidget {
   }
 }
 
-double rankedSlotWidth(double cardWidth) =>
-    cardWidth * (1 + kRankNumberWidth - kRankOverlap);
+double rankedSlotWidth(double cardWidth, {int rank = 1}) =>
+    cardWidth * (1 + rankNumberWidth(rank) - kRankOverlap);
