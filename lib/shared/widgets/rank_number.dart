@@ -9,9 +9,10 @@ import '../../core/theme/app_theme.dart';
 const double kRankNumberWidth = 1.0;
 const double kRankOverlap = 0.4;
 
-/// A two-digit rank ("10"): a little more room, so the "0" isn't all hidden.
-/// It is always the row's last.
-const double kRankNumberWidthWide = 1.15;
+/// A two-digit rank ("10") is half again as wide as a wide digit: its card
+/// gets more room, so it stands nearly as tall as the others. It is always
+/// the row's last.
+const double kRankNumberWidthWide = 1.5;
 
 /// The number's space for [rank], as a fraction of the card's width.
 double rankNumberWidth(int rank) =>
@@ -26,7 +27,7 @@ const double _kClearOfCard = 0.1;
 
 /// DM Sans' digits are wide: drawn condensed to this share of their width,
 /// they stand as tall as the card without a wide row (a chart's look).
-const double _kCondense = 0.74;
+const double _kCondense = 0.86;
 
 /// The big number beside a card in a Top 10 row: the app's own font,
 /// condensed, filled with the background and outlined in the accent — plain
@@ -65,15 +66,18 @@ class _RankPainter extends CustomPainter {
   // Digits' cap height is ~0.7 of the font size in DM Sans.
   static const _capRatio = 0.72;
 
-  TextPainter _layout(double fontSize, Paint? stroke) => TextPainter(
+  // Between two digits, as a share of the font size: laid out one by one
+  // (letter spacing is drawn differently from one platform to another, and
+  // pulled tight it ran the "1" into the "0").
+  static const _digitGap = 0.04;
+
+  TextPainter _digit(String d, double fontSize, Paint? stroke) => TextPainter(
         text: TextSpan(
-          text: text,
+          text: d,
           style: TextStyle(
             fontFamily: AppTheme.bodyFont,
             fontSize: fontSize,
             fontWeight: FontWeight.w700,
-            // Two digits nearly touch, as in the charts.
-            letterSpacing: -fontSize * (text.length > 1 ? 0.07 : 0.02),
             color: stroke == null ? AppTheme.bg : null,
             foreground: stroke,
           ),
@@ -81,38 +85,52 @@ class _RankPainter extends CustomPainter {
         textDirection: TextDirection.ltr,
       )..layout();
 
+  // The width of [s] before condensing, at [fontSize].
+  double _width(String s, double fontSize) {
+    var w = 0.0;
+    for (var i = 0; i < s.length; i++) {
+      final p = _digit(s[i], fontSize, null);
+      w += p.width + (i > 0 ? fontSize * _digitGap : 0);
+      p.dispose();
+    }
+    return w;
+  }
+
   @override
   void paint(Canvas canvas, Size size) {
     var fontSize = size.height * _kDigitHeight / _capRatio;
-    // On screen (condensed) a number never goes past its own box.
-    final probe = _layout(fontSize, null);
-    final probeW = probe.width * _kCondense;
-    if (probeW > size.width) fontSize *= size.width / probeW;
-    final fill = _layout(fontSize, null);
-    final stroke = _layout(
-        fontSize,
-        Paint()
-          ..style = PaintingStyle.stroke
-          ..strokeWidth = (fontSize * 0.02).clamp(1.5, 9.0)
-          ..color = AppTheme.primary.withValues(alpha: 0.9));
-    final w = fill.width * _kCondense;
-    final baseline =
-        fill.computeDistanceToActualBaseline(TextBaseline.alphabetic);
+    // On screen (condensed) a number never goes past its own box. One digit
+    // is sized as the widest ("0") would be, so 1 to 9 stand equally tall.
+    final full = _width(text.length == 1 ? '0' : text, fontSize) * _kCondense;
+    if (full > size.width) fontSize *= size.width / full;
+    final w = _width(text, fontSize) * _kCondense;
     // Wide: from the left edge, under the card as needed. Narrow: whole in
     // the visible part, clear of the card.
     final right =
         (w > visible * (1 - _kClearOfCard) ? w : visible * (1 - _kClearOfCard))
             .clamp(0.0, size.width);
+    final strokePaint = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = (fontSize * 0.02).clamp(1.5, 9.0)
+      ..color = AppTheme.primary.withValues(alpha: 0.9);
     canvas
       ..save()
-      ..translate(right - w, size.height - baseline)
+      ..translate(right - w, 0)
       ..scale(_kCondense, 1);
-    fill.paint(canvas, Offset.zero);
-    stroke.paint(canvas, Offset.zero);
+    var x = 0.0;
+    for (var i = 0; i < text.length; i++) {
+      final fill = _digit(text[i], fontSize, null);
+      final stroke = _digit(text[i], fontSize, strokePaint);
+      final baseline =
+          fill.computeDistanceToActualBaseline(TextBaseline.alphabetic);
+      final at = Offset(x, size.height - baseline);
+      fill.paint(canvas, at);
+      stroke.paint(canvas, at);
+      x += fill.width + fontSize * _digitGap;
+      fill.dispose();
+      stroke.dispose();
+    }
     canvas.restore();
-    probe.dispose();
-    fill.dispose();
-    stroke.dispose();
   }
 
   @override
