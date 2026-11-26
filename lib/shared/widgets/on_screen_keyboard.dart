@@ -332,10 +332,10 @@ class OnScreenKeyboardState extends State<OnScreenKeyboard> {
   }
 
   void _moveHorizontal(int row, int col, int dir) {
-    final newCol = col + dir;
-    // stop at edges, no wrap
-    if (newCol < 0 || newCol >= _rows[row].length) return;
-    _nodes[row][newCol].requestFocus();
+    // Wraps around: right from the last key lands on the first of the same
+    // row, left from the first on the last.
+    final len = _rows[row].length;
+    _nodes[row][(col + dir) % len].requestFocus();
   }
 
   void _moveVertical(int row, int col, int dir) {

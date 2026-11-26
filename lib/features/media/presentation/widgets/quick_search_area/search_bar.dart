@@ -122,20 +122,20 @@ class _QuickSearchBarState extends State<_QuickSearchBar> {
               // button below just read as "two things are selected". A plain,
               // static box — the blinking caret (shown only once expanded)
               // and the keyboard appearing are enough to signal "typing here".
-              // Closed, on the home, it is tinted with the accent instead
-              // (fill, a faint border, the icon) so it stands out without a
-              // focus ring; open, it goes back to neutral while the focus
-              // is on the keyboard.
+              // Closed, on the home, it is lifted off the page with the
+              // app's own neutrals — a lighter surface, a brighter outline,
+              // icon and hint — rather than the accent, which means focus
+              // everywhere else; open, it goes back to plain while the
+              // focus is on the keyboard.
               decoration: BoxDecoration(
                 color: widget.expanded
                     ? const Color(0xFF1E1E2E)
-                    : Color.alphaBlend(AppTheme.primary.withValues(alpha: 0.16),
-                        const Color(0xFF1E1E2E)),
+                    : Color.alphaBlend(Colors.white.withValues(alpha: 0.08),
+                        AppTheme.surface2),
                 borderRadius: BorderRadius.circular(10),
                 border: Border.all(
-                  color: widget.expanded
-                      ? AppTheme.textHigh.withValues(alpha: 0.20)
-                      : AppTheme.primary.withValues(alpha: 0.35),
+                  color: AppTheme.textHigh
+                      .withValues(alpha: widget.expanded ? 0.20 : 0.28),
                   width: 1,
                 ),
               ),
@@ -143,9 +143,8 @@ class _QuickSearchBarState extends State<_QuickSearchBar> {
                 children: [
                   Icon(Icons.search_rounded,
                       size: barH * 0.42,
-                      color: widget.expanded
-                          ? AppTheme.textHigh.withValues(alpha: 0.5)
-                          : AppTheme.primary),
+                      color: AppTheme.textHigh
+                          .withValues(alpha: widget.expanded ? 0.5 : 0.85)),
                   SizedBox(width: barH * 0.2),
                   Expanded(
                     // OnScreenKeyboard below is the only intended input
@@ -170,7 +169,8 @@ class _QuickSearchBarState extends State<_QuickSearchBar> {
                                 : text,
                             style: TextStyle(
                               color: text.isEmpty
-                                  ? AppTheme.textHigh.withValues(alpha: 0.4)
+                                  ? AppTheme.textHigh.withValues(
+                                      alpha: widget.expanded ? 0.4 : 0.65)
                                   : AppTheme.textHigh,
                               fontSize: barH * 0.32,
                             ),
