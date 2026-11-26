@@ -373,7 +373,7 @@ class _Row extends StatelessWidget {
           style: TextStyle(color: AppTheme.textMid, fontSize: 19 * u)),
     );
     // No announced hour: "In giornata" at the head of the small line (on
-    // every layout), a calendar mark where the hour would stand.
+    // every layout), "--:--" where the hour would stand.
     final when = time.isEmpty ? kCalendarAllDayLabel : (compact ? time : '');
     final small =
         [when, sub, pluginName].where((s) => s.isNotEmpty).join('  ·  ');
@@ -396,23 +396,23 @@ class _Row extends StatelessWidget {
           child: Row(children: [
             if (!compact)
               SizedBox(
-                width: 90 * u,
+                width: 110 * u,
                 // Centred, one line: a larger text scale (web, desktop)
                 // shrinks the hour rather than breaking it.
                 child: Center(
-                  child: time.isNotEmpty
-                      ? FittedBox(
-                          fit: BoxFit.scaleDown,
-                          child: Text(time,
-                              maxLines: 1,
-                              softWrap: false,
-                              style: TextStyle(
-                                  color: AppTheme.textMid,
-                                  fontSize: 24 * u,
-                                  fontWeight: FontWeight.w600)),
-                        )
-                      : Icon(Icons.event_rounded,
-                          size: 28 * u, color: AppTheme.textLow),
+                  // No announced hour: "--:--", dimmed, in the hour's place.
+                  child: FittedBox(
+                    fit: BoxFit.scaleDown,
+                    child: Text(time.isNotEmpty ? time : '--:--',
+                        maxLines: 1,
+                        softWrap: false,
+                        style: TextStyle(
+                            color: time.isNotEmpty
+                                ? AppTheme.textMid
+                                : AppTheme.textLow,
+                            fontSize: 24 * u,
+                            fontWeight: FontWeight.w600)),
+                  ),
                 ),
               ),
             ClipRRect(

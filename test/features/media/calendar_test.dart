@@ -74,8 +74,12 @@ void main() {
     expect(calendarSubtitle(bare), 'S2 · E8');
   });
 
-  test('a tap opens the series once available, nothing before', () {
-    expect(calendarOpenTarget(entry('2026-11-26', available: false)), isNull);
+  test('a tap opens the series, "Previsto" ones too', () {
+    expect(
+        calendarOpenTarget(
+                entry('2026-11-26', available: false, seriesId: 's1'))!
+            .id,
+        's1');
     final ep = calendarOpenTarget(entry('2026-11-26', seriesId: 's1'))!;
     expect(ep.id, 's1');
     expect(ep.mediaType, 'series');

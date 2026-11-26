@@ -114,10 +114,10 @@ String calendarSubtitle(CalendarEntry e) {
 /// `series_id` and the episode number instead.
 bool calendarLandscapeThumb(CalendarEntry e) => e.item.mediaType == 'episode';
 
-/// What a tap opens: the series of an episode, or the title itself — only
-/// once it's available ("Previsto" opens nothing: a date is a plan).
+/// What a tap opens: the series of an episode, or the title itself — a
+/// "Previsto" one too (its page, to follow or add it ahead of the date).
+/// Null only for an entry with nothing to open.
 CatalogItem? calendarOpenTarget(CalendarEntry e) {
-  if (!e.available) return null;
   if (e.seriesId.isNotEmpty) {
     return CatalogItem(
       id: e.seriesId,
@@ -126,5 +126,5 @@ CatalogItem? calendarOpenTarget(CalendarEntry e) {
       mediaType: 'series',
     );
   }
-  return e.item;
+  return e.item.id.isEmpty ? null : e.item;
 }
