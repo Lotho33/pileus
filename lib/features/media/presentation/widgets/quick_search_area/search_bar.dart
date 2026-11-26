@@ -122,21 +122,30 @@ class _QuickSearchBarState extends State<_QuickSearchBar> {
               // button below just read as "two things are selected". A plain,
               // static box — the blinking caret (shown only once expanded)
               // and the keyboard appearing are enough to signal "typing here".
-              // Its border is the accent, without the glow, so the bar
-              // stands out on the home without reading as focused.
+              // Closed, on the home, it is tinted with the accent instead
+              // (fill, a faint border, the icon) so it stands out without a
+              // focus ring; open, it goes back to neutral while the focus
+              // is on the keyboard.
               decoration: BoxDecoration(
-                color: const Color(0xFF1E1E2E),
+                color: widget.expanded
+                    ? const Color(0xFF1E1E2E)
+                    : Color.alphaBlend(AppTheme.primary.withValues(alpha: 0.16),
+                        const Color(0xFF1E1E2E)),
                 borderRadius: BorderRadius.circular(10),
                 border: Border.all(
-                  color: AppTheme.primary,
-                  width: 2,
+                  color: widget.expanded
+                      ? AppTheme.textHigh.withValues(alpha: 0.20)
+                      : AppTheme.primary.withValues(alpha: 0.35),
+                  width: 1,
                 ),
               ),
               child: Row(
                 children: [
                   Icon(Icons.search_rounded,
                       size: barH * 0.42,
-                      color: AppTheme.textHigh.withValues(alpha: 0.5)),
+                      color: widget.expanded
+                          ? AppTheme.textHigh.withValues(alpha: 0.5)
+                          : AppTheme.primary),
                   SizedBox(width: barH * 0.2),
                   Expanded(
                     // OnScreenKeyboard below is the only intended input
