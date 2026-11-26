@@ -5,17 +5,17 @@ import '../../core/theme/app_theme.dart';
 
 /// How wide the number beside a ranked card is, as a fraction of the card's
 /// width; the card then covers [kRankOverlap] of it — like the big charts of
-/// the streaming services, the digits run well under the next poster.
+/// the streaming services, a wide number runs under its poster.
 const double kRankNumberWidth = 1.0;
-const double kRankOverlap = 0.3;
+const double kRankOverlap = 0.2;
 
-/// A two-digit rank ("10") keeps the same space as the others — it is drawn
-/// smaller, as in the charts, and may run further under its card, by this
-/// share of the part the card covers.
-const double _kTwoDigitsUnderCard = 0.33;
+/// "10" keeps the same space as the others and may run further under its
+/// card, by this share of the part the card covers; every number is drawn
+/// at the size "10" fits at.
+const double _kTwoDigitsUnderCard = 0.2;
 
-/// How tall the digits stand, as a fraction of the card's height: well
-/// short of it, centred on the card's middle.
+/// How tall the digits stand at most, as a fraction of the card's height
+/// (the width "10" needs usually keeps them shorter).
 const double _kDigitHeight = 0.62;
 
 /// How far from the card a narrow number ("1") ends, as a share of the
@@ -25,13 +25,11 @@ const double _kClearOfCard = 0.1;
 /// The big number beside a card in a Top 10 row: the app's own font at its
 /// own proportions, filled with the background and outlined in the accent —
 /// plain stroked text, cheap on modest hardware (no shader, blur or
-/// shadow). It stands about two thirds as tall as the card, centred on the
+/// shadow). It stands about half as tall as the card, centred on the
 /// card's middle. A wide number starts at the left of [width] and runs under
 /// the card as far as it must; a narrow one ("1") stays whole in the part
-/// the card leaves visible ([visibleWidth]). A number wider than [width] is
-/// scaled down to fit — a two-digit one may reach a little further under
-/// the card ([_kTwoDigitsUnderCard]), so "10" is smaller than the others
-/// but not tiny.
+/// the card leaves visible ([visibleWidth]). All ten stand equally tall:
+/// sized so "10", its digits pulled close to read as one number, fits.
 class RankNumber extends StatelessWidget {
   final int rank;
   final double width;
@@ -62,9 +60,10 @@ class _RankPainter extends CustomPainter {
   static const _capRatio = 0.72;
 
   // Between two digits, as a share of the font size: laid out one by one
-  // (letter spacing is drawn differently from one platform to another, and
-  // pulled tight it ran the "1" into the "0").
-  static const _digitGap = 0.04;
+  // (letter spacing is drawn differently from one platform to another).
+  // Negative: DM Sans' "1" has wide side bearings; pulled in, "10" reads as
+  // one number rather than "1 0".
+  static const _digitGap = -0.10;
 
   TextPainter _digit(String d, double fontSize, Paint? stroke) => TextPainter(
         text: TextSpan(
@@ -94,12 +93,14 @@ class _RankPainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
     var fontSize = size.height * _kDigitHeight / _capRatio;
-    // A number never goes past its own box. One digit is sized as the
-    // widest ("0") would be, so 1 to 9 stand equally tall.
+    // A number never goes past its own box.
     final room = size.width +
         (text.length > 1 ? (size.width - visible) * _kTwoDigitsUnderCard : 0);
-    final full = _width(text.length == 1 ? '0' : text, fontSize);
-    if (full > room) fontSize *= room / full;
+    // Every number at the size "10" fits in its room: 1 to 10 stand
+    // equally tall.
+    final roomTen = size.width + (size.width - visible) * _kTwoDigitsUnderCard;
+    final ten = _width('10', fontSize);
+    if (ten > roomTen) fontSize *= roomTen / ten;
     final w = _width(text, fontSize);
     // Wide: from the left edge, under the card as needed. Narrow: whole in
     // the visible part, clear of the card.

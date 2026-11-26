@@ -397,16 +397,23 @@ class _Row extends StatelessWidget {
             if (!compact)
               SizedBox(
                 width: 90 * u,
-                child: time.isNotEmpty
-                    ? Text(time,
-                        style: TextStyle(
-                            color: AppTheme.textMid,
-                            fontSize: 24 * u,
-                            fontWeight: FontWeight.w600))
-                    : Align(
-                        alignment: Alignment.centerLeft,
-                        child: Icon(Icons.event_rounded,
-                            size: 28 * u, color: AppTheme.textLow)),
+                // Centred, one line: a larger text scale (web, desktop)
+                // shrinks the hour rather than breaking it.
+                child: Center(
+                  child: time.isNotEmpty
+                      ? FittedBox(
+                          fit: BoxFit.scaleDown,
+                          child: Text(time,
+                              maxLines: 1,
+                              softWrap: false,
+                              style: TextStyle(
+                                  color: AppTheme.textMid,
+                                  fontSize: 24 * u,
+                                  fontWeight: FontWeight.w600)),
+                        )
+                      : Icon(Icons.event_rounded,
+                          size: 28 * u, color: AppTheme.textLow),
+                ),
               ),
             ClipRRect(
               borderRadius: BorderRadius.circular(8 * u),
