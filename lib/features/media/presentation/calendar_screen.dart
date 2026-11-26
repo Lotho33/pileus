@@ -8,7 +8,7 @@ import 'package:grpc/grpc.dart' show GrpcError, StatusCode;
 
 import '../../../core/di/injection.dart';
 import '../../../core/grpc/clients/media_client.dart'
-    show CalendarEntry, CalendarResponse, PluginInfo;
+    show CalendarEntry, CalendarResponse, CatalogItem, PluginInfo;
 import '../../../core/grpc/grpc_errors.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/image_sizing.dart';
@@ -29,7 +29,12 @@ import 'widgets/plugin_nav.dart' show pluginLabel;
 /// [embedded]: a tab of the phone's bottom bar — no back button.
 class CalendarScreen extends StatefulWidget {
   final bool embedded;
-  const CalendarScreen({super.key, this.embedded = false});
+
+  /// Opens a live event: each shell has its own (the phone's sheet, the
+  /// desktop's dialog); without one, the TV's D-pad popup.
+  final void Function(BuildContext context, String pluginId, CatalogItem item)?
+      openLive;
+  const CalendarScreen({super.key, this.embedded = false, this.openLive});
 
   @override
   State<CalendarScreen> createState() => _CalendarScreenState();
@@ -99,7 +104,12 @@ class _CalendarScreenState extends State<CalendarScreen> {
   void _open(CalendarEntry e) {
     final target = calendarOpenTarget(e);
     if (target != null) {
-      openCatalogItem(context, e.pluginId, target);
+      final openLive = widget.openLive;
+      if (target.mediaType == 'live' && openLive != null) {
+        openLive(context, e.pluginId, target);
+      } else {
+        openCatalogItem(context, e.pluginId, target);
+      }
       return;
     }
     final day = calendarReleaseTime(e);

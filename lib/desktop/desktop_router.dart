@@ -7,6 +7,7 @@ import '../core/router/auth_guard.dart';
 import '../core/theme/app_theme.dart';
 import '../features/downloads/presentation/downloads_page.dart';
 import '../features/media/presentation/calendar_screen.dart';
+import 'widgets/desktop_dialogs.dart';
 import 'desktop_details_screen.dart';
 import 'desktop_discovery_screen.dart';
 import 'desktop_pairing_screen.dart';
@@ -48,7 +49,10 @@ final GoRouter desktopRouter = GoRouter(
       ),
     ),
     GoRoute(path: '/downloads', builder: (_, __) => const DownloadsPage()),
-    GoRoute(path: '/calendar', builder: (_, __) => const CalendarScreen()),
+    GoRoute(
+        path: '/calendar',
+        builder: (_, __) =>
+            const CalendarScreen(openLive: showDesktopLiveDialog)),
   ],
   errorBuilder: (context, state) => Scaffold(
     backgroundColor: AppTheme.bg,

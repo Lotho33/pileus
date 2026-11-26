@@ -27,6 +27,7 @@ import 'widgets/desktop_nav_rail.dart';
 import '../features/downloads/presentation/downloads_page.dart';
 import '../features/media/my_list.dart';
 import '../features/media/presentation/calendar_screen.dart';
+import 'widgets/desktop_dialogs.dart';
 
 /// The desktop home destination: a left rail (Home / Cerca / plugin list /
 /// Impostazioni) beside a content area that swaps between the three panes.
@@ -233,8 +234,11 @@ class _DesktopShellState extends State<DesktopShell> {
                                 const DesktopMyListPane(),
                                 _lazyPane(DesktopSection.downloads,
                                     () => const DownloadsPage(embedded: true)),
-                                _lazyPane(DesktopSection.calendar,
-                                    () => const CalendarScreen(embedded: true)),
+                                _lazyPane(
+                                    DesktopSection.calendar,
+                                    () => const CalendarScreen(
+                                        embedded: true,
+                                        openLive: showDesktopLiveDialog)),
                                 const DesktopSettingsPane(),
                               ],
                             ),

@@ -66,6 +66,9 @@ class _MetricsDialogState extends State<_MetricsDialog> {
     const head = TextStyle(
         color: AppTheme.textLow, fontSize: 12, fontWeight: FontWeight.w700);
     const cell = TextStyle(color: AppTheme.textHigh, fontSize: 14);
+    // A phone: no room for a name column beside the numbers (the names broke
+    // a letter per line), so each name goes on its own line above them.
+    final narrow = MediaQuery.sizeOf(context).width < 600;
     return Focus(
       canRequestFocus: false,
       onKeyEvent: _onKey,
@@ -84,18 +87,26 @@ class _MetricsDialogState extends State<_MetricsDialog> {
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  _times(head, cell),
+                  _times(head, cell, narrow),
                   if (_smooth.isNotEmpty) ...[
                     const SizedBox(height: 18),
                     const Text('FLUIDITÀ — fotogrammi lenti per schermata',
                         style: head),
                     const SizedBox(height: 6),
-                    for (final f in _smooth)
+                    for (final f in _smooth) ...[
+                      if (narrow)
+                        Padding(
+                          padding: const EdgeInsets.only(top: 6),
+                          child: Text(f.label, style: cell),
+                        ),
                       Padding(
                         padding: const EdgeInsets.symmetric(vertical: 3),
                         child: Row(
                           children: [
-                            Expanded(child: Text(f.label, style: cell)),
+                            Expanded(
+                                child: narrow
+                                    ? const SizedBox.shrink()
+                                    : Text(f.label, style: cell)),
                             Text('${f.slowPct.toStringAsFixed(1)} %',
                                 style: cell.copyWith(
                                     fontWeight: FontWeight.w700,
@@ -105,7 +116,7 @@ class _MetricsDialogState extends State<_MetricsDialog> {
                             // Which thread made them slow: UI = building
                             // and layout, GPU = painting.
                             SizedBox(
-                              width: 150,
+                              width: narrow ? 130 : 150,
                               child: Text(
                                   f.slowPct == 0
                                       ? ''
@@ -115,7 +126,7 @@ class _MetricsDialogState extends State<_MetricsDialog> {
                                       color: AppTheme.textLow, fontSize: 12)),
                             ),
                             SizedBox(
-                              width: 90,
+                              width: narrow ? 60 : 90,
                               child: Text('${f.frames}',
                                   textAlign: TextAlign.right,
                                   style: const TextStyle(
@@ -124,6 +135,7 @@ class _MetricsDialogState extends State<_MetricsDialog> {
                           ],
                         ),
                       ),
+                    ],
                   ],
                 ],
               ),
@@ -135,7 +147,8 @@ class _MetricsDialogState extends State<_MetricsDialog> {
     );
   }
 
-  Widget _times(TextStyle head, TextStyle cell) {
+  Widget _times(TextStyle head, TextStyle cell, bool narrow) {
+    if (narrow && _rows.isNotEmpty) return _timesNarrow(head, cell);
     return _rows.isEmpty
         ? const Text(
             'Nessuna misura ancora. Usa l\'app normalmente: avvio, '
@@ -180,6 +193,47 @@ class _MetricsDialogState extends State<_MetricsDialog> {
                 ]),
             ],
           );
+  }
+
+  // The phone's layout: each measure's name and hint over the full width,
+  // its four numbers on a line below, each under its own small heading.
+  Widget _timesNarrow(TextStyle head, TextStyle cell) {
+    Widget value(String h, String v, {bool bold = false}) => Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(h, style: head.copyWith(fontSize: 10)),
+              Text(v,
+                  style:
+                      bold ? cell.copyWith(fontWeight: FontWeight.w700) : cell),
+            ],
+          ),
+        );
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        for (final r in _rows)
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: 8),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(r.metric.label, style: cell),
+                Text(r.metric.hint,
+                    style:
+                        const TextStyle(color: AppTheme.textLow, fontSize: 11)),
+                const SizedBox(height: 6),
+                Row(children: [
+                  value('MEDIANA', _fmt(r.median), bold: true),
+                  value('ULTIMA', _fmt(r.last)),
+                  value('PEGGIORE', _fmt(r.worst)),
+                  value('N', '${r.samples.length}'),
+                ]),
+              ],
+            ),
+          ),
+      ],
+    );
   }
 
   List<Widget> _actions(BuildContext context) => [

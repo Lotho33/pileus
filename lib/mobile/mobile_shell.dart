@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 import '../core/theme/app_theme.dart';
 import '../core/utils/metrics.dart';
 import '../features/media/presentation/calendar_screen.dart';
+import 'mobile_live_sheet.dart';
 import '../shared/widgets/offline_banner.dart';
 import 'mobile_home_screen.dart';
 import 'mobile_search_screen.dart';
@@ -76,7 +77,9 @@ class _MobileShellState extends State<MobileShell> {
                 _calendarVisits == 0
                     ? const SizedBox.shrink()
                     : CalendarScreen(
-                        key: ValueKey(_calendarVisits), embedded: true),
+                        key: ValueKey(_calendarVisits),
+                        embedded: true,
+                        openLive: showLiveSheet),
                 const MobileSettingsScreen(),
               ],
             ),
@@ -124,7 +127,11 @@ class _MobileShellState extends State<MobileShell> {
                     color: AppTheme.textMid),
                 selectedIcon:
                     Icon(Icons.bookmark_rounded, color: AppTheme.textHigh),
-                label: 'La mia lista',
+                // Short labels: five tabs leave about 80 dp each, and "La mia
+                // lista" / "Impostazioni" broke on two lines (more so with a
+                // larger system text size). The screens keep their full
+                // titles.
+                label: 'Lista',
               ),
               NavigationDestination(
                 icon: Icon(Icons.event_outlined, color: AppTheme.textMid),
@@ -136,7 +143,7 @@ class _MobileShellState extends State<MobileShell> {
                 icon: Icon(Icons.settings_outlined, color: AppTheme.textMid),
                 selectedIcon:
                     Icon(Icons.settings_rounded, color: AppTheme.textHigh),
-                label: 'Impostazioni',
+                label: 'Opzioni',
               ),
             ],
           ),

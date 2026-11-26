@@ -87,23 +87,31 @@ class _ServerInfoDialogState extends State<_ServerInfoDialog> {
       fontSize: 14,
       fontWeight: isState ? FontWeight.w600 : FontWeight.w400,
     );
+    final labelText = Text(label,
+        style: const TextStyle(color: AppTheme.textLow, fontSize: 14));
+    // Not selectable on TV: a SelectableText takes D-pad focus.
+    final valueText = widget.tv
+        ? Text(value, style: style)
+        : SelectableText(value, style: style);
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 4),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          SizedBox(
-            width: 190,
-            child: Text(label,
-                style: const TextStyle(color: AppTheme.textLow, fontSize: 14)),
-          ),
-          Expanded(
-            // Not selectable on TV: a SelectableText takes D-pad focus.
-            child: widget.tv
-                ? Text(value, style: style)
-                : SelectableText(value, style: style),
-          ),
-        ],
+      // A phone's dialog is too narrow for the two columns (the values broke
+      // a letter or two per line): the label goes above its value instead.
+      // (By the screen, not a LayoutBuilder: AlertDialog measures its
+      // content's intrinsic width, which a LayoutBuilder can't answer.)
+      child: Builder(
+        builder: (context) => MediaQuery.sizeOf(context).width < 600
+            ? Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [labelText, const SizedBox(height: 2), valueText],
+              )
+            : Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  SizedBox(width: 190, child: labelText),
+                  Expanded(child: valueText),
+                ],
+              ),
       ),
     );
   }
