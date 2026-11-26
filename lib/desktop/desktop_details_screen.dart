@@ -483,17 +483,14 @@ class _Header extends StatelessWidget {
               ],
             )
           else
-            Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                _PlayButton(
-                  pluginId: pluginId,
-                  item: item,
-                  isSeries: isSeries,
-                  big: big,
-                  onPlayDefault: onPlay,
-                  seasons: seasons,
-                ),
+            _PlayButton(
+              pluginId: pluginId,
+              item: item,
+              isSeries: isSeries,
+              big: big,
+              onPlayDefault: onPlay,
+              seasons: seasons,
+              trailing: [
                 const SizedBox(width: 8),
                 DownloadButton(
                   pluginId: pluginId,
@@ -641,6 +638,10 @@ class _PlayButton extends StatefulWidget {
   // defaultPlayStreamId (warm ahead of Play).
   final List<SeasonInfo> seasons;
 
+  /// The round buttons beside Play (download, list, trailer): on Play's own
+  /// line, so the language chips below don't push them down between the two.
+  final List<Widget> trailing;
+
   const _PlayButton({
     required this.pluginId,
     required this.item,
@@ -648,6 +649,7 @@ class _PlayButton extends StatefulWidget {
     required this.big,
     required this.onPlayDefault,
     this.seasons = const [],
+    this.trailing = const [],
   });
 
   @override
@@ -749,12 +751,18 @@ class _PlayButtonState extends State<_PlayButton> {
     );
     // Movies: the language versions under the button. A resume keeps the
     // language it was watched in; a series picks per episode.
-    if (widget.isSeries || resume != null) return button;
+    final top = widget.trailing.isEmpty
+        ? button
+        : Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [button, ...widget.trailing],
+          );
+    if (widget.isSeries || resume != null) return top;
     return Column(
       mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        button,
+        top,
         LanguageChips(
           pluginId: widget.pluginId,
           mediaId: widget.item.id,
