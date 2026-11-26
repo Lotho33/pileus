@@ -118,6 +118,18 @@ String calendarSubtitle(CalendarEntry e) {
 bool calendarLandscapeThumb(CalendarEntry e) =>
     e.item.mediaType == 'episode' || e.item.mediaType == 'live';
 
+/// The row's picture: for a live event its wide image when the plugin sends
+/// one (as the home's live cards), else the poster.
+String calendarThumbUrl(CalendarEntry e) {
+  final i = e.item;
+  if (i.mediaType == 'live' && i.bannerUrl.isNotEmpty) return i.bannerUrl;
+  return i.posterUrl;
+}
+
+/// A live event on air right now (`extra.is_live`, as on the home).
+bool calendarLiveNow(CalendarEntry e) =>
+    e.item.mediaType == 'live' && e.item.extra['is_live'] == '1';
+
 /// What a tap opens: the series of an episode, or the title itself — a
 /// "Previsto" one too (its page, to follow or add it ahead of the date).
 /// Null only for an entry with nothing to open.

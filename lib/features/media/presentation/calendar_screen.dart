@@ -363,7 +363,22 @@ class _Row extends StatelessWidget {
     final thumbW = episode ? thumbH * 16 / 9 : thumbH * 2 / 3;
     final time = calendarTimeLabel(e);
     final sub = calendarSubtitle(e);
-    final dim = !e.available;
+    final liveNow = calendarLiveNow(e);
+    final dim = !e.available && !liveNow;
+    final thumbUrl = calendarThumbUrl(e);
+    // On air: "In diretta" in the live cards' red, where "Previsto" goes.
+    final onAir = Container(
+      padding: EdgeInsets.symmetric(horizontal: 14 * u, vertical: 6 * u),
+      decoration: BoxDecoration(
+        color: Colors.red,
+        borderRadius: BorderRadius.circular(20 * u),
+      ),
+      child: Text('In diretta',
+          style: TextStyle(
+              color: Colors.white,
+              fontSize: 19 * u,
+              fontWeight: FontWeight.w700)),
+    );
     final previsto = Container(
       padding: EdgeInsets.symmetric(horizontal: 14 * u, vertical: 6 * u),
       decoration: BoxDecoration(
@@ -421,7 +436,7 @@ class _Row extends StatelessWidget {
               child: SizedBox(
                 width: thumbW,
                 height: thumbH,
-                child: e.item.posterUrl.isEmpty
+                child: thumbUrl.isEmpty
                     ? const ColoredBox(color: AppTheme.surface2)
                     : Opacity(
                         opacity: dim ? 0.55 : 1,
@@ -429,7 +444,7 @@ class _Row extends StatelessWidget {
                           imageRenderMethodForWeb:
                               ImageRenderMethodForWeb.HttpGet,
                           imageUrl: posterSrc(
-                              e.item.posterUrl, cacheWidthFor(context, thumbW),
+                              thumbUrl, cacheWidthFor(context, thumbW),
                               proxy: true),
                           memCacheWidth: cacheWidthFor(context, thumbW),
                           fit: BoxFit.cover,
@@ -481,16 +496,16 @@ class _Row extends StatelessWidget {
                           TextStyle(color: AppTheme.textMid, fontSize: 21 * u),
                     ),
                   ],
-                  if (dim && compact) ...[
+                  if ((dim || liveNow) && compact) ...[
                     SizedBox(height: 8 * u),
-                    previsto,
+                    liveNow ? onAir : previsto,
                   ],
                 ],
               ),
             ),
-            if (dim && !compact) ...[
+            if ((dim || liveNow) && !compact) ...[
               SizedBox(width: 12 * u),
-              previsto,
+              liveNow ? onAir : previsto,
             ],
           ]),
         ),

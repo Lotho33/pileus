@@ -96,4 +96,24 @@ void main() {
     final film = calendarOpenTarget(entry('2026-11-26'))!;
     expect(film.id, 'i');
   });
+
+  test('a live event: wide image when sent, "In diretta" while on air', () {
+    CalendarEntry live({String banner = '', bool onAir = false}) =>
+        CalendarEntry(
+          pluginId: 'p',
+          releaseAt: '2026-11-26T20:45:00Z',
+          item: CatalogItem(
+              id: 'e',
+              title: 'Inter - Milan',
+              mediaType: 'live',
+              posterUrl: 'poster',
+              bannerUrl: banner,
+              extra: {if (onAir) 'is_live': '1'}.entries),
+        );
+    expect(calendarThumbUrl(live()), 'poster');
+    expect(calendarThumbUrl(live(banner: 'wide')), 'wide');
+    expect(calendarLiveNow(live()), isFalse);
+    expect(calendarLiveNow(live(onAir: true)), isTrue);
+    expect(calendarThumbUrl(entry('2026-11-26')), '');
+  });
 }
