@@ -104,15 +104,19 @@ String calendarTitle(CalendarEntry e) {
 /// when the big line is the series').
 String calendarSubtitle(CalendarEntry e) {
   final i = e.item;
+  // A live event: its competition ("Serie A", "ATP Finals").
+  if (i.mediaType == 'live') return (i.extra['competition'] ?? '').trim();
   final badge = episodeBadge(i.seasonNumber, i.episodeNumber);
   final ownTitle = calendarSeriesTitle(e).isNotEmpty ? i.title.trim() : '';
   return [badge, ownTitle].where((s) => s.isNotEmpty).join(' · ');
 }
 
-/// The row's picture is an episode still (landscape) only for an episode
-/// item; a plugin may send the series' own card (its portrait poster) with
-/// `series_id` and the episode number instead.
-bool calendarLandscapeThumb(CalendarEntry e) => e.item.mediaType == 'episode';
+/// The row's picture is landscape for an episode item (its still) and a live
+/// event (its cover, often "badge vs badge"); a plugin may send the series'
+/// own card (its portrait poster) with `series_id` and the episode number
+/// instead.
+bool calendarLandscapeThumb(CalendarEntry e) =>
+    e.item.mediaType == 'episode' || e.item.mediaType == 'live';
 
 /// What a tap opens: the series of an episode, or the title itself — a
 /// "Previsto" one too (its page, to follow or add it ahead of the date).

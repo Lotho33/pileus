@@ -74,6 +74,16 @@ void main() {
     expect(calendarSubtitle(bare), 'S2 · E8');
   });
 
+  test('a live event: its competition, a landscape cover, opens itself', () {
+    final e = entry('2026-11-28T19:45:00Z',
+        title: 'Inter - Milan', extra: {'competition': 'Serie A'});
+    e.item.mediaType = 'live';
+    expect(calendarTitle(e), 'Inter - Milan');
+    expect(calendarSubtitle(e), 'Serie A');
+    expect(calendarLandscapeThumb(e), isTrue);
+    expect(calendarOpenTarget(e)!.mediaType, 'live');
+  });
+
   test('a tap opens the series, "Previsto" ones too', () {
     expect(
         calendarOpenTarget(
