@@ -372,11 +372,11 @@ class _Row extends StatelessWidget {
       child: Text('Previsto',
           style: TextStyle(color: AppTheme.textMid, fontSize: 19 * u)),
     );
-    // No announced hour: "In giornata" instead of an empty time.
-    final when = time.isEmpty ? kCalendarAllDayLabel : time;
-    final small = [if (compact) when, sub, pluginName]
-        .where((s) => s.isNotEmpty)
-        .join('  ·  ');
+    // No announced hour: "In giornata" at the head of the small line (on
+    // every layout), a calendar mark where the hour would stand.
+    final when = time.isEmpty ? kCalendarAllDayLabel : (compact ? time : '');
+    final small =
+        [when, sub, pluginName].where((s) => s.isNotEmpty).join('  ·  ');
     return Padding(
       padding: EdgeInsets.only(bottom: 10 * u),
       child: TvFocusable(
@@ -403,12 +403,10 @@ class _Row extends StatelessWidget {
                             color: AppTheme.textMid,
                             fontSize: 24 * u,
                             fontWeight: FontWeight.w600))
-                    : Text('In\ngiornata',
-                        style: TextStyle(
-                            color: AppTheme.textLow,
-                            fontSize: 18 * u,
-                            height: 1.15,
-                            fontWeight: FontWeight.w600)),
+                    : Align(
+                        alignment: Alignment.centerLeft,
+                        child: Icon(Icons.event_rounded,
+                            size: 28 * u, color: AppTheme.textLow)),
               ),
             ClipRRect(
               borderRadius: BorderRadius.circular(8 * u),

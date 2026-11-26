@@ -11,30 +11,24 @@ const double kRankOverlap = 0.3;
 
 /// A two-digit rank ("10") keeps the same space as the others — it is drawn
 /// smaller, as in the charts, and may run further under its card, by this
-/// share of the part the card covers: its "0" half hidden.
-const double _kTwoDigitsUnderCard = 0.15;
+/// share of the part the card covers.
+const double _kTwoDigitsUnderCard = 0.33;
 
-/// How tall the digits stand, as a fraction of the card's height.
-const double _kDigitHeight = 0.94;
+/// How tall the digits stand, as a fraction of the card's height: well
+/// short of it, centred on the card's middle.
+const double _kDigitHeight = 0.62;
 
 /// How far from the card a narrow number ("1") ends, as a share of the
 /// visible part: room for the focused card growing over it.
 const double _kClearOfCard = 0.1;
 
-/// DM Sans' digits are wide: drawn condensed to this share of their width,
-/// they stand as tall as the card without a wide row (a chart's look).
-const double _kCondense = 0.86;
-
-/// Two digits a little more condensed, so "10" isn't much smaller.
-const double _kCondenseTwoDigits = 0.78;
-
-/// The big number beside a card in a Top 10 row: the app's own font,
-/// condensed, filled with the background and outlined in the accent — plain
-/// stroked text, cheap on modest hardware (no shader, blur or shadow). Its
-/// baseline sits on the card's bottom edge and it stands about as tall as
-/// the card. A wide number starts at the left of [width] and runs under the
-/// card as far as it must; a narrow one ("1") stays whole in the part the
-/// card leaves visible ([visibleWidth]). A number wider than [width] is
+/// The big number beside a card in a Top 10 row: the app's own font at its
+/// own proportions, filled with the background and outlined in the accent —
+/// plain stroked text, cheap on modest hardware (no shader, blur or
+/// shadow). It stands about two thirds as tall as the card, centred on the
+/// card's middle. A wide number starts at the left of [width] and runs under
+/// the card as far as it must; a narrow one ("1") stays whole in the part
+/// the card leaves visible ([visibleWidth]). A number wider than [width] is
 /// scaled down to fit — a two-digit one may reach a little further under
 /// the card ([_kTwoDigitsUnderCard]), so "10" is smaller than the others
 /// but not tiny.
@@ -64,8 +58,6 @@ class _RankPainter extends CustomPainter {
   final double visible;
   _RankPainter(this.text, this.visible);
 
-  double get _condense => text.length > 1 ? _kCondenseTwoDigits : _kCondense;
-
   // Digits' cap height is ~0.7 of the font size in DM Sans.
   static const _capRatio = 0.72;
 
@@ -88,7 +80,7 @@ class _RankPainter extends CustomPainter {
         textDirection: TextDirection.ltr,
       )..layout();
 
-  // The width of [s] before condensing, at [fontSize].
+  // The width of [s] at [fontSize].
   double _width(String s, double fontSize) {
     var w = 0.0;
     for (var i = 0; i < s.length; i++) {
@@ -102,40 +94,37 @@ class _RankPainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
     var fontSize = size.height * _kDigitHeight / _capRatio;
-    // On screen (condensed) a number never goes past its own box. One digit
-    // is sized as the widest ("0") would be, so 1 to 9 stand equally tall.
+    // A number never goes past its own box. One digit is sized as the
+    // widest ("0") would be, so 1 to 9 stand equally tall.
     final room = size.width +
         (text.length > 1 ? (size.width - visible) * _kTwoDigitsUnderCard : 0);
-    final full = _width(text.length == 1 ? '0' : text, fontSize) * _condense;
+    final full = _width(text.length == 1 ? '0' : text, fontSize);
     if (full > room) fontSize *= room / full;
-    final w = _width(text, fontSize) * _condense;
+    final w = _width(text, fontSize);
     // Wide: from the left edge, under the card as needed. Narrow: whole in
     // the visible part, clear of the card.
     final right =
         (w > visible * (1 - _kClearOfCard) ? w : visible * (1 - _kClearOfCard))
             .clamp(0.0, room);
+    // The digits' middle on the card's middle.
+    final baselineY = (size.height + fontSize * _capRatio) / 2;
     final strokePaint = Paint()
       ..style = PaintingStyle.stroke
-      ..strokeWidth = (fontSize * 0.02).clamp(1.5, 9.0)
+      ..strokeWidth = (fontSize * 0.025).clamp(1.5, 9.0)
       ..color = AppTheme.primary.withValues(alpha: 0.9);
-    canvas
-      ..save()
-      ..translate(right - w, 0)
-      ..scale(_condense, 1);
-    var x = 0.0;
+    var x = right - w;
     for (var i = 0; i < text.length; i++) {
       final fill = _digit(text[i], fontSize, null);
       final stroke = _digit(text[i], fontSize, strokePaint);
       final baseline =
           fill.computeDistanceToActualBaseline(TextBaseline.alphabetic);
-      final at = Offset(x, size.height - baseline);
+      final at = Offset(x, baselineY - baseline);
       fill.paint(canvas, at);
       stroke.paint(canvas, at);
       x += fill.width + fontSize * _digitGap;
       fill.dispose();
       stroke.dispose();
     }
-    canvas.restore();
   }
 
   @override
