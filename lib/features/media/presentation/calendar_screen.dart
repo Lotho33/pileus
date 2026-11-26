@@ -5,8 +5,10 @@ import 'package:cached_network_image_platform_interface/cached_network_image_pla
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:grpc/grpc.dart' show GrpcError, StatusCode;
+import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../../core/di/injection.dart';
+import '../../../core/grpc/auth_interceptor.dart';
 import '../../../core/grpc/clients/media_client.dart'
     show CalendarEntry, CalendarResponse, CatalogItem, PluginInfo;
 import '../../../core/grpc/grpc_errors.dart';
@@ -52,9 +54,28 @@ class _CalendarScreenState extends State<CalendarScreen> {
   String _plugin = ''; // '' = every plugin
   Map<String, String> _pluginNames = const {};
 
+  // The filters are remembered per profile (CalendarFilters).
+  String get _profileId => getIt<AuthInterceptor>().profileId ?? '';
+
+  void _saveFilters() {
+    CalendarFilters(followedOnly: _followedOnly, plugin: _plugin)
+        .write(getIt<SharedPreferences>(), _profileId)
+        .catchError((_) {});
+  }
+
+  void _setPlugin(String p) {
+    setState(() => _plugin = p);
+    _saveFilters();
+  }
+
   @override
   void initState() {
     super.initState();
+    try {
+      final f = CalendarFilters.read(getIt<SharedPreferences>(), _profileId);
+      _followedOnly = f.followedOnly;
+      _plugin = f.plugin;
+    } catch (_) {}
     _load();
     _repo.listPlugins().then((ps) {
       if (mounted) {
@@ -96,6 +117,7 @@ class _CalendarScreenState extends State<CalendarScreen> {
 
   void _toggleMine() {
     _followedOnly = !_followedOnly;
+    _saveFilters();
     _load();
   }
 
@@ -141,6 +163,14 @@ class _CalendarScreenState extends State<CalendarScreen> {
     final plugins = {
       for (final e in _data?.entries ?? const <CalendarEntry>[]) e.pluginId
     }.toList();
+    // A phone: a "Solo seguite" switch and a plugin menu instead of the
+    // row of chips (made for the D-pad, and too wide for a phone).
+    final compact = size.width < 600;
+    // The remembered plugin stays a choice even when nothing of it came back.
+    final choices = [
+      ...plugins,
+      if (_plugin.isNotEmpty && !plugins.contains(_plugin)) _plugin,
+    ];
     final days = groupCalendar(entries);
     final failed = _data?.failedPlugins ?? const <String>[];
 
@@ -164,43 +194,53 @@ class _CalendarScreenState extends State<CalendarScreen> {
                     fontWeight: FontWeight.w800)),
           ]),
           SizedBox(height: 16 * u),
-          SingleChildScrollView(
-            scrollDirection: Axis.horizontal,
-            clipBehavior: Clip.none,
-            child: Row(children: [
-              _Chip(
-                u: u,
-                focusNode: _mineFn,
-                label: 'Solo le mie',
-                icon: _followedOnly
-                    ? Icons.check_circle_rounded
-                    : Icons.radio_button_unchecked_rounded,
-                selected: _followedOnly,
-                onTap: _toggleMine,
-                onDown: () => _firstRowFn.requestFocus(),
-              ),
-              if (plugins.length > 1) ...[
-                SizedBox(width: 20 * u),
+          if (compact)
+            _PhoneFilters(
+              followedOnly: _followedOnly,
+              onFollowedOnly: (_) => _toggleMine(),
+              plugin: _plugin,
+              plugins: choices,
+              name: _name,
+              onPlugin: _setPlugin,
+            )
+          else
+            SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              clipBehavior: Clip.none,
+              child: Row(children: [
                 _Chip(
                   u: u,
-                  label: 'Tutti',
-                  selected: _plugin.isEmpty,
-                  onTap: () => setState(() => _plugin = ''),
+                  focusNode: _mineFn,
+                  label: 'Solo le mie',
+                  icon: _followedOnly
+                      ? Icons.check_circle_rounded
+                      : Icons.radio_button_unchecked_rounded,
+                  selected: _followedOnly,
+                  onTap: _toggleMine,
                   onDown: () => _firstRowFn.requestFocus(),
                 ),
-                for (final p in plugins) ...[
-                  SizedBox(width: 10 * u),
+                if (plugins.length > 1) ...[
+                  SizedBox(width: 20 * u),
                   _Chip(
                     u: u,
-                    label: _name(p),
-                    selected: _plugin == p,
-                    onTap: () => setState(() => _plugin = p),
+                    label: 'Tutti',
+                    selected: _plugin.isEmpty,
+                    onTap: () => _setPlugin(''),
                     onDown: () => _firstRowFn.requestFocus(),
                   ),
+                  for (final p in plugins) ...[
+                    SizedBox(width: 10 * u),
+                    _Chip(
+                      u: u,
+                      label: _name(p),
+                      selected: _plugin == p,
+                      onTap: () => _setPlugin(p),
+                      onDown: () => _firstRowFn.requestFocus(),
+                    ),
+                  ],
                 ],
-              ],
-            ]),
-          ),
+              ]),
+            ),
         ],
       ),
     );
@@ -284,6 +324,73 @@ class _CalendarScreenState extends State<CalendarScreen> {
         ),
       ),
     );
+  }
+}
+
+/// The phone's filters: the plugin menu ("Tutti i plugin" or one) and the
+/// "Solo seguite" switch on one line.
+class _PhoneFilters extends StatelessWidget {
+  final bool followedOnly;
+  final ValueChanged<bool> onFollowedOnly;
+  final String plugin;
+  final List<String> plugins;
+  final String Function(String pluginId) name;
+  final ValueChanged<String> onPlugin;
+  const _PhoneFilters({
+    required this.followedOnly,
+    required this.onFollowedOnly,
+    required this.plugin,
+    required this.plugins,
+    required this.name,
+    required this.onPlugin,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(children: [
+      if (plugins.length > 1 || plugin.isNotEmpty)
+        Expanded(
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12),
+            decoration: BoxDecoration(
+              color: AppTheme.surface2,
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(color: AppTheme.border),
+            ),
+            child: DropdownButtonHideUnderline(
+              child: DropdownButton<String>(
+                value: plugin,
+                isExpanded: true,
+                dropdownColor: AppTheme.surface2,
+                style: const TextStyle(color: AppTheme.textHigh, fontSize: 15),
+                items: [
+                  const DropdownMenuItem(
+                      value: '', child: Text('Tutti i plugin')),
+                  for (final p in plugins)
+                    DropdownMenuItem(
+                      value: p,
+                      child: Text(name(p),
+                          maxLines: 1, overflow: TextOverflow.ellipsis),
+                    ),
+                ],
+                onChanged: (v) => onPlugin(v ?? ''),
+              ),
+            ),
+          ),
+        )
+      else
+        const Spacer(),
+      const SizedBox(width: 12),
+      const Text('Solo seguite',
+          style: TextStyle(color: AppTheme.textMid, fontSize: 15)),
+      const SizedBox(width: 4),
+      Switch(
+        value: followedOnly,
+        activeThumbColor: AppTheme.textHigh,
+        activeTrackColor: AppTheme.primary,
+        onChanged: onFollowedOnly,
+      ),
+    ]);
   }
 }
 

@@ -1,3 +1,5 @@
+import 'package:shared_preferences/shared_preferences.dart';
+
 import '../../core/grpc/generated/media.pb.dart'
     show CalendarEntry, CatalogItem;
 import '../player/episode_poster.dart' show episodeBadge;
@@ -143,4 +145,26 @@ CatalogItem? calendarOpenTarget(CalendarEntry e) {
     );
   }
   return e.item.id.isEmpty ? null : e.item;
+}
+
+/// The calendar's filters, kept per profile across visits: "Solo seguite"
+/// and the plugin shown ('' = every plugin).
+class CalendarFilters {
+  final bool followedOnly;
+  final String plugin;
+  const CalendarFilters({this.followedOnly = false, this.plugin = ''});
+
+  static String _key(String profileId, String what) =>
+      'calendar.$what:$profileId';
+
+  static CalendarFilters read(SharedPreferences prefs, String profileId) =>
+      CalendarFilters(
+        followedOnly: prefs.getBool(_key(profileId, 'followedOnly')) ?? false,
+        plugin: prefs.getString(_key(profileId, 'plugin')) ?? '',
+      );
+
+  Future<void> write(SharedPreferences prefs, String profileId) async {
+    await prefs.setBool(_key(profileId, 'followedOnly'), followedOnly);
+    await prefs.setString(_key(profileId, 'plugin'), plugin);
+  }
 }

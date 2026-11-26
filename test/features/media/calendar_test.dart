@@ -1,4 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:pileus/core/grpc/clients/media_client.dart'
     show CalendarEntry, CatalogItem;
 import 'package:pileus/features/media/calendar.dart';
@@ -115,5 +116,18 @@ void main() {
     expect(calendarLiveNow(live()), isFalse);
     expect(calendarLiveNow(live(onAir: true)), isTrue);
     expect(calendarThumbUrl(entry('2026-11-26')), '');
+  });
+
+  test('the filters are remembered per profile', () async {
+    SharedPreferences.setMockInitialValues({});
+    final prefs = await SharedPreferences.getInstance();
+    expect(CalendarFilters.read(prefs, 'a').followedOnly, isFalse);
+    expect(CalendarFilters.read(prefs, 'a').plugin, '');
+    await const CalendarFilters(followedOnly: true, plugin: 'animeunity')
+        .write(prefs, 'a');
+    final a = CalendarFilters.read(prefs, 'a');
+    expect(a.followedOnly, isTrue);
+    expect(a.plugin, 'animeunity');
+    expect(CalendarFilters.read(prefs, 'b').followedOnly, isFalse);
   });
 }
