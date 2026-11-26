@@ -118,7 +118,8 @@ class _ItemSheetState extends State<_ItemSheet> {
       PlayerLaunchGuard.push(
         router,
         '/player/${widget.pluginId}/${Uri.encodeComponent(resume.playableID)}',
-        extra: continueWatchingPlayerExtra(resume, posterFallback: it.posterUrl),
+        extra:
+            continueWatchingPlayerExtra(resume, posterFallback: it.posterUrl),
       );
       return;
     }
@@ -131,7 +132,8 @@ class _ItemSheetState extends State<_ItemSheet> {
         if (seasons.isNotEmpty) {
           final s = seasons.firstWhere((x) => x.episodeCount > 0,
               orElse: () => seasons.first);
-          final b = await repo.browse(widget.pluginId, s.directoryId, '', cache: true);
+          final b = await repo.browse(widget.pluginId, s.directoryId, '',
+              cache: true);
           if (mounted && b.episodes.isNotEmpty) {
             final eps = b.episodes;
             final series = d.series;
@@ -279,9 +281,13 @@ class _ItemSheetState extends State<_ItemSheet> {
               ],
             ),
             const SizedBox(height: 14),
+            // "Riproduci" gets the wider share and both labels stay on one
+            // line (shrinking if they must): with the list button and a
+            // larger system text size, "Riproduci" broke onto two lines.
             Row(
               children: [
                 Expanded(
+                  flex: 3,
                   child: FilledButton.icon(
                     onPressed: _preparing ? null : _play,
                     icon: _preparing
@@ -291,15 +297,20 @@ class _ItemSheetState extends State<_ItemSheet> {
                             child: CircularProgressIndicator(
                                 strokeWidth: 2, color: Colors.white))
                         : const Icon(Icons.play_arrow_rounded),
-                    label: const Text('Riproduci'),
+                    label: const FittedBox(
+                        fit: BoxFit.scaleDown,
+                        child: Text('Riproduci', maxLines: 1, softWrap: false)),
                   ),
                 ),
                 const SizedBox(width: 10),
                 Expanded(
+                  flex: 2,
                   child: OutlinedButton.icon(
                     onPressed: _info,
                     icon: const Icon(Icons.info_outline_rounded),
-                    label: const Text('Info'),
+                    label: const FittedBox(
+                        fit: BoxFit.scaleDown,
+                        child: Text('Info', maxLines: 1, softWrap: false)),
                   ),
                 ),
                 if (MyList.instance.supported &&

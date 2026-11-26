@@ -646,6 +646,9 @@ class _PlayButtonState extends State<_PlayButton> {
         resume != null
             ? 'Riprendi «${resume.title}»'
             : (widget.isSeries ? 'Riproduci 1ª puntata' : 'Riproduci'),
+        // One line: beside the download, list and trailer buttons it broke
+        // onto two with a larger system text size.
+        maxLines: 1,
         overflow: TextOverflow.ellipsis,
       ),
       style: FilledButton.styleFrom(
