@@ -18,7 +18,9 @@ bool isNewEpisodesCatalog(String catalogId) =>
 
 CatalogDef newEpisodesCatalogDef() => CatalogDef(
       id: kNewEpisodesCatalogId,
-      name: 'Nuovi episodi',
+      // Not just "Nuovi episodi": a plugin may have its own row by that name
+      // (everything just out on the site), this one is the profile's series.
+      name: 'Nuovi episodi delle tue serie',
       type: 'series',
     );
 
@@ -37,11 +39,21 @@ List<PluginInfo> withNewEpisodesRow(List<PluginInfo> plugins) => [
             ..catalogs.insert(1, newEpisodesCatalogDef()),
     ];
 
-/// The card for a series with a new episode: opens its details page.
-CatalogItem newEpisodeCard(NewEpisode e) => CatalogItem(
-      id: e.seriesId,
-      title: e.title,
-      posterUrl: e.posterUrl,
-      mediaType: 'series',
-      badge: 'new_episode',
-    );
+/// The card for a series with a new episode: opens its details page. The
+/// server sends the series' full card (backdrop, plot, genres, logo) once it
+/// has checked it with details; until then title and poster are all there is.
+CatalogItem newEpisodeCard(NewEpisode e) {
+  if (e.hasItem() && e.item.id.isNotEmpty) {
+    return (CatalogItem()..mergeFromMessage(e.item))
+      ..id = e.seriesId
+      ..mediaType = 'series'
+      ..badge = 'new_episode';
+  }
+  return CatalogItem(
+    id: e.seriesId,
+    title: e.title,
+    posterUrl: e.posterUrl,
+    mediaType: 'series',
+    badge: 'new_episode',
+  );
+}

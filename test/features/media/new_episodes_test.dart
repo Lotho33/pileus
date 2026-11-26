@@ -57,6 +57,31 @@ void main() {
     expect(withNewEpisodesRow(out)[0].catalogs, hasLength(3));
   });
 
+  test('the card is the server one when it sent it, else title and poster', () {
+    final full = newEpisodeCard(NewEpisode(
+        pluginId: 'anime',
+        seriesId: 'a1',
+        title: 'Anime 1',
+        posterUrl: 'old',
+        item: CatalogItem(
+            id: 'a1',
+            title: 'Anime 1',
+            posterUrl: 'tmdb',
+            isDir: true,
+            logoUrl: 'logo',
+            extra: {'fanart_url': 'bg', 'plot': 'Trama'}.entries)));
+    expect(full.posterUrl, 'tmdb');
+    expect(full.extra['fanart_url'], 'bg');
+    expect(full.extra['plot'], 'Trama');
+    expect(full.logoUrl, 'logo');
+    expect(full.badge, 'new_episode');
+    final bare = newEpisodeCard(
+        NewEpisode(seriesId: 's2', title: 'Serie 2', posterUrl: 'p2'));
+    expect(bare.posterUrl, 'p2');
+    expect(bare.extra, isEmpty);
+    expect(bare.badge, 'new_episode');
+  });
+
   group('repository', () {
     late _FakeClient client;
     late MediaRepository repo;

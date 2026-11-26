@@ -7920,6 +7920,7 @@ class NewEpisode extends $pb.GeneratedMessage {
     $core.int? episodeNumber,
     $core.String? airDate,
     $fixnum.Int64? foundAt,
+    CatalogItem? item,
   }) {
     final result = NewEpisode._();
     if (pluginId != null) result.pluginId = pluginId;
@@ -7930,6 +7931,7 @@ class NewEpisode extends $pb.GeneratedMessage {
     if (episodeNumber != null) result.episodeNumber = episodeNumber;
     if (airDate != null) result.airDate = airDate;
     if (foundAt != null) result.foundAt = foundAt;
+    if (item != null) result.item = item;
     return result;
   }
 
@@ -7954,6 +7956,8 @@ class NewEpisode extends $pb.GeneratedMessage {
     ..aI(6, _omitFieldNames ? '' : 'episodeNumber')
     ..aOS(7, _omitFieldNames ? '' : 'airDate')
     ..aInt64(8, _omitFieldNames ? '' : 'foundAt')
+    ..aOM<CatalogItem>(9, _omitFieldNames ? '' : 'item',
+        subBuilder: CatalogItem.$_createMessage)
     ..hasRequiredFields = false;
 
   @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
@@ -8047,6 +8051,17 @@ class NewEpisode extends $pb.GeneratedMessage {
   $core.bool hasFoundAt() => $_has(7);
   @$pb.TagNumber(8)
   void clearFoundAt() => $_clearField(8);
+
+  @$pb.TagNumber(9)
+  CatalogItem get item => $_getN(8);
+  @$pb.TagNumber(9)
+  set item(CatalogItem value) => $_setField(9, value);
+  @$pb.TagNumber(9)
+  $core.bool hasItem() => $_has(8);
+  @$pb.TagNumber(9)
+  void clearItem() => $_clearField(9);
+  @$pb.TagNumber(9)
+  CatalogItem ensureItem() => $_ensure(8);
 }
 
 class NewEpisodesResponse extends $pb.GeneratedMessage {
