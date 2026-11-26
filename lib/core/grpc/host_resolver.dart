@@ -134,6 +134,9 @@ Future<String> resolveGrpcHost({int port = ServerPorts.grpc}) async {
 
   String? savedHost;
   String? vpnHost;
+  // The paired server's certificate: an address other than the saved one
+  // must lead to that same server (see answersAsMycelium).
+  String? pinned;
   int? savedPort;
   var savedHttpPort = ServerPorts.http;
   try {
@@ -148,6 +151,8 @@ Future<String> resolveGrpcHost({int port = ServerPorts.grpc}) async {
       }
       savedPort = session.grpcPort;
       savedHttpPort = session.lanHttpPort;
+      final fp = session.tlsFingerprint;
+      if (fp != null && fp.isNotEmpty) pinned = fp;
     }
   } catch (_) {}
 
@@ -184,7 +189,11 @@ Future<String> resolveGrpcHost({int port = ServerPorts.grpc}) async {
     if (result == null || completer.isCompleted) return;
     final probePort = result.grpcPort ?? port;
     lastUdpDiscovery = (host: result.host, httpPort: result.httpPort);
-    if (await canReach(result.host, probePort, timeout)) {
+    if (await canReach(result.host, probePort, timeout) &&
+        (pinned == null ||
+            await answersAsMycelium(
+                result.host, result.httpPort ?? ServerPorts.http, timeout,
+                fingerprint: pinned))) {
       discoveredGrpcPort = result.grpcPort;
       discoveredHttpPort = result.httpPort;
       win(result.host);
@@ -201,7 +210,12 @@ Future<String> resolveGrpcHost({int port = ServerPorts.grpc}) async {
     Future.wait([
       canReach(host, probePort, timeout),
       answersAsMycelium(
-          host, isSaved ? savedHttpPort : ServerPorts.http, timeout),
+          host, isSaved ? savedHttpPort : ServerPorts.http, timeout,
+          // The saved host too: one already overwritten by another server
+          // heals here. A reinstalled server (new certificate) matches no
+          // candidate, so the saved host still wins as the fallback below
+          // and the pairing flow takes it from there.
+          fingerprint: pinned),
     ]).then((r) => r[0] && r[1]).then((ok) {
       if (ok) {
         if (isSaved) discoveredGrpcPort = savedPort;

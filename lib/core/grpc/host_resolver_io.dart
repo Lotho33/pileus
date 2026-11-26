@@ -34,8 +34,14 @@ Future<bool> canReach(String host, int port, Duration timeout) async {
 /// accepts connections even with nothing running behind it (a stopped
 /// mycelium devcontainer on 127.0.0.1 used to win every resolve that way,
 /// and then got persisted over the real server's IP).
-Future<bool> answersAsMycelium(
-    String host, int httpPort, Duration timeout) async {
+///
+/// [fingerprint]: the paired server's gRPC certificate — when given, only
+/// that server counts. Any Mycelium isn't proof either: a second one on the
+/// same machine or network (a dev server, a neighbour's) answered first,
+/// replaced the paired server's address and every start then failed on the
+/// pinned certificate.
+Future<bool> answersAsMycelium(String host, int httpPort, Duration timeout,
+    {String? fingerprint}) async {
   final client = HttpClient()..connectionTimeout = timeout;
   try {
     final req = await client
@@ -45,12 +51,25 @@ Future<bool> answersAsMycelium(
     if (res.statusCode != 200) return false;
     final body = await res.transform(utf8.decoder).join().timeout(timeout);
     final info = jsonDecode(body);
-    return info is Map && info['name'] == 'Mycelium';
+    if (info is! Map || info['name'] != 'Mycelium') return false;
+    return fingerprint == null || sameFingerprint(fingerprint, info);
   } catch (_) {
     return false;
   } finally {
     client.close(force: true);
   }
+}
+
+/// Whether /pileus/info's `grpc_tls_fingerprint` is [pinned] (hex, any case,
+/// with or without colons). A server that doesn't announce one (no TLS)
+/// can't be told apart: it counts.
+bool sameFingerprint(String pinned, Map info) {
+  String norm(String s) => s.replaceAll(':', '').toLowerCase();
+  final announced = info['grpc_tls_fingerprint'];
+  if (announced is! String || announced.isEmpty || pinned.isEmpty) {
+    return true;
+  }
+  return norm(announced) == norm(pinned);
 }
 
 /// UDP broadcast discovery — mirrors mycelium's responder
