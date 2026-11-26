@@ -9,14 +9,9 @@ import '../../core/theme/app_theme.dart';
 const double kRankNumberWidth = 1.0;
 const double kRankOverlap = 0.2;
 
-/// "10" keeps the same space as the others and may run further under its
-/// card, by this share of the part the card covers; every number is drawn
-/// at the size "10" fits at.
-const double _kTwoDigitsUnderCard = 0.2;
-
 /// How tall the digits stand at most, as a fraction of the card's height
-/// (the width "10" needs usually keeps them shorter).
-const double _kDigitHeight = 0.62;
+/// (the width "10" needs may keep them shorter).
+const double _kDigitHeight = 0.72;
 
 /// How far from the card a narrow number ("1") ends, as a share of the
 /// visible part: room for the focused card growing over it.
@@ -25,11 +20,12 @@ const double _kClearOfCard = 0.1;
 /// The big number beside a card in a Top 10 row: the app's own font at its
 /// own proportions, filled with the background and outlined in the accent —
 /// plain stroked text, cheap on modest hardware (no shader, blur or
-/// shadow). It stands about half as tall as the card, centred on the
+/// shadow). It stands about two thirds as tall as the card, centred on the
 /// card's middle. A wide number starts at the left of [width] and runs under
 /// the card as far as it must; a narrow one ("1") stays whole in the part
 /// the card leaves visible ([visibleWidth]). All ten stand equally tall:
-/// sized so "10", its digits pulled close to read as one number, fits.
+/// as big as "10" (its digits pulled close) can be with its card covering
+/// no more than half of the "0".
 class RankNumber extends StatelessWidget {
   final int rank;
   final double width;
@@ -93,20 +89,20 @@ class _RankPainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
     var fontSize = size.height * _kDigitHeight / _capRatio;
-    // A number never goes past its own box.
-    final room = size.width +
-        (text.length > 1 ? (size.width - visible) * _kTwoDigitsUnderCard : 0);
-    // Every number at the size "10" fits in its room: 1 to 10 stand
-    // equally tall.
-    final roomTen = size.width + (size.width - visible) * _kTwoDigitsUnderCard;
-    final ten = _width('10', fontSize);
-    if (ten > roomTen) fontSize *= roomTen / ten;
+    // Every number at the size "10" allows, so 1 to 10 stand equally tall:
+    // "10" starts at the left edge and its card may cover up to half of the
+    // "0" — past that it would stop reading as 10.
+    final oneWidth = _width('1', fontSize);
+    final halfTen = oneWidth +
+        fontSize * _digitGap +
+        (_width('10', fontSize) - oneWidth - fontSize * _digitGap) / 2;
+    if (halfTen > visible) fontSize *= visible / halfTen;
     final w = _width(text, fontSize);
     // Wide: from the left edge, under the card as needed. Narrow: whole in
     // the visible part, clear of the card.
     final right =
         (w > visible * (1 - _kClearOfCard) ? w : visible * (1 - _kClearOfCard))
-            .clamp(0.0, room);
+            .clamp(0.0, double.infinity);
     // The digits' middle on the card's middle.
     final baselineY = (size.height + fontSize * _capRatio) / 2;
     final strokePaint = Paint()

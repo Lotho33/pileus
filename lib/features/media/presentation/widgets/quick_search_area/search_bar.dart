@@ -122,15 +122,14 @@ class _QuickSearchBarState extends State<_QuickSearchBar> {
               // button below just read as "two things are selected". A plain,
               // static box — the blinking caret (shown only once expanded)
               // and the keyboard appearing are enough to signal "typing here".
-              // Its border is the accent, softened and without the glow, so
-              // the bar stands out on the home without reading as focused.
+              // Its border is the accent, without the glow, so the bar
+              // stands out on the home without reading as focused.
               decoration: BoxDecoration(
                 color: const Color(0xFF1E1E2E),
                 borderRadius: BorderRadius.circular(10),
                 border: Border.all(
-                  color: AppTheme.primary
-                      .withValues(alpha: widget.expanded ? 0.75 : 0.55),
-                  width: 1.4,
+                  color: AppTheme.primary,
+                  width: 2,
                 ),
               ),
               child: Row(
