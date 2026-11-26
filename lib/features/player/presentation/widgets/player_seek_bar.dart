@@ -314,6 +314,9 @@ class _PlayerSeekBarState extends State<PlayerSeekBar> {
   Widget build(BuildContext context) {
     final dur = widget.durSec.clamp(1.0, double.infinity);
     final pos = (_dragPos ?? widget.posSec).clamp(0.0, dur);
+    // Until the stream reports its length (still loading) there is nothing
+    // left to count down: "--:--", not the "-00:01" of the 1 s floor above.
+    final remaining = widget.durSec > 0 ? '-${_fmt(dur - pos)}' : '--:--';
     final focused = _focused;
 
     return Focus(
@@ -332,11 +335,11 @@ class _PlayerSeekBarState extends State<PlayerSeekBar> {
           ? Row(
               children: [
                 _inlineTime(context, _fmt(pos)),
-                Expanded(child: _bar(context, pos, dur, focused)),
-                _inlineTime(context, '-${_fmt(dur - pos)}'),
+                Expanded(child: _bar(context, pos, dur, focused, remaining)),
+                _inlineTime(context, remaining),
               ],
             )
-          : _bar(context, pos, dur, focused),
+          : _bar(context, pos, dur, focused, remaining),
     );
   }
 
@@ -355,7 +358,8 @@ class _PlayerSeekBarState extends State<PlayerSeekBar> {
     );
   }
 
-  Widget _bar(BuildContext context, double pos, double dur, bool focused) {
+  Widget _bar(BuildContext context, double pos, double dur, bool focused,
+      String remaining) {
     return Builder(
       builder: (context) => LayoutBuilder(
         builder: (context, constraints) {
@@ -439,7 +443,7 @@ class _PlayerSeekBarState extends State<PlayerSeekBar> {
                         Text(_fmt(pos),
                             style: const TextStyle(
                                 color: Colors.white70, fontSize: 13)),
-                        Text('-${_fmt(dur - pos)}',
+                        Text(remaining,
                             style: const TextStyle(
                                 color: Colors.white70, fontSize: 13)),
                       ],
