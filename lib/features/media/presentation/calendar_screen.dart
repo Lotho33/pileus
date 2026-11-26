@@ -219,7 +219,7 @@ class _CalendarScreenState extends State<CalendarScreen> {
                   onTap: _toggleMine,
                   onDown: () => _firstRowFn.requestFocus(),
                 ),
-                if (plugins.length > 1) ...[
+                if (choices.length > 1 || _plugin.isNotEmpty) ...[
                   SizedBox(width: 20 * u),
                   _Chip(
                     u: u,
@@ -228,7 +228,7 @@ class _CalendarScreenState extends State<CalendarScreen> {
                     onTap: () => _setPlugin(''),
                     onDown: () => _firstRowFn.requestFocus(),
                   ),
-                  for (final p in plugins) ...[
+                  for (final p in choices) ...[
                     SizedBox(width: 10 * u),
                     _Chip(
                       u: u,
