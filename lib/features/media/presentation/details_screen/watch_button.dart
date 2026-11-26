@@ -459,8 +459,9 @@ class _WatchButtonState extends State<_WatchButton> {
         color: focused ? AppTheme.primary : Colors.white24,
         borderRadius: BorderRadius.circular(8),
         border: Border.all(
+          // Always 1: see detailsSecondaryChip.
           color: focused ? AppTheme.primary : AppTheme.textLow,
-          width: focused ? 0 : 1,
+          width: 1,
         ),
         boxShadow: focused
             ? [

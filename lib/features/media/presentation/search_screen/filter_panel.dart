@@ -251,8 +251,11 @@ class _FilterPanelState extends State<_FilterPanel> {
                   onUp: () => _moveVertical(_rowNodes.length, 0, -1),
                   builder: (context, focused) => AnimatedContainer(
                     duration: const Duration(milliseconds: 120),
+                    // 1 off for the focused 2-wide edge: same size either way.
                     padding: EdgeInsets.symmetric(
-                        vertical: AppScale.space(context, 12)),
+                        vertical:
+                            AppScale.space(context, 12) - (focused ? 1 : 0),
+                        horizontal: focused ? 0 : 1),
                     decoration: BoxDecoration(
                       color: focused
                           ? _kFocusColor.withValues(alpha: 0.16)
@@ -624,9 +627,11 @@ class _FilterChipBtnState extends State<_FilterChipBtn> {
         },
         builder: (context, focused) => AnimatedContainer(
           duration: const Duration(milliseconds: 130),
+          // 1 off for the focused 2-wide edge: the chips in the Wrap
+          // don't shift when focus moves.
           padding: EdgeInsets.symmetric(
-              horizontal: AppScale.space(context, 14),
-              vertical: AppScale.space(context, 9)),
+              horizontal: AppScale.space(context, 14) - (focused ? 1 : 0),
+              vertical: AppScale.space(context, 9) - (focused ? 1 : 0)),
           decoration: BoxDecoration(
             color: widget.selected
                 ? _kFocusColor.withValues(alpha: focused ? 0.42 : 0.28)

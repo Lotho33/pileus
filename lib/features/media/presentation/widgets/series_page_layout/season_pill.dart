@@ -85,7 +85,9 @@ class _SeasonPillState extends State<_SeasonPill> {
               color: widget.selected || focused
                   ? AppTheme.primary
                   : AppTheme.textHigh.withValues(alpha: 0.30),
-              width: widget.selected ? 0 : 1.5,
+              // Always 1.5 (the selected fill hides it): without it the
+              // selected pill stood 3 px shorter than the others.
+              width: 1.5,
             ),
           ),
           child: AnimatedDefaultTextStyle(

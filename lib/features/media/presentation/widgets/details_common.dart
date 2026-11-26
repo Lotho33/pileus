@@ -141,8 +141,11 @@ class _PopupPlayButtonState extends State<PopupPlayButton> {
       onRight: widget.onRight,
       builder: (context, focused) => AnimatedContainer(
         duration: const Duration(milliseconds: 150),
+        // The focus edge is 0.5 thicker: taken off the padding, so the
+        // button keeps its size and the ones beside it don't move.
         padding: EdgeInsets.symmetric(
-            horizontal: sh * (24.0 / 1080.0), vertical: sh * (12.0 / 1080.0)),
+            horizontal: sh * (24.0 / 1080.0) - (focused ? 0.5 : 0),
+            vertical: sh * (12.0 / 1080.0) - (focused ? 0.5 : 0)),
         decoration: BoxDecoration(
           color: focused
               ? AppTheme.primary

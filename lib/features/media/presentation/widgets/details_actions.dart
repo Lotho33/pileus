@@ -29,8 +29,10 @@ Widget detailsSecondaryChip(
       color: focused ? AppTheme.primary : Colors.transparent,
       borderRadius: BorderRadius.circular(6),
       border: Border.all(
+        // Always 1: a border that vanished on focus shrank the chip and
+        // nudged its neighbours (the focused fill hides it anyway).
         color: focused ? AppTheme.primary : AppTheme.textLow,
-        width: focused ? 0 : 1,
+        width: 1,
       ),
       boxShadow: focused
           ? [

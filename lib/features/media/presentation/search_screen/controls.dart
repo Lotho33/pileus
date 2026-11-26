@@ -144,8 +144,10 @@ class _FilterBtnState extends State<_FilterBtn> {
       onDown: widget.onNavigateDown,
       builder: (context, focused) => AnimatedContainer(
         duration: const Duration(milliseconds: 120),
+        // 1 off for the focused 2-wide edge: same size either way.
         padding: EdgeInsets.symmetric(
-            horizontal: widget.barH * 0.30, vertical: widget.barH * 0.24),
+            horizontal: widget.barH * 0.30 - (focused ? 1 : 0),
+            vertical: widget.barH * 0.24 - (focused ? 1 : 0)),
         decoration: BoxDecoration(
           color: hasActive
               ? _kFocusColor.withValues(alpha: focused ? 0.5 : 0.28)
@@ -231,9 +233,10 @@ class _ActiveFilterChip extends StatelessWidget {
       onUp: onNavigateUp,
       onDown: onNavigateDown,
       builder: (context, focused) => Container(
+        // 1 off for the focused 2-wide edge: same size either way.
         padding: EdgeInsets.symmetric(
-            horizontal: AppScale.space(context, 12),
-            vertical: AppScale.space(context, 6)),
+            horizontal: AppScale.space(context, 12) - (focused ? 1 : 0),
+            vertical: AppScale.space(context, 6) - (focused ? 1 : 0)),
         decoration: BoxDecoration(
           color: _kFocusColor.withValues(alpha: focused ? 0.4 : 0.22),
           borderRadius: BorderRadius.circular(20),
