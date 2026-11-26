@@ -359,7 +359,14 @@ class _PlayerSeekBarState extends State<PlayerSeekBar> {
     return Builder(
       builder: (context) => LayoutBuilder(
         builder: (context, constraints) {
+          // The track is inset by the focused thumb's halo on each side, so
+          // the thumb never runs past the bar — at 00:00 it sat over the
+          // elapsed time beside it.
+          const inset = _kThumbHalo;
           final barWidth = constraints.maxWidth;
+          final trackWidth = (barWidth - 2 * inset).clamp(1.0, double.infinity);
+          double fracAt(double dx) =>
+              ((dx - inset) / trackWidth).clamp(0.0, 1.0);
           final thumbFrac = pos / dur;
 
           return AnimatedOpacity(
@@ -377,8 +384,7 @@ class _PlayerSeekBarState extends State<PlayerSeekBar> {
                     onHorizontalDragUpdate: widget.disabled
                         ? null
                         : (d) {
-                            final frac =
-                                (d.localPosition.dx / barWidth).clamp(0.0, 1.0);
+                            final frac = fracAt(d.localPosition.dx);
                             setState(() => _dragPos = frac * dur);
                           },
                     onHorizontalDragEnd: widget.disabled
@@ -391,8 +397,7 @@ class _PlayerSeekBarState extends State<PlayerSeekBar> {
                     onTapUp: widget.disabled
                         ? null
                         : (d) {
-                            final frac =
-                                (d.localPosition.dx / barWidth).clamp(0.0, 1.0);
+                            final frac = fracAt(d.localPosition.dx);
                             widget.onSeek(frac * dur);
                           },
                     child: Container(
@@ -404,8 +409,9 @@ class _PlayerSeekBarState extends State<PlayerSeekBar> {
                             ? AppScale.focusGlow(AppTheme.primary)
                             : null,
                       ),
+                      padding: const EdgeInsets.symmetric(horizontal: inset),
                       child: CustomPaint(
-                        size: Size(barWidth, 8),
+                        size: Size(trackWidth, 8),
                         painter: _SeekBarPainter(
                           posFrac: thumbFrac,
                           skipIntervals: widget.skipIntervals,
@@ -447,6 +453,9 @@ class _PlayerSeekBarState extends State<PlayerSeekBar> {
     );
   }
 }
+
+/// The focused thumb's halo radius: the widest the thumb gets.
+const double _kThumbHalo = 20;
 
 class _SeekBarPainter extends CustomPainter {
   final double posFrac;
@@ -515,7 +524,7 @@ class _SeekBarPainter extends CustomPainter {
     if (focused) {
       canvas.drawCircle(
         Offset(thumbX, h / 2),
-        20,
+        _kThumbHalo,
         Paint()..color = AppTheme.primary.withValues(alpha: 0.4),
       );
     }
