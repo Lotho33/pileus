@@ -12,6 +12,7 @@ import '../../../core/grpc/clients/media_client.dart'
 import '../../../core/grpc/grpc_errors.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/image_sizing.dart';
+import '../../../shared/widgets/language_badge.dart';
 import '../../../shared/widgets/open_catalog_item.dart';
 import '../../../shared/widgets/tv_back_button.dart';
 import '../../../shared/widgets/tv_focusable.dart';
@@ -462,6 +463,13 @@ class _Row extends StatelessWidget {
                               fontSize: 26 * u,
                               fontWeight: FontWeight.w700)),
                     ),
+                    // Which version comes out: sub and dub of the same title
+                    // are separate releases (often minutes or episodes apart).
+                    if (languageBadges(e.item.extra['lang'] ?? '')
+                        .isNotEmpty) ...[
+                      SizedBox(width: 10 * u),
+                      LanguageBadgePill(lang: e.item.extra['lang'] ?? ''),
+                    ],
                   ]),
                   if (small.isNotEmpty) ...[
                     SizedBox(height: 4 * u),
