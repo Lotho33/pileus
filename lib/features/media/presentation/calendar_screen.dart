@@ -596,31 +596,38 @@ class _Row extends StatelessWidget {
                   ),
                 ),
               ),
-            ClipRRect(
-              borderRadius: BorderRadius.circular(8 * u),
-              child: SizedBox(
-                width: thumbW,
-                height: thumbH,
-                child: thumbUrl.isEmpty
-                    ? const ColoredBox(color: AppTheme.surface2)
-                    : Opacity(
-                        opacity: dim ? 0.55 : 1,
-                        child: CachedNetworkImage(
-                          imageRenderMethodForWeb:
-                              ImageRenderMethodForWeb.HttpGet,
-                          imageUrl: posterSrc(
-                              thumbUrl, cacheWidthFor(context, thumbW),
-                              proxy: true),
-                          memCacheWidth: cacheWidthFor(context, thumbW),
-                          fit: BoxFit.cover,
-                          fadeInDuration: Duration.zero,
-                          placeholder: (_, __) =>
-                              const ColoredBox(color: AppTheme.surface2),
-                          errorWidget: (_, __, ___) =>
-                              const ColoredBox(color: AppTheme.surface2),
+            // Drawn straight into a rounded box, dimmed by a colour filter
+            // for "Previsto": no clip layer and no Opacity's offscreen layer
+            // per row (weak TV GPUs pay for each, and most rows can be
+            // "Previsto").
+            SizedBox(
+              width: thumbW,
+              height: thumbH,
+              child: thumbUrl.isEmpty
+                  ? _thumbBox(u)
+                  : CachedNetworkImage(
+                      imageRenderMethodForWeb: ImageRenderMethodForWeb.HttpGet,
+                      imageUrl: posterSrc(
+                          thumbUrl, cacheWidthFor(context, thumbW),
+                          proxy: true),
+                      memCacheWidth: cacheWidthFor(context, thumbW),
+                      fadeInDuration: Duration.zero,
+                      imageBuilder: (_, image) => DecoratedBox(
+                        decoration: BoxDecoration(
+                          borderRadius: BorderRadius.circular(8 * u),
+                          image: DecorationImage(
+                            image: image,
+                            fit: BoxFit.cover,
+                            colorFilter: dim
+                                ? const ColorFilter.mode(
+                                    Color(0x8C000000), BlendMode.srcATop)
+                                : null,
+                          ),
                         ),
                       ),
-              ),
+                      placeholder: (_, __) => _thumbBox(u),
+                      errorWidget: (_, __, ___) => _thumbBox(u),
+                    ),
             ),
             SizedBox(width: 18 * u),
             Expanded(
@@ -702,3 +709,11 @@ class _Message extends StatelessWidget {
         ]),
       );
 }
+
+/// A thumbnail's empty rounded box (no picture, loading or failed).
+Widget _thumbBox(double u) => DecoratedBox(
+      decoration: BoxDecoration(
+        color: AppTheme.surface2,
+        borderRadius: BorderRadius.circular(8 * u),
+      ),
+    );
