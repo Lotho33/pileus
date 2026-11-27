@@ -4,6 +4,8 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
+import '../core/voice_search.dart';
+import '../shared/widgets/voice_search_flow.dart';
 import '../core/di/injection.dart';
 import '../core/grpc/clients/media_client.dart' show PluginInfo, SearchFilter;
 import '../core/theme/app_theme.dart';
@@ -85,9 +87,23 @@ class _DesktopSearchScreenState extends State<DesktopSearchScreen> {
   Timer? _debounce;
   static const _debounceDelay = Duration(milliseconds: 350);
 
+  // The microphone: on the web where the browser recognizes speech
+  // (voice_search_web.dart); never on Linux/Windows.
+  bool _voice = false;
+  Future<void> _listen() async {
+    final text = await voiceSearch(context);
+    if (!mounted || text == null) return;
+    _ctrl.text = text;
+    _recent.submit(_pluginId ?? '', text);
+    _run();
+  }
+
   @override
   void initState() {
     super.initState();
+    VoiceSearch.available().then((v) {
+      if (mounted && v) setState(() => _voice = true);
+    });
     _bloc = DiscoveryBloc(
       getIt<MediaRepository>(),
       onSessionExpired: () =>
@@ -273,6 +289,7 @@ class _DesktopSearchScreenState extends State<DesktopSearchScreen> {
                               _recent.submit(_pluginId ?? '', _ctrl.text);
                               _run();
                             },
+                            onVoice: _voice ? _listen : null,
                           ),
                         ),
                       ),
@@ -451,12 +468,14 @@ class _SearchField extends StatelessWidget {
   final String hint;
   final ValueChanged<String> onChanged;
   final VoidCallback onSubmit;
+  final VoidCallback? onVoice;
   const _SearchField({
     required this.controller,
     required this.focusNode,
     required this.hint,
     required this.onChanged,
     required this.onSubmit,
+    this.onVoice,
   });
 
   @override
@@ -478,7 +497,14 @@ class _SearchField extends StatelessWidget {
         suffixIcon: ValueListenableBuilder<TextEditingValue>(
           valueListenable: controller,
           builder: (_, v, __) => v.text.isEmpty
-              ? const SizedBox.shrink()
+              ? (onVoice == null
+                  ? const SizedBox.shrink()
+                  : IconButton(
+                      icon: const Icon(Icons.mic_rounded, size: 20),
+                      color: AppTheme.textMid,
+                      tooltip: 'Cerca con la voce',
+                      onPressed: onVoice,
+                    ))
               : IconButton(
                   icon: const Icon(Icons.close, size: 18),
                   color: AppTheme.textMid,

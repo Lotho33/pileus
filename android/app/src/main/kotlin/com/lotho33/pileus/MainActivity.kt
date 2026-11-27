@@ -38,6 +38,15 @@ class MainActivity : FlutterActivity() {
         super.onActivityResult(requestCode, resultCode, data)
     }
 
+    override fun onRequestPermissionsResult(
+        requestCode: Int,
+        permissions: Array<out String>,
+        grantResults: IntArray
+    ) {
+        if (VoiceSearch.onRequestPermissionsResult(requestCode, grantResults)) return
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
+    }
+
     override fun onUserLeaveHint() {
         super.onUserLeaveHint()
         Pip.onUserLeaveHint(this)

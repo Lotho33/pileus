@@ -254,7 +254,7 @@ class _SearchViewState extends State<_SearchView> {
 
   // The system recognizer's words: searched at once, kept as a recent search.
   Future<void> _listen() async {
-    final text = await VoiceSearch.listen();
+    final text = await voiceSearch(context);
     if (!mounted || text == null) return;
     _controller.text = text;
     _recent.submit(widget.pluginId, text);

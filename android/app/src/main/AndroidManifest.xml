@@ -38,6 +38,14 @@
     -->
     <uses-permission android:name="android.permission.INTERNET"/>
 
+    <!-- Voice search through the recognition service (VoiceSearch.kt, the
+         "service" mode where no dictation dialog exists): asked only the first
+         time the microphone button is used. Not required hardware: TVs and
+         boxes without a microphone stay installable (RECORD_AUDIO alone would
+         make Play and Amazon require one). -->
+    <uses-permission android:name="android.permission.RECORD_AUDIO"/>
+    <uses-feature android:name="android.hardware.microphone" android:required="false"/>
+
     <!-- Pulled in transitively by a player dependency (no Flutter plugin
          declares it directly — it comes from an ExoPlayer-related native
          library), not something Pileus itself has any use for: there's no
@@ -136,6 +144,9 @@
         <!-- Voice search (VoiceSearch.kt): is there a speech recognizer? -->
         <intent>
             <action android:name="android.speech.action.RECOGNIZE_SPEECH"/>
+        </intent>
+        <intent>
+            <action android:name="android.speech.RecognitionService"/>
         </intent>
     </queries>
 </manifest>

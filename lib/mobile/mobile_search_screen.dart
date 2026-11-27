@@ -11,6 +11,7 @@ import '../core/theme/app_theme.dart';
 import '../features/auth/bloc/auth_bloc.dart';
 import '../features/auth/bloc/auth_event.dart';
 import '../core/voice_search.dart';
+import '../shared/widgets/voice_search_flow.dart';
 import '../features/media/active_plugin_controller.dart';
 import '../features/media/bloc/discovery_bloc.dart';
 import '../features/media/bloc/discovery_event.dart';
@@ -253,7 +254,7 @@ class _MobileSearchScreenState extends State<MobileSearchScreen> {
   // The microphone: the system recognizer's words become the query.
   bool _voice = false;
   Future<void> _listen() async {
-    final text = await VoiceSearch.listen();
+    final text = await voiceSearch(context);
     if (!mounted || text == null) return;
     _ctrl.text = text;
     _recent.submit(_pluginId ?? '', text);

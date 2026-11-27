@@ -335,7 +335,7 @@ class _QuickSearchAreaState extends State<QuickSearchArea> {
   // search picked from the row.
   bool _voice = false;
   Future<void> _listen() async {
-    final text = await VoiceSearch.listen();
+    final text = await voiceSearch(context);
     if (mounted && text != null) _pickRecent(text);
   }
 
