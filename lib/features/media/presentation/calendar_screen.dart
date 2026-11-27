@@ -345,51 +345,99 @@ class _PhoneFilters extends StatelessWidget {
     required this.onPlugin,
   });
 
+  // The plugins as a bottom sheet, like the app's other phone choices.
+  void _pick(BuildContext context) {
+    showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: AppTheme.surface,
+      showDragHandle: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (ctx) {
+        Widget option(String id, String label) => ListTile(
+              title: Text(label,
+                  style: TextStyle(
+                      color:
+                          id == plugin ? AppTheme.textHigh : AppTheme.textMid,
+                      fontWeight:
+                          id == plugin ? FontWeight.w700 : FontWeight.w400)),
+              trailing: id == plugin
+                  ? const Icon(Icons.check_rounded, color: AppTheme.primary)
+                  : null,
+              onTap: () {
+                Navigator.of(ctx).pop();
+                onPlugin(id);
+              },
+            );
+        return SafeArea(
+          top: false,
+          child: SingleChildScrollView(
+            child: Column(mainAxisSize: MainAxisSize.min, children: [
+              option('', 'Tutti i plugin'),
+              for (final p in plugins) option(p, name(p)),
+            ]),
+          ),
+        );
+      },
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
-    return Row(children: [
+    // The menu takes what it needs (up to all the room left), the switch
+    // stays at the right edge.
+    return Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
       if (plugins.length > 1 || plugin.isNotEmpty)
-        Expanded(
-          child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 12),
-            decoration: BoxDecoration(
-              color: AppTheme.surface2,
-              borderRadius: BorderRadius.circular(10),
-              border: Border.all(color: AppTheme.border),
-            ),
-            child: DropdownButtonHideUnderline(
-              child: DropdownButton<String>(
-                value: plugin,
-                isExpanded: true,
-                dropdownColor: AppTheme.surface2,
-                style: const TextStyle(color: AppTheme.textHigh, fontSize: 15),
-                items: [
-                  const DropdownMenuItem(
-                      value: '', child: Text('Tutti i plugin')),
-                  for (final p in plugins)
-                    DropdownMenuItem(
-                      value: p,
-                      child: Text(name(p),
-                          maxLines: 1, overflow: TextOverflow.ellipsis),
-                    ),
-                ],
-                onChanged: (v) => onPlugin(v ?? ''),
+        Flexible(
+          child: Material(
+            color: AppTheme.surface2,
+            shape:
+                const StadiumBorder(side: BorderSide(color: AppTheme.border)),
+            clipBehavior: Clip.antiAlias,
+            child: InkWell(
+              onTap: () => _pick(context),
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(14, 8, 8, 8),
+                child: Row(mainAxisSize: MainAxisSize.min, children: [
+                  Flexible(
+                    child: Text(
+                        plugin.isEmpty ? 'Tutti i plugin' : name(plugin),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                            color: AppTheme.textHigh,
+                            fontSize: 14,
+                            fontWeight: FontWeight.w600)),
+                  ),
+                  const SizedBox(width: 2),
+                  const Icon(Icons.expand_more_rounded,
+                      size: 20, color: AppTheme.textMid),
+                ]),
               ),
             ),
           ),
-        )
-      else
-        const Spacer(),
+        ),
+      if (plugins.length <= 1 && plugin.isEmpty) const Spacer(),
       const SizedBox(width: 12),
-      const Text('Solo seguite',
-          style: TextStyle(color: AppTheme.textMid, fontSize: 15)),
-      const SizedBox(width: 4),
-      Switch(
-        value: followedOnly,
-        activeThumbColor: AppTheme.textHigh,
-        activeTrackColor: AppTheme.primary,
-        onChanged: onFollowedOnly,
-      ),
+      Row(mainAxisSize: MainAxisSize.min, children: [
+        const Text('Solo seguite',
+            style: TextStyle(color: AppTheme.textMid, fontSize: 15)),
+        const SizedBox(width: 4),
+        Switch(
+          value: followedOnly,
+          activeThumbColor: AppTheme.textHigh,
+          activeTrackColor: AppTheme.primary,
+          // Off: the app's surfaces, not Material's white outline.
+          inactiveThumbColor: AppTheme.textMid,
+          inactiveTrackColor: AppTheme.surface2,
+          trackOutlineColor: WidgetStateProperty.resolveWith((st) =>
+              st.contains(WidgetState.selected)
+                  ? AppTheme.primary
+                  : AppTheme.border),
+          onChanged: onFollowedOnly,
+        ),
+      ]),
     ]);
   }
 }
